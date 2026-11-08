@@ -22,7 +22,7 @@
 
 An in-process extension for the **PORTHEON UFC 6 `3309ab23f` Windows engine**. It draws its menu directly into the game's Vulkan frames and keeps focus on the game. The main menu contains **Resume, Take screenshot, Restart game, Settings, and Quit game**, followed by a gap separating **Restart PC and Shut down PC**.
 
-The game executable and game files are not edited. A short-lived helper handles restart or confirmed shutdown after the old game and launcher have exited.
+The engine executable and game assets are not patched. A startup bridge forwards calls to your verified original threading runtime, preserved byte-for-byte as `ufc6_pthread_original.dll` and restored by the uninstaller. A short-lived helper handles restart or confirmed shutdown after the old game and launcher have exited.
 
 This download contains the overlay and installer only. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. It supports the **PORTHEON `3309ab23f` Windows engine**, rather than every KytyPS5 build. The installer checks the executable hash before installing.
 
@@ -106,7 +106,7 @@ Verification uses the test helper with power APIs compiled out and a file in pla
 
 ## Install, upgrade, and remove
 
-Download **`UFC6-Actions-Overlay-Setup-0.8.1.exe`** and double-click it. The setup EXE contains all four mod files; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
+Download **`UFC6-Actions-Overlay-Setup-0.8.2.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
 
 1. Close UFC 6 and its launcher.
 2. Click **Browse** and select the UFC 6 game folder or its **bin** folder containing **`UFC 6.exe`**.
@@ -114,9 +114,11 @@ Download **`UFC6-Actions-Overlay-Setup-0.8.1.exe`** and double-click it. The set
 4. Click **Install / Update**. The setup verifies the engine and bundled files, backs up recognized older versions, and installs the overlay.
 5. Start UFC 6 normally. Hold **LB + RB + Menu** for about one second, then release, or press **F10**.
 
-To uninstall, run the same setup EXE, choose the same folder, and click **Remove overlay**. Settings and screenshots are preserved. Setup refuses to modify a running game or overwrite files from an unknown mod. Changes roll back if installation or removal fails. No game files or Windows startup settings are changed by setup. For a protected game folder, Windows may require running setup as administrator.
+To uninstall, run the same setup EXE, choose the same folder, and click **Remove overlay**. Settings and screenshots are preserved. Setup refuses to modify a running game or overwrite files from an unknown mod. Changes roll back if installation or removal fails. The engine executable, game assets, and Windows startup settings are not changed by setup. For a protected game folder, Windows may require running setup as administrator.
 
-The full **`UFC6-Actions-Overlay-0.8.1.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
+Version 0.8.2 fixes startup when Windows prefers system DLLs, which can bypass an app-local `version.dll`. The bridge uses the engine's existing non-system runtime import and enables the Vulkan layer only inside the game process. It preserves the Windows security policy, checks all required overlay files before enabling the layer, and does not register a system-wide Vulkan layer. The installer accepts only the verified original runtime SHA-256, and rejects unknown replacements.
+
+The full **`UFC6-Actions-Overlay-0.8.2.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
 
 The Python command-line manager remains available for development and scripting:
 
@@ -127,7 +129,7 @@ python manage_menu.py install --bin-dir "D:\Games\UFC6\bin"
 
 Restart UFC 6 once after installing an update. Already loaded DLLs remain active until the game exits. Replace the example path with your own game's bin folder. If omitted, `--bin-dir` defaults to `bin` under the current working directory.
 
-The installer manages `version.dll`, `ufc6_menu_layer.dll`, `ufc6_menu_layer.json`, and `ufc6_menu_restart.exe`. It verifies all hashes, backs up recognized older versions, installs the core last, and rolls back changes if a commit fails. Unknown files, including unrelated mods using `version.dll`, are left untouched. Settings, screenshots, diagnostic logs, and backups are preserved.
+The installer manages `version.dll`, `ufc6_menu_layer.dll`, `ufc6_menu_layer.json`, `ufc6_menu_restart.exe`, and the `libwinpthread-1.dll` startup bridge. It verifies the original threading runtime before preserving it as `ufc6_pthread_original.dll`; that original is never downloaded or bundled. Uninstall restores it byte-for-byte. Keep this original-runtime copy and use the current setup to remove the overlay. It verifies all hashes, backs up recognized older versions, installs the core last, and rolls back changes if a commit fails. Unknown files, including unrelated mods using `version.dll`, are left untouched. Settings, screenshots, diagnostic logs, and backups are preserved.
 
 Close the game before uninstalling:
 
@@ -171,6 +173,6 @@ Verification includes:
 - Shutdown and reboot hold/countdown/cancellation tests and stubbed handoffs (`tests/shutdown_handoff.py`, with `--reboot` for reboot/resume). The test binary is checked to contain no Windows power API import.
 - Installer upgrade, rollback, conflict rejection, and preference-preservation tests.
 
-The in-frame menu and controller navigation were confirmed by the user in fullscreen UFC 6. Scaling is covered by isolated rendering, persistence, state, and GPU tests. Version 0.8.1's configurable reboot/resume path is covered by the safe fixtures above; the live game session and PC were not restarted during this update.
+The in-frame menu and controller navigation were confirmed in fullscreen UFC 6. Version 0.8.2 startup is covered by mitigation-policy, original-runtime forwarding/restoration, small-stack thread, and real GPU tests. PC power tests always use the stub helper and never reboot or shut down the machine.
 
 Project source is GPL-2.0-only; see `LICENSE`. Other engine builds require separately verified hooks.

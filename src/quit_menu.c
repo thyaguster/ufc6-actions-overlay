@@ -584,15 +584,7 @@ __declspec(dllexport) int MenuTestAutoLaunch(void){EnterCriticalSection(&lock);i
 __declspec(dllexport) int MenuTestScale(void){EnterCriticalSection(&lock);int scale=menu_scale(&menu);LeaveCriticalSection(&lock);return scale;}
 #endif
 #ifndef QUIT_MENU_TEST
-static int env_list_has(const wchar_t *list,const wchar_t *value) {
-    size_t length=wcslen(value);
-    for(const wchar_t *start=list;*start;){
-        const wchar_t *end=wcschr(start,L';');size_t count=end?(size_t)(end-start):wcslen(start);
-        if(count==length&&!_wcsnicmp(start,value,length))return 1;
-        if(!end)break;start=end+1;
-    }
-    return 0;
-}
+#include "overlay_bootstrap.h"
 #endif
 BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, LPVOID reserved) {
     (void)reserved;
@@ -601,16 +593,7 @@ BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, LPVOID reserved) {
         InitializeCriticalSection(&lock);
         DisableThreadLibraryCalls(dll);
 #ifndef QUIT_MENU_TEST
-        /* Process-local loader configuration, before the emulator initializes Vulkan. */
-        wchar_t directory[MAX_PATH],existing[16000],value[16384];
-        if(GetModuleFileNameW(dll,directory,MAX_PATH)){
-            wchar_t *slash=wcsrchr(directory,L'\\');if(slash)*slash=0;
-            const wchar_t *key=GetEnvironmentVariableW(L"VK_LAYER_PATH",existing,16000)?L"VK_LAYER_PATH":L"VK_ADD_LAYER_PATH";
-            DWORD n=GetEnvironmentVariableW(key,existing,16000);
-            if(n<16000&&(!n||!env_list_has(existing,directory))){lstrcpyW(value,directory);if(n){lstrcatW(value,L";");lstrcatW(value,existing);}SetEnvironmentVariableW(key,value);}
-            n=GetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",existing,16000);
-            if(n<16000&&(!n||!env_list_has(existing,L"VK_LAYER_UFC6_quit_menu"))){lstrcpyW(value,L"VK_LAYER_UFC6_quit_menu");if(n){lstrcatW(value,L";");lstrcatW(value,existing);}SetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",value);}
-        }
+        overlay_bootstrap(dll);
         HANDLE h = CreateThread(NULL,0,worker,NULL,0,NULL);
         if (h) CloseHandle(h);
 #endif

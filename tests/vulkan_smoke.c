@@ -18,24 +18,27 @@ typedef void (*ToggleFn)(void);
 typedef void (*ButtonFn)(uint32_t,int);
 typedef int (*ScaleFn)(void);
 static void press(ButtonFn button,uint32_t value){button(value,1);button(value,0);Sleep(40);}
+#ifdef STARTUP_BRIDGE_TEST
+__declspec(dllimport) int clock_getres(int,void*);
+#endif
 static LRESULT CALLBACK proc(HWND w,UINT m,WPARAM a,LPARAM b){return DefWindowProcW(w,m,a,b);}
 int main(void){
     wchar_t directory[MAX_PATH];GetCurrentDirectoryW(MAX_PATH,directory);
+    PROCESS_MITIGATION_IMAGE_LOAD_POLICY policy={0};policy.PreferSystem32Images=1;
+    if(!SetProcessMitigationPolicy(ProcessImageLoadPolicy,&policy,sizeof(policy)))return 1;
+    if(!LoadLibraryExW(L"version.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32))return 1;
+#ifdef STARTUP_BRIDGE_TEST
+    if(clock_getres(0,NULL)!=7331)return 1;
+#else
     SetEnvironmentVariableW(L"VK_LAYER_PATH",directory);
     SetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",L"VK_LAYER_UFC6_quit_menu");
+#endif
     wchar_t test_settings[MAX_PATH];swprintf(test_settings,MAX_PATH,L"%ls\\ufc6-quit-menu.test.ini",directory);
     WritePrivateProfileStringW(L"Menu",L"UIScale",L"100",test_settings);
     HINSTANCE app=GetModuleHandleW(NULL);
     WNDCLASSW wc={0};wc.lpfnWndProc=proc;wc.hInstance=app;wc.lpszClassName=L"VulkanMenuSmoke";RegisterClassW(&wc);
     HWND window=CreateWindowW(wc.lpszClassName,L"Vulkan menu isolated test",WS_OVERLAPPEDWINDOW,0,0,1024,768,NULL,NULL,app,NULL);
     if(!window)return 1;
-    HMODULE core=LoadLibraryW(L"version.dll");
-    StartFn start=(StartFn)GetProcAddress(core,"MenuTestStart");
-    ToggleFn toggle=(ToggleFn)GetProcAddress(core,"MenuTestToggle");
-    ToggleFn screenshot=(ToggleFn)GetProcAddress(core,"MenuTestScreenshot");
-    ButtonFn button=(ButtonFn)GetProcAddress(core,"MenuTestButton");
-    ScaleFn scale=(ScaleFn)GetProcAddress(core,"MenuTestScale");
-    if(!start||!toggle){puts("Core test exports missing");return 1;}start(window);
     HMODULE loader=LoadLibraryExW(L"vulkan-1.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32);
     if(!loader){puts("Vulkan loader missing");return 1;}
     PFN_vkGetInstanceProcAddr gipa=(PFN_vkGetInstanceProcAddr)GetProcAddress(loader,"vkGetInstanceProcAddr");
@@ -44,6 +47,15 @@ int main(void){
     VkApplicationInfo ai={.sType=VK_STRUCTURE_TYPE_APPLICATION_INFO,.pApplicationName="UFC6 menu test",.apiVersion=VK_API_VERSION_1_3};
     VkInstanceCreateInfo ii={.sType=VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,.pApplicationInfo=&ai,.enabledExtensionCount=2,.ppEnabledExtensionNames=extensions};
     VkInstance instance;CHECK(create_instance(&ii,NULL,&instance));
+    wchar_t core_path[MAX_PATH];swprintf(core_path,MAX_PATH,L"%ls\\version.dll",directory);
+    HMODULE core=GetModuleHandleW(core_path);if(!core){puts("Layer did not load the app core explicitly");return 1;}
+    StartFn start=(StartFn)GetProcAddress(core,"MenuTestStart");
+    ToggleFn toggle=(ToggleFn)GetProcAddress(core,"MenuTestToggle");
+    ToggleFn screenshot=(ToggleFn)GetProcAddress(core,"MenuTestScreenshot");
+    ButtonFn button=(ButtonFn)GetProcAddress(core,"MenuTestButton");
+    ScaleFn scale=(ScaleFn)GetProcAddress(core,"MenuTestScale");
+    if(!start||!toggle){puts("Core test exports missing");return 1;}start(window);
+
     INSTANCE(EnumeratePhysicalDevices);INSTANCE(GetPhysicalDeviceQueueFamilyProperties);
     INSTANCE(CreateWin32SurfaceKHR);INSTANCE(GetPhysicalDeviceSurfaceSupportKHR);
     INSTANCE(GetPhysicalDeviceSurfaceCapabilitiesKHR);INSTANCE(GetPhysicalDeviceSurfaceFormatsKHR);

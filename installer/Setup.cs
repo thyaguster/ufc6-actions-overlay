@@ -13,6 +13,11 @@ using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 namespace UFC6OverlaySetup {
+    public sealed class RuntimeBridge {
+        public string target { get; set; }
+        public string original_name { get; set; }
+        public string original_sha256 { get; set; }
+    }
     public sealed class Release {
         public string version { get; set; }
         public string engine_sha256 { get; set; }
@@ -20,6 +25,7 @@ namespace UFC6OverlaySetup {
         public string[] previous_dll_sha256 { get; set; }
         public Dictionary<string,string> companion_files { get; set; }
         public Dictionary<string,string[]> previous_companion_sha256 { get; set; }
+        public RuntimeBridge runtime_bridge { get; set; }
     }
     public sealed class Inspection {
         public string Folder;
@@ -43,13 +49,18 @@ namespace UFC6OverlaySetup {
         readonly Dictionary<string,string> expected = new Dictionary<string,string>();
         readonly Dictionary<string,HashSet<string>> known = new Dictionary<string,HashSet<string>>();
         readonly string engineHash;
+        readonly RuntimeBridge runtime;
         public readonly string Version;
         // Tests inject fixture bytes and a fixture engine hash into the same transaction code.
         public Action<int> BeforeCommit;
         public Manager(Release release, Dictionary<string,byte[]> payload) {
-            Version = release.version; engineHash = release.engine_sha256; Payload = payload;
+            Version = release.version; engineHash = release.engine_sha256; Payload = payload; runtime = release.runtime_bridge;
             foreach (var pair in release.companion_files) { expected.Add(pair.Key,pair.Value); Order.Add(pair.Key); }
             expected.Add("version.dll",release.dll_sha256); Order.Add("version.dll"); // Core commits last.
+            if (runtime != null) {
+                if (!expected.ContainsKey(runtime.target) || runtime.target == "version.dll") throw new InvalidDataException("Invalid runtime bridge target.");
+                expected.Add(runtime.original_name,runtime.original_sha256); Order.Insert(0,runtime.original_name);
+            }
             foreach (string name in Order) {
                 if (Path.GetFileName(name) != name || name.IndexOfAny(new [] {'/', '\\', ':'}) >= 0) throw new InvalidDataException("Invalid release filename.");
                 string[] old;
@@ -57,6 +68,8 @@ namespace UFC6OverlaySetup {
                 else if (!release.previous_companion_sha256.TryGetValue(name,out old)) old = new string[0];
                 known[name] = new HashSet<string>(old ?? new string[0],StringComparer.OrdinalIgnoreCase);
                 known[name].Add(expected[name]);
+                if (runtime != null && name == runtime.target) known[name].Add(runtime.original_sha256);
+                if (runtime != null && name == runtime.original_name) continue; // User's original; never bundled.
                 if (!payload.ContainsKey(name) || Hash(payload[name]) != expected[name]) throw new InvalidDataException("The bundled " + name + " failed verification.");
             }
         }
@@ -82,7 +95,11 @@ namespace UFC6OverlaySetup {
                 result.Hashes[name] = hash;
                 if (hash == null) continue;
                 if (!known[name].Contains(hash)) result.Conflicts.Add(name);
-                else { ++result.Installed; if (hash == expected[name]) ++result.Current; }
+                else {
+                    bool original = runtime != null && (name == runtime.original_name || (name == runtime.target && hash == runtime.original_sha256));
+                    if (!original) ++result.Installed;
+                    if (hash == expected[name]) ++result.Current;
+                }
             }
             return result;
         }
@@ -108,37 +125,47 @@ namespace UFC6OverlaySetup {
             if (state.Conflicts.Count != 0) throw new IOException("Unknown or linked files were found: " + string.Join(", ",state.Conflicts) + ". Nothing was changed.");
             if (!remove && !state.Supported) throw new IOException("This engine is not the supported PORTHEON 3309ab23f build. Nothing was changed.");
             RequireClosed(folder);
+            byte[] originalRuntime = null;
+            if (runtime != null) {
+                string source = state.Hashes[runtime.target] == runtime.original_sha256 ? runtime.target : state.Hashes[runtime.original_name] == runtime.original_sha256 ? runtime.original_name : null;
+                if (source == null) throw new IOException("The verified original threading runtime is missing. Nothing was changed. Restore it from your own matching PORTHEON installation.");
+                originalRuntime = File.ReadAllBytes(Path.Combine(folder,source));
+                if (Hash(originalRuntime) != runtime.original_sha256) throw new IOException("The original runtime changed during setup. Nothing was changed.");
+                Payload[runtime.original_name] = originalRuntime;
+            }
+            var desired = Order.ToDictionary(name => name,name => !remove ? expected[name] : runtime != null && name == runtime.target ? runtime.original_sha256 : null);
+            var order = remove ? Order.AsEnumerable().Reverse().ToList() : Order;
             var staged = new Dictionary<string,string>();
             var backups = new Dictionary<string,string>();
             var committed = new List<string>();
             var installed = new HashSet<string>();
             string token = Guid.NewGuid().ToString("N");
             try {
-                foreach (string name in Order) {
+                foreach (string name in order) {
                     string old = state.Hashes[name];
-                    if (remove ? old == null : old == expected[name]) continue;
-                    if (!remove) {
+                    if (old == desired[name]) continue;
+                    if (desired[name] != null) {
                         string temp = Path.Combine(folder,".ufc6-menu-" + token + "-" + name + ".tmp");
-                        using (var file = new FileStream(temp,FileMode.CreateNew,FileAccess.Write,FileShare.None)) { staged.Add(name,temp); byte[] bytes = Payload[name]; file.Write(bytes,0,bytes.Length); file.Flush(true); }
-                        if (HashFile(temp) != expected[name]) throw new IOException("Temporary payload verification failed.");
+                        using (var file = new FileStream(temp,FileMode.CreateNew,FileAccess.Write,FileShare.None)) { staged.Add(name,temp); byte[] bytes = remove ? originalRuntime : Payload[name]; file.Write(bytes,0,bytes.Length); file.Flush(true); }
+                        if (HashFile(temp) != desired[name]) throw new IOException("Temporary payload verification failed.");
                     }
                     if (old != null) backups[name] = Path.Combine(folder,"ufc6-quit-menu." + (remove ? "removed-" : "previous-") + name + "-" + old.Substring(0,16) + "-" + token + ".bak");
                 }
-                foreach (string name in Order) {
+                foreach (string name in order) {
                     if (!staged.ContainsKey(name) && !backups.ContainsKey(name)) continue;
                     if (BeforeCommit != null) BeforeCommit(committed.Count);
                     string target = Path.Combine(folder,name);
                     Unchanged(target,state.Hashes[name]);
                     committed.Add(name);
                     if (backups.ContainsKey(name)) File.Move(target,backups[name]);
-                    if (!remove) { File.Move(staged[name],target); installed.Add(name); if (HashFile(target) != expected[name]) throw new IOException("Installed file verification failed."); }
+                    if (staged.ContainsKey(name)) { File.Move(staged[name],target); installed.Add(name); if (HashFile(target) != desired[name]) throw new IOException("Installed file verification failed."); }
                 }
             } catch (Exception error) {
                 var failures = new List<string>();
                 foreach (string name in committed.AsEnumerable().Reverse()) {
                     string target = Path.Combine(folder,name);
                     try {
-                        if (installed.Contains(name) && File.Exists(target) && !Linked(target) && HashFile(target) == expected[name]) File.Delete(target);
+                        if (installed.Contains(name) && File.Exists(target) && !Linked(target) && HashFile(target) == desired[name]) File.Delete(target);
                         if (backups.ContainsKey(name) && File.Exists(backups[name]) && !File.Exists(target) && !Directory.Exists(target)) File.Move(backups[name],target);
                         if ((File.Exists(target) ? HashFile(target) : null) != state.Hashes[name]) failures.Add(name);
                     } catch { failures.Add(name); }

@@ -16,7 +16,7 @@ New-Item -ItemType Directory -Force -Path "$package\tests" | Out-Null
 Get-ChildItem -LiteralPath 'tests' -File | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination "$package\tests"
 }
-Copy-Item -LiteralPath 'dist\version.dll','dist\release.json','dist\ufc6_menu_layer.dll','dist\ufc6_menu_layer.json','dist\ufc6_menu_restart.exe' -Destination "$package\dist"
+Copy-Item -LiteralPath 'dist\libwinpthread-1.dll','dist\version.dll','dist\release.json','dist\ufc6_menu_layer.dll','dist\ufc6_menu_layer.json','dist\ufc6_menu_restart.exe' -Destination "$package\dist"
 New-Item -ItemType Directory -Force -Path "$package\vendor\vulkan-headers" | Out-Null
 Copy-Item -LiteralPath 'vendor\vulkan-headers\include','vendor\vulkan-headers\LICENSES' -Destination "$package\vendor\vulkan-headers" -Recurse -Force
 Copy-Item -LiteralPath 'vendor\vulkan-headers\LICENSE.md' -Destination "$package\vendor\vulkan-headers"

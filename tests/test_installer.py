@@ -138,6 +138,65 @@ class InstallerTests(unittest.TestCase):
         self.run_action("install");self.run_action("remove")
         self.assertEqual(settings.read_bytes(),contents)
 
+    def add_runtime(self):
+        target=self.bin/"libwinpthread-1.dll"
+        original=b"verified user runtime"
+        target.write_bytes(original)
+        bridge=self.root/target.name;bridge.write_bytes(b"startup bridge")
+        manifest=json.loads(self.manifest.read_text())
+        manifest["companion_files"]={bridge.name:manage_menu.digest(bridge)}
+        manifest["runtime_bridge"]={"target":target.name,"original_name":"ufc6_pthread_original.dll","original_sha256":hashlib.sha256(original).hexdigest()}
+        self.manifest.write_text(json.dumps(manifest))
+        return target,bridge,original,self.bin/"ufc6_pthread_original.dll"
+
+    def test_runtime_install_restore_and_reinstall(self):
+        target,bridge,original,saved=self.add_runtime()
+        for _ in range(2):
+            self.run_action("install")
+            self.assertEqual(target.read_bytes(),bridge.read_bytes())
+            self.assertEqual(saved.read_bytes(),original)
+            self.run_action("remove")
+            self.assertEqual(target.read_bytes(),original)
+            self.assertFalse(saved.exists())
+            self.assertFalse((self.bin/"version.dll").exists())
+
+    def test_runtime_install_rollback(self):
+        target,bridge,original,saved=self.add_runtime()
+        rename=Path.rename
+        for failed in [saved.name,target.name,"version.dll"]:
+            def fail_commit(path,destination):
+                if path.suffix==".tmp" and Path(destination).name==failed:raise OSError("runtime commit failure")
+                return rename(path,destination)
+            with patch.object(Path,"rename",fail_commit):
+                with self.assertRaisesRegex(OSError,"runtime commit"):self.run_action("install")
+            self.assertEqual(target.read_bytes(),original)
+            self.assertFalse(saved.exists())
+            self.assertFalse((self.bin/"version.dll").exists())
+            self.assertFalse(list(self.bin.glob(".ufc6-menu-*.tmp")))
+
+    def test_runtime_remove_rollback_and_missing_original(self):
+        target,bridge,original,saved=self.add_runtime();self.run_action("install")
+        rename=Path.rename
+        def fail_restore(path,destination):
+            if path.suffix==".tmp" and Path(destination).name==target.name:raise OSError("restore failed")
+            return rename(path,destination)
+        with patch.object(Path,"rename",fail_restore):
+            with self.assertRaisesRegex(OSError,"restore failed"):self.run_action("remove")
+        self.assertEqual(target.read_bytes(),bridge.read_bytes())
+        self.assertEqual(saved.read_bytes(),original)
+        self.assertTrue((self.bin/"version.dll").exists())
+        saved.unlink()
+        for action in ["install","remove"]:
+            with self.assertRaisesRegex(RuntimeError,"original threading runtime is missing"):self.run_action(action)
+        self.assertEqual(target.read_bytes(),bridge.read_bytes())
+
+    def test_runtime_backup_conflict_is_preserved(self):
+        target,bridge,original,saved=self.add_runtime();saved.write_bytes(b"unrelated file")
+        for action in ["install","remove"]:
+            with self.assertRaisesRegex(RuntimeError,"unknown file"):self.run_action(action)
+        self.assertEqual(saved.read_bytes(),b"unrelated file")
+        self.assertEqual(target.read_bytes(),original)
+
 
 if __name__ == "__main__":
     unittest.main()

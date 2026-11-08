@@ -13,3 +13,7 @@ The bundled headers under `vendor/vulkan-headers/include` come from [Khronos Vul
 - The Windows setup uses the system .NET Framework. The Vulkan layer uses the game's existing Vulkan loader. The release does not redistribute either runtime.
 
 This is an unofficial community tool, not affiliated with EA, Sony, Microsoft, PORTHEON, Khronos, or the KytyPS5 project. The license covers the tool, not UFC 6 or other third-party content.
+
+## User-provided threading runtime
+
+The startup bridge declares API forwarders for the engine's `libwinpthread-1.dll`. The original winpthreads DLL is not distributed. Setup verifies the user's installed original, preserves its bytes under `ufc6_pthread_original.dll`, and restores it on uninstall. Forwarder tests use a tiny source-built stand-in; it contains no original runtime or game bytes.

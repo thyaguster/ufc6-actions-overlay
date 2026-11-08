@@ -71,6 +71,42 @@ namespace UFC6OverlaySetup {
                 Reject(() => new Manager(release,bad),"Corrupt embedded payload must be rejected.");
                 Assert(File.ReadAllText(ini) == settings && File.ReadAllText(screenshot) == "existing image","All safeguards must preserve user data.");
                 passed.Add("PASS: concurrent writes, directory conflicts and corrupt bundled payloads are rejected.");
+                string runtime = Path.Combine(folder,"libwinpthread-1.dll"), originalCopy = Path.Combine(folder,"ufc6_pthread_original.dll");
+                byte[] original = Bytes("user supplied original threading runtime");
+                File.WriteAllBytes(runtime,original);
+                payload["libwinpthread-1.dll"] = Bytes("startup bridge fixture");
+                release.companion_files.Add("libwinpthread-1.dll",Manager.Hash(payload["libwinpthread-1.dll"]));
+                release.runtime_bridge = new RuntimeBridge { target = "libwinpthread-1.dll", original_name = "ufc6_pthread_original.dll", original_sha256 = Manager.Hash(original) };
+                var runtimeManager = new Manager(release,payload);
+                for (int fail = 0; fail < runtimeManager.Order.Count; ++fail) {
+                    int point = fail;
+                    runtimeManager.BeforeCommit = count => { if (count == point) throw new IOException("Injected bridge install failure"); };
+                    Reject(() => runtimeManager.Apply(folder,false),"Every bridge install failure must propagate.");
+                    Assert(File.ReadAllBytes(runtime).SequenceEqual(original) && !File.Exists(originalCopy),"Failed bridge installation must preserve the original runtime.");
+                    Assert(runtimeManager.Inspect(folder).Installed == 0,"Failed bridge installation must not leave a partial overlay.");
+                }
+                runtimeManager.BeforeCommit = null; runtimeManager.Apply(folder,false);
+                Assert(File.ReadAllBytes(originalCopy).SequenceEqual(original),"Original runtime must be preserved byte-for-byte.");
+                Assert(File.ReadAllBytes(runtime).SequenceEqual(payload["libwinpthread-1.dll"]),"Bridge must replace only the verified runtime.");
+                for (int fail = 0; fail < runtimeManager.Order.Count; ++fail) {
+                    int point = fail;
+                    runtimeManager.BeforeCommit = count => { if (count == point) throw new IOException("Injected bridge removal failure"); };
+                    Reject(() => runtimeManager.Apply(folder,true),"Bridge removal failure must propagate.");
+                    Assert(runtimeManager.Inspect(folder).Current == runtimeManager.Order.Count,"Bridge removal rollback must restore all files, including the user's runtime copy.");
+                }
+                runtimeManager.BeforeCommit = null;
+                File.Delete(originalCopy);
+                Reject(() => runtimeManager.Apply(folder,true),"Missing original must block removal safely.");
+                Reject(() => runtimeManager.Apply(folder,false),"Missing original must block reinstallation safely.");
+                File.WriteAllBytes(originalCopy,Bytes("another mod"));
+                Reject(() => runtimeManager.Apply(folder,true),"Unknown runtime copy must be preserved.");
+                File.WriteAllBytes(originalCopy,original);
+                runtimeManager.Apply(folder,true);
+                Assert(File.ReadAllBytes(runtime).SequenceEqual(original) && !File.Exists(originalCopy),"Uninstall must restore the original runtime and remove the extra copy.");
+                runtimeManager.Apply(folder,false); runtimeManager.Apply(folder,true);
+                Assert(File.ReadAllBytes(runtime).SequenceEqual(original),"Reinstall after uninstall must remain safe.");
+                Assert(File.ReadAllText(ini) == settings,"Runtime bridge migration must preserve settings.");
+                passed.Add("PASS: runtime bridge install/remove/reinstall, every commit rollback, missing/corrupt original rejection, and byte-for-byte runtime restoration.");
                 // Verify the actual embedded release too, without touching a game directory.
                 var embedded = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Release>(Encoding.UTF8.GetString(Program.Resource("release.json")).TrimStart('\ufeff'));
                 new Manager(embedded,embedded.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n => n,n => Program.Resource(n)));

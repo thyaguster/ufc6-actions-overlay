@@ -96,7 +96,9 @@ static void bind_menu(void) {
     if(render_menu)return;
     wchar_t path[MAX_PATH];GetModuleFileNameW(self,path,MAX_PATH);
     wchar_t *s=wcsrchr(path,L'\\');if(!s)return;lstrcpyW(s+1,L"version.dll");
-    HMODULE core=GetModuleHandleW(path);if(!core)return;
+    HMODULE core=GetModuleHandleW(path);
+    if(!core)core=LoadLibraryExW(path,NULL,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if(!core)return;
     render_menu=(RenderFn)GetProcAddress(core,"Ufc6RenderMenu");
     menu_extent=(ExtentFn)GetProcAddress(core,"Ufc6MenuExtent");
     mark_active=(ActiveFn)GetProcAddress(core,"Ufc6VulkanActive");
@@ -362,6 +364,7 @@ static VkResult VKAPI_CALL menu_create_device(VkPhysicalDevice physical,const Vk
     log_line("Vulkan device dispatch captured.");return result;
 }
 static VkResult VKAPI_CALL menu_create_instance(const VkInstanceCreateInfo *info,const VkAllocationCallbacks *alloc,VkInstance *out){
+    bind_menu(); /* Explicit core path, outside DllMain; system VERSION.dll may already be loaded. */
     VkLayerInstanceCreateInfo *link=(VkLayerInstanceCreateInfo *)info->pNext;
     while(link&&(link->sType!=VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO||link->function!=VK_LAYER_LINK_INFO))link=(VkLayerInstanceCreateInfo *)link->pNext;
     if(!link)return VK_ERROR_INITIALIZATION_FAILED;

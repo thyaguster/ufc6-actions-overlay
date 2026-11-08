@@ -1,11 +1,21 @@
-# UFC 6 Actions Overlay v0.8.1
+# UFC 6 Actions Overlay v0.8.2
 
-First public release of the controller overlay and standalone Windows installer.
+Fixes the overlay not loading when Windows prefers system DLLs, including the launch behavior observed after a PORTHEON update. The supported engine is still `3309ab23f`; its compatibility checks remain in place.
+
+## Startup repair
+
+- A non-system threading-runtime bridge enables the Vulkan layer inside the game process. The layer explicitly loads the app-local overlay core beside Windows' system `version.dll`.
+- All 135 runtime exports forward to the user's verified original. Setup preserves its bytes as `ufc6_pthread_original.dll`; uninstall restores it. The original runtime is never distributed. Keep that copy and use this version's setup to uninstall.
+- Large startup buffers stay off GPU-worker thread-attach stacks. Missing overlay components leave normal runtime forwarding active without enabling a broken Vulkan layer.
+- Windows' system-DLL preference is preserved. No system-wide Vulkan layer is registered.
+- Installer tests cover runtime preservation/restoration, reinstall, unknown or missing originals, and rollback at every commit failure. Startup tests enable PreferSystem32Images at process creation and check explicit core loading, small-stack threads, and the missing-overlay case. Real GPU checks cover startup, scaling, and clean screenshots through the bridge.
+
+The game-action UI is unchanged from v0.8.1. Restart and post-reboot auto-launch still use the supported UFC6.exe launcher; custom launcher configuration is not part of this update.
 
 ## Downloads
 
-- **UFC6-Actions-Overlay-Setup-0.8.1.exe** — recommended. One file with all overlay components built in. No Python or compiler required.
-- **UFC6-Actions-Overlay-0.8.1.zip** — setup EXE, prebuilt mod files, complete project source, build scripts, tests, and licenses.
+- **UFC6-Actions-Overlay-Setup-0.8.2.exe** — recommended. One file with all overlay components built in. No Python or compiler required.
+- **UFC6-Actions-Overlay-0.8.2.zip** — setup EXE, prebuilt mod files, complete project source, build scripts, tests, and licenses.
 - **Overlay-Screenshots-0.8.1.zip** — 18 updated images, including the main menu and Settings over the actual game menu.
 - **SHA256SUMS.txt** — checksums for these download files.
 

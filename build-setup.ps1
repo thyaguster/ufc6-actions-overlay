@@ -6,7 +6,7 @@ if (-not (Test-Path -LiteralPath $compiler)) { throw 'The Windows .NET Framework
 New-Item -ItemType Directory -Force -Path 'dist','.build','release' | Out-Null
 $release = Get-Content -LiteralPath 'dist\release.json' -Raw | ConvertFrom-Json
 $arguments = @('/nologo','/target:winexe','/platform:x64','/optimize+','/warn:4','/warnaserror+','/out:dist\UFC6ActionsOverlaySetup.exe','/win32manifest:installer\setup.manifest','/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Web.Extensions.dll')
-foreach ($name in @('version.dll','ufc6_menu_layer.dll','ufc6_menu_layer.json','ufc6_menu_restart.exe','release.json')) {
+foreach ($name in @('libwinpthread-1.dll','version.dll','ufc6_menu_layer.dll','ufc6_menu_layer.json','ufc6_menu_restart.exe','release.json')) {
     $arguments += "/resource:dist\$name,$name"
 }
 $arguments += @('installer\Setup.cs','installer\SelfTests.cs','installer\AssemblyInfo.cs')
