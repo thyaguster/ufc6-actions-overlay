@@ -34,7 +34,7 @@ if (-not $Test) {
             'ufc6_menu_layer.json' = (Get-FileHash -LiteralPath 'dist/ufc6_menu_layer.json').Hash.ToLowerInvariant()
             'ufc6_menu_restart.exe' = (Get-FileHash -LiteralPath 'dist/ufc6_menu_restart.exe').Hash.ToLowerInvariant()
         }
-        previous_companion_sha256 = @{'ufc6_menu_layer.dll' = @('620dc7fe02917c24ddb8476da90cd561030de6ed9e7e7e57b5c3c0a83ca0eebd','d943492814bec60b5b535fc31f33c9a1c2e809239f6e7022a95dfc964cf0e101','0b63b6657e5049609281bda3045c530333fc55c37ce38366bcf582141e036e83','bec28a5cad188a802063c2a0f5f7eac259882a6ff575bb7905f56ca1bbb34e7b');'ufc6_menu_restart.exe'=@('9234b1e02b3dc2e7ad804bdaeb20854898462de159a6a224444aba80325829c3','cc25fdf1e57cb63aa0a0dcb493a77cc5575abf692447713de75e84024bfa0618','92b747b7c5cacd7dfe9c97c085ba436bcd4b53a3272093aa781f991a3a272556')}
+        previous_companion_sha256 = @{'ufc6_menu_layer.dll' = @('620dc7fe02917c24ddb8476da90cd561030de6ed9e7e7e57b5c3c0a83ca0eebd','d943492814bec60b5b535fc31f33c9a1c2e809239f6e7022a95dfc964cf0e101','0b63b6657e5049609281bda3045c530333fc55c37ce38366bcf582141e036e83','bec28a5cad188a802063c2a0f5f7eac259882a6ff575bb7905f56ca1bbb34e7b','da7b6ca8e9ef149b37ed8986781db071899a843d4e12ab326ba65e7d196a72de');'ufc6_menu_restart.exe'=@('9234b1e02b3dc2e7ad804bdaeb20854898462de159a6a224444aba80325829c3','cc25fdf1e57cb63aa0a0dcb493a77cc5575abf692447713de75e84024bfa0618','92b747b7c5cacd7dfe9c97c085ba436bcd4b53a3272093aa781f991a3a272556')}
         shortcut = 'Hold LB + RB + Menu for 800 ms'
     }
     $manifest | ConvertTo-Json | Set-Content -LiteralPath 'dist/release.json' -Encoding utf8

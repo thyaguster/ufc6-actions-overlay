@@ -18,13 +18,13 @@
     "9d7a5429ccf1e79e3c98b9c82248414698e9000daa95ba2f125863dcf09e54fb"
   ],
   "runtime_bridge": {
+    "original_sha256": "78ebbc1480d62098aa66307db2ff139abc07c137bc188f5b73bf7b131492932c",
     "target": "libwinpthread-1.dll",
-    "original_name": "ufc6_pthread_original.dll",
-    "original_sha256": "78ebbc1480d62098aa66307db2ff139abc07c137bc188f5b73bf7b131492932c"
+    "original_name": "ufc6_pthread_original.dll"
   },
   "companion_files": {
     "libwinpthread-1.dll": "7834ba478b95cc2e680dd7b61cc92fc61f73cd9d3de373121c3448ec0a701ba4",
-    "ufc6_menu_layer.dll": "da7b6ca8e9ef149b37ed8986781db071899a843d4e12ab326ba65e7d196a72de",
+    "ufc6_menu_layer.dll": "56a5a3dac1d174dc0825d95b0729969967b66ebd538e1263aa06b122d5ce0527",
     "ufc6_menu_layer.json": "5057d77d0bef83dbc53e4a1bef5c9c80eded92b1265a088d30d4fd59c42a0c92",
     "ufc6_menu_restart.exe": "3ab575a182f6f8d899b9a7276c003941d7bd575d2f60738b3931e6db5cae65fd"
   },
@@ -33,7 +33,8 @@
       "620dc7fe02917c24ddb8476da90cd561030de6ed9e7e7e57b5c3c0a83ca0eebd",
       "d943492814bec60b5b535fc31f33c9a1c2e809239f6e7022a95dfc964cf0e101",
       "0b63b6657e5049609281bda3045c530333fc55c37ce38366bcf582141e036e83",
-      "bec28a5cad188a802063c2a0f5f7eac259882a6ff575bb7905f56ca1bbb34e7b"
+      "bec28a5cad188a802063c2a0f5f7eac259882a6ff575bb7905f56ca1bbb34e7b",
+      "da7b6ca8e9ef149b37ed8986781db071899a843d4e12ab326ba65e7d196a72de"
     ],
     "ufc6_menu_restart.exe": [
       "9234b1e02b3dc2e7ad804bdaeb20854898462de159a6a224444aba80325829c3",

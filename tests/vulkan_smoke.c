@@ -48,7 +48,13 @@ int main(void){
     VkInstanceCreateInfo ii={.sType=VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,.pApplicationInfo=&ai,.enabledExtensionCount=2,.ppEnabledExtensionNames=extensions};
     VkInstance instance;CHECK(create_instance(&ii,NULL,&instance));
     wchar_t core_path[MAX_PATH];swprintf(core_path,MAX_PATH,L"%ls\\version.dll",directory);
-    HMODULE core=GetModuleHandleW(core_path);if(!core){puts("Layer did not load the app core explicitly");return 1;}
+    HMODULE core=GetModuleHandleW(core_path);
+#ifdef NON_GAME_PROBE
+    if(core){puts("FAIL: overlay core loaded into a launcher/probe process");return 1;}
+    ((PFN_vkDestroyInstance)gipa(instance,"vkDestroyInstance"))(instance,NULL);DestroyWindow(window);
+    puts("PASS: Vulkan probe in a non-game process does not load the overlay core.");return 0;
+#endif
+    if(!core){puts("Layer did not load the app core explicitly");return 1;}
     StartFn start=(StartFn)GetProcAddress(core,"MenuTestStart");
     ToggleFn toggle=(ToggleFn)GetProcAddress(core,"MenuTestToggle");
     ToggleFn screenshot=(ToggleFn)GetProcAddress(core,"MenuTestScreenshot");

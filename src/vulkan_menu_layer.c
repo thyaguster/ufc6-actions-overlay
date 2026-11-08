@@ -95,7 +95,12 @@ static Device *device_for(void *handle) {
 static void bind_menu(void) {
     if(render_menu)return;
     wchar_t path[MAX_PATH];GetModuleFileNameW(self,path,MAX_PATH);
-    wchar_t *s=wcsrchr(path,L'\\');if(!s)return;lstrcpyW(s+1,L"version.dll");
+    wchar_t *s=wcsrchr(path,L'\\');if(!s)return;
+    lstrcpyW(s+1,L"UFC 6.exe");
+    wchar_t executable[MAX_PATH];if(!GetModuleFileNameW(NULL,executable,MAX_PATH)||lstrcmpiW(path,executable))return;
+    /* A launcher can probe Vulkan with inherited layer settings. Never load
+     * controller hooks into that launcher or any other process. */
+    lstrcpyW(s+1,L"version.dll");
     HMODULE core=GetModuleHandleW(path);
     if(!core)core=LoadLibraryExW(path,NULL,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
     if(!core)return;

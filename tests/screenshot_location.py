@@ -33,7 +33,7 @@ root=Path(__file__).resolve().parents[1]
 fixture=root/".build/vulkan-smoke"
 before=set(folder.glob("UFC6_*.png"))
 old_before=set((fixture/"Screenshots").glob("UFC6_*.png"))
-subprocess.run([str(fixture/"vulkan_smoke.exe")],cwd=fixture,check=True,timeout=20,creationflags=0x08000000)
+subprocess.run([str(fixture/"UFC 6.exe")],cwd=fixture,check=True,timeout=20,creationflags=0x08000000)
 created=set(folder.glob("UFC6_*.png"))-before
 assert len(created)==1,f"Expected one PNG in {folder}; found {len(created)}"
 assert set((fixture/"Screenshots").glob("UFC6_*.png"))==old_before,"Writer still used the old game-local folder"
