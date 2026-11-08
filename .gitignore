@@ -1,0 +1,17 @@
+.tools/
+.deps/
+.build/
+.capturedeps/
+.vscode/
+release/
+__pycache__/
+engine-original.exe
+kyty-source/
+plugin-reference/
+dist/*.exe
+dist/*.dll
+dist/*.lib
+dist/*.pdb
+dist/*.log
+dist/*.png
+*.pyc

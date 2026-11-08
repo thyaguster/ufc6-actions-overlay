@@ -1,0 +1,176 @@
+"""Exercise icon selection through the real DLL and render both profiles offscreen."""
+import argparse
+import ctypes as c
+from ctypes import wintypes as w
+from pathlib import Path
+import time
+from PIL import Image
+
+parser=argparse.ArgumentParser()
+parser.add_argument("folder",type=Path)
+parser.add_argument("--reload",action="store_true")
+parser.add_argument("--reset",action="store_true")
+parser.add_argument("--power",action="store_true")
+parser.add_argument("--reboot",action="store_true")
+parser.add_argument("--auto-launch",action="store_true")
+parser.add_argument("--reload-auto-off",action="store_true")
+parser.add_argument("--scale",action="store_true")
+args=parser.parse_args()
+folder=args.folder.resolve()
+if args.reset:
+    (folder/"ufc6-quit-menu.test.ini").write_text("[Menu]\nButtonIcons=Xbox\nOpeningShortcut=0xc08\nUIScale=100\n")
+u=c.WinDLL("user32",use_last_error=True)
+k=c.WinDLL("kernel32",use_last_error=True)
+u.CreateWindowExW.argtypes=[w.DWORD,w.LPCWSTR,w.LPCWSTR,w.DWORD,c.c_int,c.c_int,c.c_int,c.c_int,w.HWND,w.HMENU,w.HINSTANCE,c.c_void_p]
+u.CreateWindowExW.restype=w.HWND
+k.GetModuleHandleW.argtypes=[w.LPCWSTR];k.GetModuleHandleW.restype=w.HMODULE
+u.PeekMessageW.argtypes=[c.POINTER(w.MSG),w.HWND,w.UINT,w.UINT,w.UINT]
+u.DispatchMessageW.argtypes=[c.POINTER(w.MSG)];u.DispatchMessageW.restype=w.LPARAM
+u.TranslateMessage.argtypes=[c.POINTER(w.MSG)]
+u.DestroyWindow.argtypes=[w.HWND]
+
+
+def pump(seconds=.2):
+    until=time.monotonic()+seconds
+    msg=w.MSG()
+    while time.monotonic()<until:
+        while u.PeekMessageW(c.byref(msg),None,0,0,1):
+            u.TranslateMessage(c.byref(msg));u.DispatchMessageW(c.byref(msg))
+        time.sleep(.005)
+
+
+window=u.CreateWindowExW(0,"STATIC","Hidden icon preview host",0,0,0,570,372,None,None,k.GetModuleHandleW(None),None)
+if not window:raise c.WinError(c.get_last_error())
+dll=c.CDLL(str(folder/"quit_menu_test.dll"))
+dll.MenuTestStart.argtypes=[w.HWND];dll.MenuTestStart.restype=None
+dll.MenuTestButton.argtypes=[w.DWORD,c.c_int];dll.MenuTestButton.restype=None
+dll.MenuTestToggle.restype=None
+dll.MenuTestSnapshot.restype=c.c_int
+dll.MenuTestShortcut.restype=w.DWORD
+dll.MenuTestShutdownRemaining.restype=c.c_int
+dll.MenuTestScale.restype=c.c_int
+dll.Ufc6MenuExtent.argtypes=[w.DWORD,w.DWORD,c.POINTER(w.DWORD),c.POINTER(w.DWORD)]
+dll.Ufc6MenuExtent.restype=None
+dll.Ufc6RenderMenu.argtypes=[c.c_void_p,w.DWORD];dll.Ufc6RenderMenu.restype=w.BOOL
+
+
+def press(button):
+    dll.MenuTestButton(button,1);dll.MenuTestButton(button,0);pump(.06)
+
+
+def render(name,viewport=(2560,1440)):
+    width,height=w.DWORD(),w.DWORD()
+    dll.Ufc6MenuExtent(*viewport,c.byref(width),c.byref(height))
+    pixels=c.create_string_buffer(width.value*height.value*4)
+    assert dll.Ufc6RenderMenu(pixels,len(pixels)),"Real menu renderer was not ready"
+    image=Image.frombytes("RGBA",(width.value,height.value),pixels.raw,"raw","BGRA")
+    image.save(folder/name)
+
+
+try:
+    dll.MenuTestStart(window);pump(.4)
+    assert (dll.MenuTestSnapshot()>>4)&1 == int(args.reload),"Stored profile was not loaded"
+    assert dll.MenuTestScale()==(175 if args.reload and args.scale else 100)
+    if args.reload:
+        assert dll.MenuTestShortcut()==6,"Recorded shortcut was not persisted"
+        dll.MenuTestButton(2,1);dll.MenuTestButton(4,1);pump(.95)
+        dll.MenuTestButton(2,0);dll.MenuTestButton(4,0);pump(.15)
+    else:
+        dll.MenuTestToggle();pump(.3)
+    assert dll.MenuTestSnapshot()&0x100
+    if args.auto_launch or args.reload_auto_off:
+        assert dll.MenuTestAutoLaunch()==(0 if args.reload_auto_off else 1)
+        render("main-auto-off.png" if args.reload_auto_off else "main-auto-on.png")
+        if not args.reload_auto_off:
+            for _ in range(3):press(0x40)
+            press(0x4000)
+            for _ in range(3):press(0x40)
+            render("settings-auto-on.png")
+            press(0x4000)
+            assert dll.MenuTestAutoLaunch()==0
+            assert "AutoLaunchAfterRestart=0" in (folder/"ufc6-quit-menu.test.ini").read_text()
+            render("settings-auto-off.png")
+            press(0x80);assert dll.MenuTestAutoLaunch()==1
+            press(0x20);assert dll.MenuTestAutoLaunch()==0
+            press(0x2000)
+            press(0x40);press(0x40)
+        else:
+            for _ in range(5):press(0x40)
+        render("main-auto-off.png")
+        press(0x4000)
+        render("confirmation-auto-off.png")
+        assert (dll.MenuTestSnapshot()>>12)&7==4
+        print("PASS: auto-launch defaults On, toggles with confirm/left/right, saves Off, and renders status on both pages." if not args.reload_auto_off else "PASS: a fresh process loaded auto-launch Off and showed it in the reboot confirmation.")
+    elif args.power or args.reboot:
+        render("main-menu.png")
+        for _ in range(5 if args.reboot else 6):press(0x40)
+        press(0x4000)
+        assert (dll.MenuTestSnapshot()>>12)&7 == (4 if args.reboot else 3) and dll.MenuTestSnapshot()&0xf == 0
+        render("reboot-confirmation.png" if args.reboot else "shutdown-confirmation.png")
+        press(0x40)
+        dll.MenuTestButton(0x4000,1);pump(1.5)
+        render("reboot-hold.png" if args.reboot else "shutdown-hold.png")
+        pump(1.7)
+        assert 8<=dll.MenuTestShutdownRemaining()<=10
+        render("reboot-countdown.png" if args.reboot else "shutdown-countdown.png")
+        dll.MenuTestButton(0x4000,0);pump(.1);press(0x2000)
+        assert dll.MenuTestShutdownRemaining()==0 and (dll.MenuTestSnapshot()>>12)&3 == 0
+        print("PASS: shutdown confirmation, real 3-second hold, countdown and cancellation; no power operation called.")
+    elif args.reload:
+        render("playstation-reloaded.png")
+        print("PASS: fresh process loaded PlayStation icons and opened using the saved custom shortcut.")
+    else:
+        render("main-menu.png")
+        for _ in range(3):press(0x40)
+        press(0x4000)  # Open the second settings box.
+        assert (dll.MenuTestSnapshot()>>12)&3 == 1
+        render("xbox-icons.png")
+        press(0x4000)  # Confirm changes icons; it must not quit/resume.
+        assert dll.MenuTestSnapshot()==0x1110
+        render("playstation-icons.png")
+        ini=(folder/"ufc6-quit-menu.test.ini").read_text()
+        assert "ButtonIcons=PlayStation" in ini
+        press(0x80)
+        assert dll.MenuTestSnapshot()==0x1100
+        render("xbox-setting.png")
+        press(0x20)
+        assert dll.MenuTestSnapshot()==0x1110
+        assert "ButtonIcons=PlayStation" in (folder/"ufc6-quit-menu.test.ini").read_text()
+        press(0x40);press(0x4000)
+        assert dll.MenuTestSnapshot()&(1<<16)
+        render("record-shortcut.png")
+        dll.MenuTestButton(2,1);dll.MenuTestButton(4,1);pump(.45)
+        dll.MenuTestButton(2,0);dll.MenuTestButton(4,0);pump(.2)
+        assert not dll.MenuTestSnapshot()&(1<<16)
+        assert dll.MenuTestShortcut()==6
+        render("custom-shortcut.png")
+        assert "OpeningShortcut=0x00000006" in (folder/"ufc6-quit-menu.test.ini").read_text()
+        if args.scale:
+            press(0x40)
+            assert dll.MenuTestSnapshot()&0xf==2
+            for _ in range(2):press(0x80)
+            assert dll.MenuTestScale()==50;render("ui-scale-050.png")
+            for _ in range(6):press(0x20)
+            assert dll.MenuTestScale()==200;render("ui-scale-200.png")
+            for _ in range(4):press(0x20)
+            assert dll.MenuTestScale()==300;render("ui-scale-300.png")
+            render("ui-scale-fit-640.png",(640,360))
+            press(0x4000)
+            assert dll.MenuTestScale()==100;render("ui-scale-reset.png")
+            for _ in range(3):press(0x20)
+            assert dll.MenuTestScale()==175;render("ui-scale-175.png")
+            assert "UIScale=175" in (folder/"ufc6-quit-menu.test.ini").read_text()
+            print("PASS: actual renderer resized from 50% to 300%, fit a small viewport, reset, and saved 175%.")
+        print("PASS: separate settings, icon switching, shortcut recording, rendering, and persistence.")
+    press(0x2000)
+    if (dll.MenuTestSnapshot()>>12)&3 == 0 and dll.MenuTestSnapshot()&0x100:
+        while dll.MenuTestSnapshot()&0xf != 2:press(0x40)
+        press(0x4000)
+        assert (dll.MenuTestSnapshot()>>12)&3 == 2 and dll.MenuTestSnapshot()&0xf == 0
+        render("restart-confirmation.png")
+        press(0x4000)  # Cancel is selected initially; it must keep the host alive.
+        press(0x2000)
+    assert not dll.MenuTestSnapshot()&0x100
+    print("PASS: Back resumes from the setting without exiting the host.")
+finally:
+    u.DestroyWindow(window);pump(.1)

@@ -1,0 +1,5 @@
+LIBRARY ufc6_menu_layer
+EXPORTS
+    vkNegotiateLoaderLayerInterfaceVersion
+    vkGetInstanceProcAddr
+    vkGetDeviceProcAddr

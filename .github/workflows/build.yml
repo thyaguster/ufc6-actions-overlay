@@ -1,0 +1,62 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.14.2'
+          architecture: x64
+
+      - name: Install pinned compiler
+        run: python -m pip install --target .tools ziglang==0.17.1
+
+      - name: Build overlay
+        shell: pwsh
+        run: .\build.ps1
+
+      - name: Run safe controller and handoff tests
+        shell: pwsh
+        run: .\build.ps1 -Test
+
+      - name: Run command-line installer tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Build and test standalone setup
+        shell: pwsh
+        run: .\build-setup.ps1 -Test
+
+      - name: Package release files
+        shell: pwsh
+        run: |
+          .\package.ps1
+          $files = Get-ChildItem release -File | Where-Object { $_.Name -like 'UFC6-Actions-Overlay-Setup-*.exe' -or $_.Name -like 'UFC6-Actions-Overlay-*.zip' }
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($file.Name)"
+          }
+          $lines | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding ascii
+
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: UFC6-Actions-Overlay-Windows-x64
+          path: |
+            release/UFC6-Actions-Overlay-Setup-*.exe
+            release/UFC6-Actions-Overlay-*.zip
+            release/SHA256SUMS.txt
+          if-no-files-found: error
