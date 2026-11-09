@@ -15,6 +15,7 @@
 #include "xinput_menu.h"
 #include "gamebar_shortcut.h"
 #include "gamebar_monitor.h"
+#include "launcher_dialog.h"
 #ifndef QUIT_MENU_TEST
 #include "engine_fingerprint.h"
 #endif
@@ -76,6 +77,7 @@ static int menu_device = -1;
 static int wait_guide_release;
 static uint64_t next_gamebar_read;
 static int gamebar_conflict;
+static int launcher_setup_active;
 static int input_redirected(void){
 #ifdef QUIT_MENU_TEST
     if(test_mode)return InterlockedCompareExchange(&test_gamebar_redirected,0,0)!=0;
@@ -149,7 +151,7 @@ static void action(int result) {
 }
 static void navigate_device(int index,uint32_t pressed){
     const uint32_t navigation[]={PAD_B,PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_A};
-    if(input_redirected()||!menu.visible||!menu.armed||menu.capturing||!(pressed&(PAD_B|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A)))return;
+    if(launcher_setup_active||input_redirected()||!menu.visible||!menu.armed||menu.capturing||!(pressed&(PAD_B|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A)))return;
     if(raw_navigation){
         if(raw_owner>=0)return;
         /* Guide can be reported by an XInput bridge while actual navigation
@@ -270,8 +272,8 @@ static void shortcut_label(uint32_t chord,int ps,wchar_t *out,size_t capacity) {
     }
 }
 static void row_geometry(int page,int index,int *top,int *height) {
-    *top=page==PAGE_MAIN?86+29*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?88+26*index:100+56*index;
-    *height=page==PAGE_MAIN?27:page==PAGE_SETTINGS?25:50;
+    *top=page==PAGE_MAIN?86+29*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?88+23*index:100+56*index;
+    *height=page==PAGE_MAIN?27:page==PAGE_SETTINGS?22:50;
 }
 static void draw_menu(HDC dc, RECT r) {
     HBRUSH bg = CreateSolidBrush(RGB(19, 23, 30));
@@ -286,9 +288,9 @@ static void draw_menu(HDC dc, RECT r) {
     RECT title = {36, 13, r.right - 36, 57};
     text(dc,font_title,state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
     RECT sub = {38, 57, r.right - 36, 84};
-    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and relaunch through PORTHEON.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):RGB(176,184,197),DT_LEFT);
+    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):RGB(176,184,197),DT_LEFT);
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
-    const wchar_t *setting_labels[]={L"Button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Back"};
+    const wchar_t *setting_labels[]={L"Button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Back"};
     const wchar_t *restart_labels[]={L"Cancel",L"Restart now"};
     const wchar_t *shutdown_labels[]={state.shutdown_countdown?L"Cancel":L"Cancel",state.page==PAGE_REBOOT?L"Hold to restart PC":L"Hold to shut down"};
     for(int i=0;i<menu_rows(&state);++i) {
@@ -360,6 +362,7 @@ static void draw_menu(HDC dc, RECT r) {
             if(selection==SETTING_AUTO_LAUNCH)wcscpy(line,L"Reopen UFC 6 after PC restart and Windows sign-in.");
             if(selection==SETTING_GUIDE)wcscpy(line,L"Turn Game Bar shortcut Off if Guide navigation stalls.");
             if(selection==SETTING_GAMEBAR)wcscpy(line,L"Windows setting for this user. Win+G still opens Game Bar.");
+            if(selection==SETTING_LAUNCHER)wcscpy(line,L"Opens desktop launcher settings. Mouse/keyboard required.");
             RECT shortcut={30,314,r.right-30,336};text(dc,font_small,line,shortcut,RGB(158,170,188),DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         }
     }
@@ -676,6 +679,16 @@ static DWORD WINAPI worker(void *unused) {
                 PostMessageW(game_window, WM_CLOSE, 0, 0);
             }
             else if(msg.wParam==MENU_STYLE_CHANGED||msg.wParam==MENU_SHORTCUT_CHANGED||msg.wParam==MENU_SCALE_CHANGED||msg.wParam==MENU_AUTO_LAUNCH_CHANGED||msg.wParam==MENU_GUIDE_CHANGED)save_settings();
+            else if(msg.wParam==MENU_LAUNCHER_SETTINGS){
+#ifdef QUIT_MENU_TEST
+                status(L"Test launcher setup requested; no desktop dialog opened.");
+#else
+                EnterCriticalSection(&lock);launcher_setup_active=1;LeaveCriticalSection(&lock);
+                BOOL saved=launcher_settings_dialog(game_window,instance,settings_path);
+                EnterCriticalSection(&lock);launcher_setup_active=0;menu.armed=0;LeaveCriticalSection(&lock);
+                status(saved?L"Launcher settings saved.":L"Launcher settings unchanged.");
+#endif
+            }
             else if(msg.wParam==MENU_GAMEBAR_CHANGED)change_gamebar();
             else if(msg.wParam==MENU_SCREENSHOT)request_screenshot();
             else if(msg.wParam==MENU_RESTART) {

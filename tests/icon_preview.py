@@ -220,6 +220,7 @@ try:
         press(0x80);assert dll.MenuTestGameBar()==1
         press(0x20);assert dll.MenuTestGameBar()==0
         press(0x40);assert dll.MenuTestSnapshot()&0xf==6
+        press(0x40);assert dll.MenuTestSnapshot()&0xf==7
         render("settings-back.png")
         press(0x4000);assert (dll.MenuTestSnapshot()>>12)&7==0
         assert windows_preference()==original_windows,"UI test must never change the actual Windows Game Bar preference"

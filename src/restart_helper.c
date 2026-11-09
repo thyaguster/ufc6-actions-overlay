@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <wchar.h>
 #include <reason.h>
+#include "launch_config.h"
 
 static void log_line(const char *line) {
     wchar_t path[1100];GetModuleFileNameW(NULL,path,1100);wchar_t *s=wcsrchr(path,L'\\');
@@ -80,11 +81,12 @@ static BOOL resume_registration(const wchar_t *command,BOOL remove) {
     RegCloseKey(key);return result==ERROR_SUCCESS||(remove&&result==ERROR_FILE_NOT_FOUND);
 #endif
 }
-static int launch_game(const wchar_t *launcher,wchar_t *directory) {
-    wchar_t command[1400];swprintf(command,1400,L"\"%ls\" --play --headless --ui-lang en",launcher);
+static int launch_game(const LaunchConfig *config) {
+    wchar_t command[LAUNCH_PATH+LAUNCH_ARGS+8];
+    if(!launch_config_valid(config)||!launch_config_command(config,command,sizeof(command)/sizeof(command[0])))return 5;
     STARTUPINFOW si={.cb=sizeof(si)};PROCESS_INFORMATION pi={0};
-    if(!CreateProcessW(launcher,command,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,directory,&si,&pi)){
-        log_line("Could not relaunch UFC6.exe.");return 5;
+    if(!CreateProcessW(config->executable,command,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,config->directory,&si,&pi)){
+        log_line("Could not start the configured launch executable.");return 5;
     }
     CloseHandle(pi.hThread);CloseHandle(pi.hProcess);return 0;
 }
@@ -114,11 +116,11 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
         SendMessageW(watcher,WM_ENDSESSION,FALSE,0);DestroyWindow(watcher);LocalFree(argv);return 0;
     }
 #endif
-    wchar_t directory[1100],expected_game[1200],expected_launcher[1200],command[1500];
+    wchar_t directory[1100],expected_game[1200],command[1500];
+    LaunchConfig config;
     GetModuleFileNameW(NULL,directory,1100);wchar_t *slash=wcsrchr(directory,L'\\');if(!slash)return 2;*slash=0;
     swprintf(expected_game,1200,L"%ls\\UFC 6.exe",directory);
-    wcscpy(expected_launcher,directory);slash=wcsrchr(expected_launcher,L'\\');if(!slash)return 2;
-    wcscpy(slash+1,L"UFC6.exe");
+    BOOL config_ok=launch_config_load(directory,&config);
     if(argc==3&&!wcscmp(argv[1],L"--resume-game")){
         wchar_t *end;unsigned long long previous=wcstoull(argv[2],&end,10),current=boot_time();
         if(!previous||*end)return 2;
@@ -128,7 +130,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
 #ifndef UFC6_POWER_TEST
         Sleep(5000); /* Give Explorer and controller services time to start. */
 #endif
-        int result=launch_game(expected_launcher,directory);LocalFree(argv);
+        int result=config_ok?launch_game(&config):5;LocalFree(argv);
         log_line(result?"Post-reboot launch failed.":"One-time post-reboot game launch completed.");return result;
     }
     if(argc!=5&&argc!=6)return 2;
@@ -137,18 +139,19 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     BOOL shutdown_pc=argc==6&&!wcscmp(argv[5],L"--shutdown-pc");
     if(argc==6&&!reboot_pc&&!shutdown_pc)return 2;
     DWORD pid=wcstoul(argv[1],NULL,10),parent=wcstoul(argv[3],NULL,10);
-    if(lstrcmpiW(argv[2],expected_launcher)){log_line("Rejected mismatched launcher path.");return 2;}
+    if(lstrcmpiW(argv[2],config.executable)){log_line("Rejected mismatched launcher path.");return 2;}
+    if((!shutdown_pc&&(!reboot_pc||resume_game))&&(!config_ok||!launch_config_valid(&config))){log_line("Invalid launch configuration; game left running.");return 2;}
     HANDLE game=open_matching(pid,expected_game);
     if(!game){swprintf(expected_game,1200,L"%ls\\UFC 6 Parsec.exe",directory);game=open_matching(pid,expected_game);}
     if(!game){log_line("Could not verify the game process; restart cancelled.");return 3;}
-    HANDLE launcher=parent?open_matching(parent,expected_launcher):NULL;
+    HANDLE launcher=parent&&config_ok&&config.wait_parent?open_matching(parent,config.executable):NULL;
     if((shutdown_pc||reboot_pc)&&!prepare_shutdown()){log_line("Windows shutdown privilege is unavailable; game left running.");CloseHandle(game);if(launcher)CloseHandle(launcher);return 6;}
     HANDLE ready=OpenEventW(EVENT_MODIFY_STATE,FALSE,argv[4]);
     if(!ready){CloseHandle(game);if(launcher)CloseHandle(launcher);return 3;}
     if(resume_game){
         wchar_t self[1200];GetModuleFileNameW(NULL,self,1200);
         swprintf(command,1500,L"\"%ls\" --resume-game %llu",self,boot_time());
-        if(GetFileAttributesW(expected_launcher)==INVALID_FILE_ATTRIBUTES||!resume_registration(command,FALSE)){
+        if(!launch_config_valid(&config)||!resume_registration(command,FALSE)){
             log_line("Could not register one-time game resume; reboot cancelled and game left running.");
             CloseHandle(ready);CloseHandle(game);if(launcher)CloseHandle(launcher);return 8;
         }
@@ -175,6 +178,6 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     }
     /* The old launcher held its single-instance mutex until exit. */
     slash=wcsrchr(directory,L'\\');if(!slash)return 2;*slash=0;
-    int launched=launch_game(expected_launcher,directory);if(launched)return launched;LocalFree(argv);
-    log_line("Game and launcher exited normally; UFC6.exe relaunched.");return 0;
+    int launched=launch_game(&config);if(launched)return launched;LocalFree(argv);
+    log_line("Game and launcher exited normally; Configured executable relaunched.");return 0;
 }

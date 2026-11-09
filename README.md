@@ -22,7 +22,7 @@
 
 An in-process extension for the **PORTHEON UFC 6 `3309ab23f` Windows engine**. It draws its menu directly into the game's Vulkan frames and keeps focus on the game. The main menu contains **Resume, Take screenshot, Restart game, Settings, and Quit game**, followed by a gap separating **Restart PC and Shut down PC**.
 
-The engine executable and game assets are not patched. A startup bridge forwards calls to your verified original threading runtime, preserved byte-for-byte as `ufc6_pthread_original.dll` and restored by the uninstaller. A short-lived helper handles restart or confirmed shutdown after the old game and launcher have exited.
+The engine executable and game assets are not patched. A startup bridge forwards calls to your verified original threading runtime, preserved byte-for-byte as `ufc6_pthread_original.dll` and restored by the uninstaller. A short-lived helper handles restart or confirmed shutdown after the old game has exited and, when configured, after launcher cleanup.
 
 This download contains the overlay and installer only. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. It supports the **PORTHEON `3309ab23f` Windows engine**, including its verified Parsec/two-player derivative, rather than every KytyPS5 build. The installer checks the executable hash before installing.
 
@@ -45,7 +45,7 @@ Install into the same `bin` folder, then launch with PORTHEON's Parsec option en
   </tr>
 </table>
 
-[Game Bar conflict warning](docs/screenshots/gamebar-conflict.png) � [Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
+[Game Bar conflict warning](docs/screenshots/gamebar-conflict.png) · [Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
 
 The two game-background images are real game-window captures. The isolated page images come from the same overlay renderer in a test host with power actions disabled.
 
@@ -66,6 +66,7 @@ Select **Settings** to open the second settings box:
 - **Xbox / Guide button:** On by default. Confirm or left/right toggles opening/closing this overlay with Guide. The controller shortcut and F10 stay available when Off. The preference saves automatically; enabling it while Guide is already held requires releasing and pressing again.
 - **Windows Game Bar shortcut:** shows Windows' actual controller-shortcut preference. Confirm or left/right changes it for the current Windows user. Turn it **Off** if Guide opens this overlay but navigation stalls; Game Bar can redirect controller input even with no visible window. **Win+G** still opens Game Bar. This setting affects other games too and persists after uninstall. Startup and setup only read it; they never change it automatically. Use the fallback controller combination or F10 to reach Settings if Guide is intercepted.
 - **Game Bar conflict warning:** if Windows reports controller input redirected to Game Bar while this menu is open, an amber warning stays visible until input returns. It shows your configured fallback shortcut with Xbox/PlayStation labels and F10, plus recovery instructions. PC power holds/countdowns cancel when redirection begins. Detection only reads Windows state; it never changes the Game Bar preference automatically.
+- **Launcher setup...:** opens a desktop configuration window (mouse/keyboard required). The game minimizes while it is open and restores afterward. Leave Custom unchecked for the current PORTHEON defaults, or browse to another launcher **or the supported game engine itself** and enter its launch arguments. The start folder defaults to the executable's folder when blank. Leave **Wait for the previous launcher to exit** Off for launchers that stay open; PORTHEON keeps its cleanup wait. These settings apply to both Restart game and post-reboot auto-launch. Launcher selection does not add support for unknown engine builds.
 - **Back:** returns to the main menu.
 
 Preferences save automatically to `bin/ufc6-quit-menu.ini` and are preserved when upgrading. A custom shortcut uses the same 0.8-second hold time. The INI can also be edited while the game is closed:
@@ -93,7 +94,7 @@ This captures the game swapchain, not the desktop. Screenshot capture requires a
 
 ## Restart and Quit
 
-**Restart game** opens a confirmation box with **Cancel selected initially**. Confirming **Restart now** starts the handoff helper and sends the engine its normal window-close request. The helper verifies the process paths, waits for the game and its PORTHEON launcher to exit, then runs `UFC6.exe --play --headless --ui-lang en`. The launcher reads your existing game settings. No process is force-terminated, and the helper exits after handing off the launch. If the helper cannot start, the current game remains open. Unsaved progress can be lost when restarting.
+**Restart game** opens a confirmation box with **Cancel selected initially**. Confirming **Restart now** starts the handoff helper and sends the engine its normal window-close request. The helper verifies the process paths, waits for the game to exit and starts the saved launch executable with its arguments and working folder. The default PORTHEON profile waits for its launcher to exit and runs `UFC6.exe --play --headless --ui-lang en`. Custom profiles can skip the launcher-exit wait for apps that stay open. Invalid launch configurations are rejected before the game is closed. No process is force-terminated, and the helper exits after handing off the launch. If the helper cannot start, the current game remains open. Unsaved progress can be lost when restarting.
 
 **Quit game** sends the same normal window-close request as closing the emulator window.
 
@@ -109,7 +110,7 @@ Shutdown is never invoked during automated verification: a separately compiled h
 
 **Restart PC** has its own confirmation with **Cancel selected initially**, a **3-second A / cross hold**, and a **10-second cancellable countdown**. Back, F10, switching apps, and controller disconnection cancel it just as they do shutdown.
 
-With **Launch UFC 6 after PC restart On**, the helper checks reboot privileges and registers a one-time game launch for the current Windows user before allowing the game to close. It waits for normal game and launcher exit, then requests a Windows reboot without force flags. **Sign back into the same Windows account after the reboot**; the helper waits briefly and starts `UFC6.exe --play --headless --ui-lang en`. It opens a fresh game session; unsaved match progress is not restored. Windows passwords and automatic sign-in settings are not changed. With the setting **Off**, the same confirmed reboot occurs without registering or launching the game. This preference is saved automatically and does not affect Restart game.
+With **Launch UFC 6 after PC restart On**, the helper checks reboot privileges and registers a one-time game launch for the current Windows user before allowing the game to close. It waits for normal game and launcher exit, then requests a Windows reboot without force flags. **Sign back into the same Windows account after the reboot**; the helper waits briefly and starts the saved launch executable with the same arguments and working folder used by Restart game. It opens a fresh game session; unsaved match progress is not restored. Windows passwords and automatic sign-in settings are not changed. With the setting **Off**, the same confirmed reboot occurs without registering or launching the game. This preference is saved automatically and does not affect Restart game.
 
 The one-time command uses `HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce`, value `UFC6MenuResume`. Windows consumes that entry at sign-in; it does not create a permanent startup app. This follows Microsoft's [RunOnce mechanism](https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys). A boot-time guard skips launching if you only sign out and back in without rebooting. Existing entries with this name are preserved and cause reboot preflight to fail. Unsupported command lengths also fail before closing the game. Process-exit timeouts, a rejected reboot request, or a Windows reboot-cancellation notification remove the entry created by the helper. If you manually cancel the reboot outside the overlay and later uninstall before signing in again, remove only that `UFC6MenuResume` value if it remains.
 

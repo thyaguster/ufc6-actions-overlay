@@ -136,6 +136,9 @@ int main(void) {
     assert(menu_button(&s,PAD_A,1)==MENU_GAMEBAR_CHANGED&&!s.armed&&s.gamebar_shortcut==1);
     assert(menu_button(&s,PAD_A,1)==MENU_NONE); /* Do not repeat a queued system setting change. */
     menu_tick(&s,0,9000,1);
+    assert(menu_button(&s,PAD_DOWN,1)==MENU_CHANGED&&s.selection==SETTING_LAUNCHER);
+    assert(menu_button(&s,PAD_A,1)==MENU_LAUNCHER_SETTINGS&&!s.armed);
+    menu_tick(&s,0,9100,1);
     assert(menu_button(&s,PAD_DOWN,1)==MENU_CHANGED&&s.selection==SETTING_BACK);
     s=(MenuState){.visible=1,.armed=1,.page=PAGE_SETTINGS,.selection=SETTING_GUIDE};
     assert(menu_guide_enabled(&s));

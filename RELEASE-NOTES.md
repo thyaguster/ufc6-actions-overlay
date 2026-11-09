@@ -1,3 +1,18 @@
+# UFC 6 Actions Overlay v0.8.6
+
+Adds **Settings > Launcher setup...** for Restart game and post-reboot auto-launch.
+
+- Browse to a launch executable (another launcher or the supported game engine), set arguments and an optional start folder, and choose whether to wait for the previous launcher to exit.
+- The current PORTHEON executable, arguments and cleanup wait remain the default. Custom launchers that stay open can restart without waiting for their exit.
+- The desktop setup window supports browsing and typing; the game minimizes while it is open and restores on close.
+- Arguments retain quotes and Unicode characters. Settings save atomically while preserving unrelated overlay preferences.
+- Both immediate restart and one-time post-reboot launch use the same saved configuration. Missing/invalid launch files are rejected before the game is closed.
+- Exact supported-engine process checks, normal game closure and non-forcing PC power behavior are retained. Choosing a launcher does not enable unsupported engine revisions.
+
+Validation includes native dialog controls, configuration persistence/Unicode, preserved unrelated settings, a rejected missing launcher with the game left running, custom launcher paths and working folders, persistent launcher restart, and simulated custom post-reboot launch. All PC power tests use the stub helper; no real reboot or shutdown is performed.
+
+Downloads: **UFC6-Actions-Overlay-Setup-0.8.6.exe** (recommended) or **UFC6-Actions-Overlay-0.8.6.zip** (installer, prebuilt files, complete source and licenses).
+
 # UFC 6 Actions Overlay v0.8.5
 
 Adds a persistent warning when Game Bar takes controller input while the overlay is open, including when Game Bar itself is invisible.

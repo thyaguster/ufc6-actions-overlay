@@ -25,6 +25,12 @@ k.SetEvent.argtypes=[w.HANDLE];k.WaitForSingleObject.argtypes=[w.HANDLE,w.DWORD]
 with tempfile.TemporaryDirectory(prefix="shutdown fixture ",dir=root/".build") as temp:
     folder=Path(temp);binary=folder/"bin";binary.mkdir()
     launcher=folder/"UFC6.exe";game_path=binary/("UFC 6 Parsec.exe" if "--parsec" in sys.argv else "UFC 6.exe");helper=binary/"ufc6_menu_restart.exe"
+    custom="--custom" in sys.argv
+    if custom:
+        launcher=folder/"external launcher"/"Game Launcher.exe";launcher.parent.mkdir()
+        working=folder/"working folder";working.mkdir()
+        (binary/"ufc6-quit-menu.ini").write_text(f'[Launch]\nMode=Custom\nExecutable={launcher}\nArguments=raw:--custom-test "post reboot argument"\nWorkingDirectory={working}\nWaitForLauncherExit=1\n',encoding="utf-16")
+    launch_marker=launcher.parent/"launcher-started.txt"
     shutil.copy2(root/".build/restart_fixture.exe",launcher)
     shutil.copy2(root/".build/restart_fixture.exe",game_path)
     shutil.copy2(test_helper,helper)
@@ -60,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix="shutdown fixture ",dir=root/".build") a
             print("PASS: rejected power request removed the one-time resume registration.")
             sys.exit(0)
         assert marker.read_text().startswith("flags=0x00000002 " if reboot else "flags=0x00000008 "),"Power request must not use force flags"
-        assert not (folder/"launcher-started.txt").exists(),"Shutdown must never relaunch the game"
+        assert not launch_marker.exists(),"Shutdown must never relaunch the game"
         if no_auto:
             assert resume.exists()==conflict
             if conflict:assert resume.read_text()=="existing registration"
@@ -70,11 +76,14 @@ with tempfile.TemporaryDirectory(prefix="shutdown fixture ",dir=root/".build") a
             match=re.fullmatch(r'"(.+)" --resume-game (\d+)',command);assert match and Path(match[1])==helper
             resume.unlink() # Windows consumes RunOnce before dispatching the command.
             assert subprocess.run([str(helper),"--resume-game",match[2]],timeout=5).returncode==0
-            assert not (folder/"launcher-started.txt").exists(),"Logging off in the same boot must not relaunch"
+            assert not launch_marker.exists(),"Logging off in the same boot must not relaunch"
             assert subprocess.run([str(helper),"--resume-game","1"],timeout=5).returncode==0
             deadline=time.monotonic()+5
-            while not (folder/"launcher-started.txt").exists() and time.monotonic()<deadline:time.sleep(.02)
-            assert (folder/"launcher-started.txt").read_text()=="--play --headless --ui-lang en"
+            while not launch_marker.exists() and time.monotonic()<deadline:time.sleep(.02)
+            if custom:
+                text=launch_marker.read_text(encoding="utf-8")
+                assert f"cwd={working}" in text and "arg2=post reboot argument" in text
+            else:assert launch_marker.read_text()=="--play --headless --ui-lang en"
             assert not resume.exists()
             assert subprocess.run([str(helper),"--test-cancel-watcher"],timeout=5).returncode==0
             assert not resume.exists(),"Windows cancelling reboot must remove the registration"
