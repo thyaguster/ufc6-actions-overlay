@@ -537,6 +537,8 @@ static void toggle_menu(void) {
         action(menu_close(&menu,MENU_RESUME));
     } else if (!menu.draining) {
         menu_show(&menu);menu_device=-1;wait_guide_release=0;
+        raw_owner=-1;raw_previous=0;raw_navigation=0;
+        for(int slot=0;slot<4;++slot){raw_idle_previous[slot]=raw_connected[slot]?raw_menu_buttons(slot):0;if(raw_connected[slot])raw_navigation=1;}
         neutralize(); action(MENU_OPEN);
     }
     LeaveCriticalSection(&lock);

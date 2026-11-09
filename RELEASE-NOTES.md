@@ -7,6 +7,7 @@ Adds a controller ownership indicator and **Settings > Controller access**.
 - Native input uses the verified engine's player assignment rather than treating SDL instance IDs or arrival order as player numbers. Direct XInput uses Windows controller slots, with slot 1 as Player 1. Unassigned native input displays Controller.
 - Switching access releases the old owner and waits for eligible held navigation controls to be released. A newly eligible held Guide is ignored until release and a fresh press. Other controllers cannot take over an already-owned menu, and owner disconnection closes the menu safely.
 - Settings scrolls to keep the selected item visible, with direction indicators.
+- F10-opened menus accept fresh direct XInput navigation as well as native engine input.
 
 Tests cover arbitrary native IDs and reversed arrival order, both owner labels, held buttons during access changes, saved preferences in a fresh process, restricted Guide/chord/navigation, owner disconnect and keyboard recovery. Existing launcher, Parsec routing, power-stub and installer checks remain included.
 
