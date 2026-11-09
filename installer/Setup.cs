@@ -21,6 +21,7 @@ namespace UFC6OverlaySetup {
     public sealed class Release {
         public string version { get; set; }
         public string engine_sha256 { get; set; }
+        public string parsec_engine_sha256 { get; set; }
         public string dll_sha256 { get; set; }
         public string[] previous_dll_sha256 { get; set; }
         public Dictionary<string,string> companion_files { get; set; }
@@ -30,6 +31,7 @@ namespace UFC6OverlaySetup {
     public sealed class Inspection {
         public string Folder;
         public bool Supported;
+        public string ParsecStatus;
         public readonly List<string> Conflicts = new List<string>();
         public readonly Dictionary<string,string> Hashes = new Dictionary<string,string>();
         public int Installed;
@@ -37,6 +39,7 @@ namespace UFC6OverlaySetup {
         public string Summary(Manager manager) {
             var lines = new List<string>();
             lines.Add(Supported ? "Compatible PORTHEON 3309ab23f engine." : "Unsupported engine. Installation is disabled.");
+            if (ParsecStatus != null) lines.Add(ParsecStatus);
             lines.Add(Installed == 0 ? "Overlay is not installed." : Current == manager.Order.Count ? "Overlay v" + manager.Version + " is already installed." : "An existing overlay installation was found; it can be updated or removed.");
             if (Conflicts.Count != 0) lines.Add("Conflicting or linked files: " + string.Join(", ", Conflicts) + ". These files will not be replaced or removed.");
             lines.Add("\r\nSettings and screenshots are kept. Close UFC 6 before making changes.");
@@ -49,12 +52,13 @@ namespace UFC6OverlaySetup {
         readonly Dictionary<string,string> expected = new Dictionary<string,string>();
         readonly Dictionary<string,HashSet<string>> known = new Dictionary<string,HashSet<string>>();
         readonly string engineHash;
+        readonly string parsecHash;
         readonly RuntimeBridge runtime;
         public readonly string Version;
         // Tests inject fixture bytes and a fixture engine hash into the same transaction code.
         public Action<int> BeforeCommit;
         public Manager(Release release, Dictionary<string,byte[]> payload) {
-            Version = release.version; engineHash = release.engine_sha256; Payload = payload; runtime = release.runtime_bridge;
+            Version = release.version; engineHash = release.engine_sha256; parsecHash = release.parsec_engine_sha256; Payload = payload; runtime = release.runtime_bridge;
             foreach (var pair in release.companion_files) { expected.Add(pair.Key,pair.Value); Order.Add(pair.Key); }
             expected.Add("version.dll",release.dll_sha256); Order.Add("version.dll"); // Core commits last.
             if (runtime != null) {
@@ -88,6 +92,8 @@ namespace UFC6OverlaySetup {
             folder = Normalize(folder);
             if (Linked(Path.Combine(folder,"UFC 6.exe"))) throw new IOException("The game executable is a link. Nothing was changed.");
             var result = new Inspection { Folder = folder, Supported = HashFile(Path.Combine(folder,"UFC 6.exe")) == engineHash };
+            string parsec = Path.Combine(folder,"UFC 6 Parsec.exe");
+            if (parsecHash != null && File.Exists(parsec)) result.ParsecStatus = !Linked(parsec) && HashFile(parsec) == parsecHash ? "Verified Parsec / two-player engine is supported." : "Unrecognized Parsec engine: that mode will not load the overlay.";
             foreach (string name in Order) {
                 string path = Path.Combine(folder,name);
                 if (Directory.Exists(path) || (File.Exists(path) && Linked(path))) { result.Conflicts.Add(name); continue; }
@@ -108,7 +114,7 @@ namespace UFC6OverlaySetup {
             foreach (var process in Process.GetProcesses()) using (process) {
                 string name;
                 try { name = process.ProcessName; } catch { continue; }
-                if (!string.Equals(name,"UFC 6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_restart",StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(name,"UFC 6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC 6 Parsec",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_restart",StringComparison.OrdinalIgnoreCase)) continue;
                 try {
                     string path = process.MainModule.FileName;
                     if (string.Equals(Path.GetDirectoryName(path),folder,StringComparison.OrdinalIgnoreCase) || string.Equals(path,Path.Combine(Directory.GetParent(folder).FullName,"UFC6.exe"),StringComparison.OrdinalIgnoreCase))

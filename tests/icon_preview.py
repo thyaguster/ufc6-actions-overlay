@@ -4,7 +4,6 @@ import ctypes as c
 from ctypes import wintypes as w
 from pathlib import Path
 import time
-from PIL import Image
 
 parser=argparse.ArgumentParser()
 parser.add_argument("folder",type=Path)
@@ -16,7 +15,11 @@ parser.add_argument("--auto-launch",action="store_true")
 parser.add_argument("--reload-auto-off",action="store_true")
 parser.add_argument("--scale",action="store_true")
 parser.add_argument("--guide",action="store_true")
+parser.add_argument("--gamebar",action="store_true")
+parser.add_argument("--no-render",action="store_true")
 parser.add_argument("--reload-guide-off",action="store_true")
+parser.add_argument("--controllers",action="store_true")
+parser.add_argument("--raw-controllers",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
 if args.reset:
@@ -61,6 +64,8 @@ def press(button):
 
 
 def render(name,viewport=(2560,1440)):
+    if args.no_render:return
+    from PIL import Image
     width,height=w.DWORD(),w.DWORD()
     dll.Ufc6MenuExtent(*viewport,c.byref(width),c.byref(height))
     pixels=c.create_string_buffer(width.value*height.value*4)
@@ -80,7 +85,111 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     assert dll.MenuTestSnapshot()&0x100
-    if args.guide or args.reload_guide_off:
+    if args.raw_controllers:
+        dll.MenuTestRawPad.argtypes=[c.c_int,c.c_int,c.c_int]
+        dll.MenuTestButtonDevice.argtypes=[c.c_int,w.DWORD,c.c_int]
+        dll.MenuTestAxisDevice.argtypes=[c.c_int,c.c_int,c.c_int]
+        def raw(slot,buttons,connected=1):dll.MenuTestRawPad(slot,buttons,connected);pump(.04)
+        def raw_press(slot,buttons):raw(slot,buttons);raw(slot,0)
+        press(0x2000)
+        raw(1,0x1000) # A held on the other controller must not block Guide.
+        raw(0,0x400);assert dll.MenuTestSnapshot()&0x100
+        raw(0,0);raw_press(0,2)
+        assert dll.MenuTestSnapshot()&0xf==1
+        dll.MenuTestButtonDevice(1,0x40,1);dll.MenuTestButtonDevice(1,0x40,0);pump(.04)
+        assert dll.MenuTestSnapshot()&0xf==1,"SDL duplicates must not navigate twice"
+        raw(1,2);assert dll.MenuTestSnapshot()&0xf==1
+        raw_press(0,2);raw_press(0,0x1000)
+        assert (dll.MenuTestSnapshot()>>12)&7==2
+        raw_press(0,0x2000);raw_press(0,0x2000)
+        assert not dll.MenuTestSnapshot()&0x100
+        raw(1,0);raw(1,0x400);raw(1,0);raw_press(1,2)
+        assert dll.MenuTestSnapshot()&0xf==1,"Guide's own XInput controller must navigate without SDL events"
+        raw(1,0,0);assert not dll.MenuTestSnapshot()&0x100
+        raw(0,0x310)
+        dll.MenuTestButtonDevice(1,0xc08,1);pump(.95)
+        assert dll.MenuTestSnapshot()&0x100
+        dll.MenuTestButtonDevice(1,0xc08,0);raw(0,0);raw_press(0,2)
+        assert dll.MenuTestSnapshot()&0xf==1,"Xbox chord must use the same reliable polled navigation"
+        raw_press(0,0x2000);assert not dll.MenuTestSnapshot()&0x100
+        raw(0,0x400);raw(0,0)
+        dll.MenuTestAxisDevice(2,1,255);pump(.06)
+        assert dll.MenuTestSnapshot()&0xf==1,"SDL/HID stick navigation must work when XInput only reports Guide"
+        dll.MenuTestAxisDevice(2,1,128);pump(.04)
+        dll.MenuTestAxisDevice(2,1,255);pump(.04)
+        assert dll.MenuTestSnapshot()&0xf==2
+        dll.MenuTestAxisDevice(2,1,128);pump(.04)
+        dll.MenuTestButtonDevice(2,0x2000,1);dll.MenuTestButtonDevice(2,0x2000,0);pump(.05)
+        assert not dll.MenuTestSnapshot()&0x100
+        raw(0,0x400);raw(0,0)
+        dll.MenuTestButtonDevice(2,0x40,1);dll.MenuTestButtonDevice(2,0x40,0);pump(.05)
+        assert dll.MenuTestSnapshot()&0xf==1,"SDL/HID D-pad must claim navigation when XInput only reports Guide"
+        dll.MenuTestButtonDevice(2,0x2000,1);dll.MenuTestButtonDevice(2,0x2000,0);pump(.05)
+        assert not dll.MenuTestSnapshot()&0x100
+        print("PASS: direct XInput Guide navigation on either pad, no SDL input dependency/duplicates, page actions and disconnect cancellation.")
+        raise SystemExit(0)
+    elif args.controllers:
+        dll.MenuTestButtonDevice.argtypes=[c.c_int,w.DWORD,c.c_int]
+        dll.MenuTestGuide.argtypes=[c.c_int]
+        dll.MenuTestDisconnect.argtypes=[c.c_int]
+        dll.MenuTestOwner.restype=c.c_int
+        press(0x2000) # Close initial menu.
+        dll.MenuTestButtonDevice(2,0x4000,1);pump(.06) # Other pad holds A before Guide opens.
+        dll.MenuTestGuide(1);pump(.08)
+        assert dll.MenuTestSnapshot()&0x100 and dll.MenuTestOwner()==-1
+        dll.MenuTestGuide(0);pump(.08)
+        dll.MenuTestButtonDevice(2,0x20,0);pump(.04) # A release/no-op must not claim navigation.
+        assert dll.MenuTestOwner()==-1
+        dll.MenuTestButtonDevice(1,0x40,1);dll.MenuTestButtonDevice(1,0x40,0);pump(.08)
+        assert dll.MenuTestSnapshot()&0xf==1,"Held buttons on another pad must not prevent Guide navigation"
+        owner=dll.MenuTestOwner();assert owner>=0
+        dll.MenuTestButtonDevice(2,0x40,1);dll.MenuTestButtonDevice(2,0x40,0);pump(.08)
+        assert dll.MenuTestSnapshot()&0xf==1 and dll.MenuTestOwner()==owner
+        dll.MenuTestButtonDevice(1,0x2000,1);dll.MenuTestButtonDevice(1,0x2000,0);pump(.08)
+        assert not dll.MenuTestSnapshot()&0x100
+        dll.MenuTestButtonDevice(2,0x4000,0);pump(.08)
+        dll.MenuTestGuide(1);pump(.06);dll.MenuTestGuide(0);pump(.06)
+        dll.MenuTestButtonDevice(2,0x40,1);dll.MenuTestButtonDevice(2,0x40,0);pump(.08)
+        assert dll.MenuTestSnapshot()&0xf==1,"Second pad must be able to claim a fresh Guide-opened menu"
+        dll.MenuTestButtonDevice(2,0x2000,1);dll.MenuTestButtonDevice(2,0x2000,0);pump(.08)
+        assert not dll.MenuTestSnapshot()&0x100
+        dll.MenuTestGuide(1);pump(.06);dll.MenuTestGuide(0);pump(.06)
+        dll.MenuTestButtonDevice(1,0x40,1);dll.MenuTestButtonDevice(1,0x40,0);pump(.06)
+        dll.MenuTestButtonDevice(1,0x400,1);pump(.04)
+        dll.MenuTestDisconnect(1);pump(.08)
+        assert not dll.MenuTestSnapshot()&0x100,"Disconnecting the owner must close the menu"
+        dll.MenuTestGuide(1);pump(.06);dll.MenuTestGuide(0);pump(.06)
+        for _ in range(3):
+            dll.MenuTestButtonDevice(1,0x40,1);dll.MenuTestButtonDevice(1,0x40,0);pump(.05)
+        dll.MenuTestButtonDevice(1,0x4000,1);dll.MenuTestButtonDevice(1,0x4000,0);pump(.07)
+        assert (dll.MenuTestSnapshot()>>12)&7==1
+        dll.MenuTestButtonDevice(1,0x4000,1);dll.MenuTestButtonDevice(1,0x4000,0);pump(.07)
+        assert dll.MenuTestSnapshot()&0x10,"Reconnected pad must not inherit stale held buttons"
+        print("PASS: Guide release, two-controller ownership, held secondary input, non-owner isolation, disconnect/reconnect and B resume.")
+        raise SystemExit(0)
+    elif args.gamebar:
+        import winreg
+        def windows_preference():
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r"Software\Microsoft\GameBar") as key:
+                    return winreg.QueryValueEx(key,"UseNexusForGameBarEnabled")
+            except FileNotFoundError:return None
+        original_windows=windows_preference()
+        for _ in range(3):press(0x40)
+        press(0x4000)
+        for _ in range(5):press(0x40)
+        assert dll.MenuTestSnapshot()&0xf==5 and dll.MenuTestGameBar()==1
+        render("gamebar-shortcut-on.png")
+        press(0x4000);assert dll.MenuTestGameBar()==0
+        render("gamebar-shortcut-off.png")
+        press(0x80);assert dll.MenuTestGameBar()==1
+        press(0x20);assert dll.MenuTestGameBar()==0
+        press(0x40);assert dll.MenuTestSnapshot()&0xf==6
+        render("settings-back.png")
+        press(0x4000);assert (dll.MenuTestSnapshot()>>12)&7==0
+        assert windows_preference()==original_windows,"UI test must never change the actual Windows Game Bar preference"
+        print("PASS: Game Bar settings row, On/Off, confirm/left/right and Back; actual Windows preference unchanged.")
+    elif args.guide or args.reload_guide_off:
         assert dll.MenuTestGuideEnabled()==(0 if args.reload_guide_off else 1)
         for _ in range(3):press(0x40)
         press(0x4000)

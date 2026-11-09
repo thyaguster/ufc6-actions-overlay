@@ -46,6 +46,8 @@ def manage(action: str,bin_dir: Path,payload: Path,manifest: Path) -> dict:
             "menu":"conflicting DLL" if state["version.dll"]=="conflict" else state["version.dll"]}
     if companions:
         result["vulkan_files"]={name:state[name] for name in companions}
+    parsec=bin_dir/"UFC 6 Parsec.exe"
+    if release.get("parsec_engine_sha256") and parsec.exists():result["parsec_engine_supported"]=not parsec.is_symlink() and digest(parsec)==release["parsec_engine_sha256"]
     if action=="status":
         return result
     if state["version.dll"]=="conflict":

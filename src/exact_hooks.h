@@ -12,4 +12,5 @@ typedef struct {
     size_t length;
 } ExactHook;
 int install_exact_hooks(ExactHook *hooks, size_t count, const char **error);
+int install_parsec_hooks(ExactHook *hooks,size_t count,unsigned char *padding,const char **error);
 #endif

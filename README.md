@@ -24,14 +24,20 @@ An in-process extension for the **PORTHEON UFC 6 `3309ab23f` Windows engine**. I
 
 The engine executable and game assets are not patched. A startup bridge forwards calls to your verified original threading runtime, preserved byte-for-byte as `ufc6_pthread_original.dll` and restored by the uninstaller. A short-lived helper handles restart or confirmed shutdown after the old game and launcher have exited.
 
-This download contains the overlay and installer only. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. It supports the **PORTHEON `3309ab23f` Windows engine**, rather than every KytyPS5 build. The installer checks the executable hash before installing.
+This download contains the overlay and installer only. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. It supports the **PORTHEON `3309ab23f` Windows engine**, including its verified Parsec/two-player derivative, rather than every KytyPS5 build. The installer checks the executable hash before installing.
+
+## Parsec / two controllers
+
+PORTHEON's **Parsec mode** uses a separate `UFC 6 Parsec.exe` with its own two-player routing. Version 0.8.4 supports the verified derivative with SHA-256 `ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d`. It preserves the routing wrappers using checked nearby relay padding; unknown engine revisions or occupied padding are rejected. The engine file is not modified or distributed.
+
+Install into the same `bin` folder, then launch with PORTHEON's Parsec option enabled. Either pad can open a new menu; Guide and F10 let the first fresh navigation press claim the menu through XInput or the game's controller input. Xbox opening combinations use the matching XInput pad when available. Other pads cannot navigate an already-owned menu. Both pads are withheld from gameplay while the menu is open, and held digital buttons must be released before gameplay input resumes. Restart and quit recognize both supported engine filenames. This does not add Parsec networking or two-player routing itself; those remain PORTHEON's features.
 
 ## Screenshots
 
 <table>
   <tr>
     <td width="50%"><img src="docs/screenshots/main-menu.png" alt="Main actions menu"><br><strong>Game actions and separate PC power options</strong></td>
-    <td width="50%"><img src="docs/screenshots/settings.png" alt="Overlay settings"><br><strong>Button icons, shortcut, UI scale, and game auto-launch</strong></td>
+    <td width="50%"><img src="docs/screenshots/settings.png" alt="Overlay settings"><br><strong>Controller shortcuts, Windows Game Bar, UI scale, and auto-launch</strong></td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/settings-playstation.png" alt="PlayStation button prompts"><br><strong>Xbox or PlayStation overlay prompts</strong></td>
@@ -46,9 +52,10 @@ The two game-background images are real game-window captures. The isolated page 
 ## Controls and Settings
 
 - Default opening shortcut: hold **LB + RB + Menu/Start** for **0.8 seconds**, then release. On PlayStation this is **L1 + R1 + Options**.
-- **D-pad up/down** selects; **A / cross** confirms; **B / circle** goes back. Back resumes the game from the main menu.
+- **D-pad or left stick up/down** selects; **A / cross** confirms; **B / circle** goes back. Back resumes the game from the main menu.
 - **F10** always opens or closes the overlay, including while recording a new shortcut.
-- The Xbox/Guide button opens or closes the overlay by default. Disable it under **Settings → Xbox / Guide button** if you use that button for something else. Windows/Steam and controller drivers may intercept it; no system settings are changed.
+- After opening with Guide or F10, release the opening button, then use the D-pad. Guide accepts navigation from either XInput or the game's controller input, with ownership assigned to the first fresh navigation press. Xbox combinations use the matching XInput pad when available. Buttons held or released on another pad do not take ownership or block arming. Disconnecting the controlling pad closes the menu safely.
+- The Xbox/Guide button opens or closes the overlay by default. Disable it under **Settings → Xbox / Guide button** if you use that button for something else. This controls only this overlay. Windows Game Bar and other apps may also use Guide; use the separate Windows Game Bar setting below to resolve that conflict.
 
 Select **Settings** to open the second settings box:
 
@@ -57,6 +64,7 @@ Select **Settings** to open the second settings box:
 - **UI scale:** left/right changes the whole overlay from **50% to 300%**, in **25% steps**. Confirm resets it to **100%**. The overlay stays centred and automatically shrinks to fit smaller game windows with a margin.
 - **Launch UFC 6 after PC restart:** On by default. Confirm or left/right toggles whether Restart PC reopens UFC 6 at your next Windows sign-in. The Restart PC row and its confirmation show the current On/Off status; the confirmation also points to Settings.
 - **Xbox / Guide button:** On by default. Confirm or left/right toggles opening/closing this overlay with Guide. The controller shortcut and F10 stay available when Off. The preference saves automatically; enabling it while Guide is already held requires releasing and pressing again.
+- **Windows Game Bar shortcut:** shows Windows' actual controller-shortcut preference. Confirm or left/right changes it for the current Windows user. Turn it **Off** if Guide opens this overlay but navigation stalls; Game Bar can redirect controller input even with no visible window. **Win+G** still opens Game Bar. This setting affects other games too and persists after uninstall. Startup and setup only read it; they never change it automatically. Use the fallback controller combination or F10 to reach Settings if Guide is intercepted.
 - **Back:** returns to the main menu.
 
 Preferences save automatically to `bin/ufc6-quit-menu.ini` and are preserved when upgrading. A custom shortcut uses the same 0.8-second hold time. The INI can also be edited while the game is closed:
@@ -108,7 +116,7 @@ Verification uses the test helper with power APIs compiled out and a file in pla
 
 ## Install, upgrade, and remove
 
-Download **`UFC6-Actions-Overlay-Setup-0.8.3.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
+Download **`UFC6-Actions-Overlay-Setup-0.8.4.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
 
 1. Close UFC 6 and its launcher.
 2. Click **Browse** and select the UFC 6 game folder or its **bin** folder containing **`UFC 6.exe`**.
@@ -118,9 +126,9 @@ Download **`UFC6-Actions-Overlay-Setup-0.8.3.exe`** and double-click it. The set
 
 To uninstall, run the same setup EXE, choose the same folder, and click **Remove overlay**. Settings and screenshots are preserved. Setup refuses to modify a running game or overwrite files from an unknown mod. Changes roll back if installation or removal fails. The engine executable, game assets, and Windows startup settings are not changed by setup. For a protected game folder, Windows may require running setup as administrator.
 
-Version 0.8.2 fixes startup when Windows prefers system DLLs, which can bypass an app-local `version.dll`. The bridge uses the engine's existing non-system runtime import and enables the Vulkan layer only inside the game process. It preserves the Windows security policy, checks all required overlay files before enabling the layer, and does not register a system-wide Vulkan layer. The installer accepts only the verified original runtime SHA-256, and rejects unknown replacements.
+Version 0.8.2 fixes startup when Windows prefers system DLLs, which can bypass an app-local `version.dll`. The bridge uses the engine's existing non-system runtime import and enables the Vulkan layer only inside the game process. It preserves the Windows security policy, checks all required overlay files before enabling the layer, and does not register a system-wide Vulkan layer. Production rendering is in-frame only; a desktop popup cannot appear behind the game. The installer accepts only the verified original runtime SHA-256, and rejects unknown replacements.
 
-The full **`UFC6-Actions-Overlay-0.8.3.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
+The full **`UFC6-Actions-Overlay-0.8.4.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
 
 The Python command-line manager remains available for development and scripting:
 

@@ -1,10 +1,24 @@
-# UFC 6 Actions Overlay v0.8.3
+# UFC 6 Actions Overlay v0.8.4
 
-Adds **Settings → Xbox / Guide button**, a saved On/Off control for opening or closing the overlay with the Xbox/Guide button. It defaults to On, preserving existing behavior. Confirm or left/right changes it. The controller combination and F10 remain available when Off. Re-enabling while Guide is held requires a fresh press. Settings now fit six rows inside the same scalable panel.
+Adds a Windows Game Bar shortcut setting to resolve Guide navigation conflicts, plus compatibility with PORTHEON's verified Parsec/two-player engine.
 
-Tests cover default On, toggling, press-edge handling, independent F10/chord access, actual rendering, persistence across a fresh process, and preservation during installation/removal. No cheat controls are added in this release.
+## Fixed
 
-The v0.8.2 startup fix is retained. The supported engine remains `3309ab23f`; its compatibility checks stay in place.
+- Guide navigation accepts both direct XInput and engine controller events, so a bridge that only reports Guide through XInput can still navigate through SDL/HID. A fresh navigation press claims ownership. Xbox combinations use the matching XInput pad when available. Release events and buttons held on a different pad do not claim or block it.
+- Settings now includes **Windows Game Bar shortcut**, showing the actual Windows preference. Turn it Off to keep Game Bar from consuming Guide navigation. It changes the current Windows user's preference only after an explicit action; Win+G remains available. Setup/startup never change it automatically, and uninstall leaves this user choice in place. Unknown registry values are preserved.
+- LB + RB + Menu (or the configured combination) and F10 remain available independently of Guide.
+- D-pad and left-stick navigation are supported through both input paths.
+- Production rendering is in-frame only; the old desktop popup fallback cannot appear behind the game.
+- Menu input, confirmation holds, and shortcut capture follow the controlling pad. Disconnect and reconnect clear stale button state.
+- Verified `UFC 6 Parsec.exe` support preserves its existing routing wrappers with five-byte relay hooks in checked unused code padding. The original engine file and Parsec patch are not changed.
+- Engine file fingerprints are verified before hooks are installed. Unknown engines and occupied relay padding are rejected.
+- The Vulkan layer, process checks, and restart/power handoffs recognize the verified Parsec filename.
+
+Live tracing confirmed that Game Bar redirected controller input while its visibility flag stayed false. Disabling its controller shortcut restored uninterrupted Guide navigation in the user's Parsec session.
+
+Tests cover the isolated Windows registry preference and the actual settings row without changing the host's Game Bar preference, plus real DLL input handling with two simulated pads, Guide release, held secondary input, ownership isolation, disconnect/reconnect, concurrent Parsec relay calls, intact continuations, rejected padding, and standard/Parsec restart handoffs. Windows power APIs remain disabled in test helpers.
+
+The supported normal engine remains `3309ab23f`; its verified Parsec derivative is `ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d`. Both normal and two-player routing remain protected by exact checks. No engine, Parsec binary, or original threading runtime is included in the download.
 
 ## Startup repair retained from v0.8.2
 
@@ -15,13 +29,13 @@ The v0.8.2 startup fix is retained. The supported engine remains `3309ab23f`; it
 - A launcher or other non-game Vulkan probe does not load the overlay core.
 - Installer tests cover runtime preservation/restoration, reinstall, unknown or missing originals, and rollback at every commit failure. Startup tests enable PreferSystem32Images at process creation and check explicit core loading, small-stack threads, and the missing-overlay case. Real GPU checks cover startup, scaling, and clean screenshots through the bridge.
 
-The game-action UI is unchanged from v0.8.1. Restart and post-reboot auto-launch still use the supported UFC6.exe launcher; custom launcher configuration is not part of this update.
+The main game-action UI is unchanged from v0.8.1; Settings adds the Guide toggle and Windows Game Bar shortcut row. Restart and post-reboot auto-launch still use the supported UFC6.exe launcher; custom launcher configuration is not part of this update.
 
 ## Downloads
 
-- **UFC6-Actions-Overlay-Setup-0.8.3.exe** — recommended. One file with all overlay components built in. No Python or compiler required.
-- **UFC6-Actions-Overlay-0.8.3.zip** — setup EXE, prebuilt mod files, complete project source, build scripts, tests, and licenses.
-- **Overlay-Screenshots-0.8.1.zip** — 18 updated images, including the main menu and Settings over the actual game menu.
+- **UFC6-Actions-Overlay-Setup-0.8.4.exe** — recommended. One file with all overlay components built in. No Python or compiler required.
+- **UFC6-Actions-Overlay-0.8.4.zip** — setup EXE, prebuilt mod files, complete project source, build scripts, tests, and licenses.
+- **Overlay-Screenshots-0.8.1.zip** — gallery from v0.8.1, including the main menu and Settings over the game menu. The current Settings preview is in the README.
 - **SHA256SUMS.txt** — checksums for these download files.
 
 ## Install

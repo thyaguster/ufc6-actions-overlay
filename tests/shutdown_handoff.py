@@ -24,7 +24,7 @@ k.CreateEventW.argtypes=[c.c_void_p,w.BOOL,w.BOOL,w.LPCWSTR];k.CreateEventW.rest
 k.SetEvent.argtypes=[w.HANDLE];k.WaitForSingleObject.argtypes=[w.HANDLE,w.DWORD];k.CloseHandle.argtypes=[w.HANDLE]
 with tempfile.TemporaryDirectory(prefix="shutdown fixture ",dir=root/".build") as temp:
     folder=Path(temp);binary=folder/"bin";binary.mkdir()
-    launcher=folder/"UFC6.exe";game_path=binary/"UFC 6.exe";helper=binary/"ufc6_menu_restart.exe"
+    launcher=folder/"UFC6.exe";game_path=binary/("UFC 6 Parsec.exe" if "--parsec" in sys.argv else "UFC 6.exe");helper=binary/"ufc6_menu_restart.exe"
     shutil.copy2(root/".build/restart_fixture.exe",launcher)
     shutil.copy2(root/".build/restart_fixture.exe",game_path)
     shutil.copy2(test_helper,helper)

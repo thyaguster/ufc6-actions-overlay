@@ -97,7 +97,8 @@ static void bind_menu(void) {
     wchar_t path[MAX_PATH];GetModuleFileNameW(self,path,MAX_PATH);
     wchar_t *s=wcsrchr(path,L'\\');if(!s)return;
     lstrcpyW(s+1,L"UFC 6.exe");
-    wchar_t executable[MAX_PATH];if(!GetModuleFileNameW(NULL,executable,MAX_PATH)||lstrcmpiW(path,executable))return;
+    wchar_t executable[MAX_PATH];if(!GetModuleFileNameW(NULL,executable,MAX_PATH))return;
+    if(lstrcmpiW(path,executable)){lstrcpyW(s+1,L"UFC 6 Parsec.exe");if(lstrcmpiW(path,executable))return;}
     /* A launcher can probe Vulkan with inherited layer settings. Never load
      * controller hooks into that launcher or any other process. */
     lstrcpyW(s+1,L"version.dll");

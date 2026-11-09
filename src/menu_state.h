@@ -11,9 +11,9 @@ enum {
 };
 enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT };
 enum { MAIN_RESUME, MAIN_SCREENSHOT, MAIN_RESTART, MAIN_SETTINGS, MAIN_QUIT, MAIN_REBOOT, MAIN_SHUTDOWN, MAIN_COUNT };
-enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_BACK, SETTING_COUNT };
+enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_BACK, SETTING_COUNT };
 enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
-       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED };
+       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED };
 
 typedef struct {
     int visible,selection,armed,chord_latched,draining;
@@ -26,6 +26,7 @@ typedef struct {
     int ui_scale_percent;
     int disable_auto_launch;
     int disable_guide;
+    int gamebar_shortcut;
 } MenuState;
 
 static int menu_power_page(const MenuState *s){return s->page==PAGE_SHUTDOWN||s->page==PAGE_REBOOT;}
@@ -128,6 +129,9 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         return MENU_CHANGED;
     }
     if(s->page==PAGE_SETTINGS) {
+        if(s->selection==SETTING_GAMEBAR&&(button==PAD_LEFT||button==PAD_RIGHT||button==PAD_A)){
+            s->armed=0;return MENU_GAMEBAR_CHANGED;
+        }
         if(s->selection==SETTING_GUIDE&&(button==PAD_LEFT||button==PAD_RIGHT||button==PAD_A)){
             s->disable_guide=!s->disable_guide;return MENU_GUIDE_CHANGED;
         }

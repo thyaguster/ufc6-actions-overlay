@@ -2,8 +2,14 @@
 #include <assert.h>
 #include <stdio.h>
 #include "../src/menu_state.h"
+#include "../src/xinput_menu.h"
 
 int main(void) {
+    assert(xinput_menu_buttons(0x400)==0); /* Guide is not an engine shoulder button. */
+    assert(xinput_menu_buttons(0x1000)==PAD_A&&xinput_menu_buttons(0x2000)==PAD_B);
+    assert(xinput_menu_buttons(0x310)==OPEN_CHORD&&xinput_menu_buttons(0xf)==0xf0);
+    assert(native_menu_stick(128,128)==0&&native_menu_stick(128,0)==PAD_UP&&native_menu_stick(128,255)==PAD_DOWN);
+    assert(xinput_menu_stick(0,0)==0&&xinput_menu_stick(0,32767)==PAD_UP&&xinput_menu_stick(-32768,0)==PAD_LEFT);
     MenuState s={0};
     assert(menu_tick(&s,OPEN_CHORD,1000,1)==MENU_NONE);
     assert(menu_tick(&s,OPEN_CHORD,1799,1)==MENU_NONE);
@@ -126,6 +132,11 @@ int main(void) {
         int aspect=(int)(width*372)-(int)(height*570);assert(aspect>=-1140&&aspect<=1140);
     }
     overlay_extent(300,32,32,&width,&height);assert(!width&&!height);
+    s=(MenuState){.visible=1,.armed=1,.page=PAGE_SETTINGS,.selection=SETTING_GAMEBAR,.gamebar_shortcut=1};
+    assert(menu_button(&s,PAD_A,1)==MENU_GAMEBAR_CHANGED&&!s.armed&&s.gamebar_shortcut==1);
+    assert(menu_button(&s,PAD_A,1)==MENU_NONE); /* Do not repeat a queued system setting change. */
+    menu_tick(&s,0,9000,1);
+    assert(menu_button(&s,PAD_DOWN,1)==MENU_CHANGED&&s.selection==SETTING_BACK);
     s=(MenuState){.visible=1,.armed=1,.page=PAGE_SETTINGS,.selection=SETTING_GUIDE};
     assert(menu_guide_enabled(&s));
     assert(menu_hotkey_pressed(&s,1,0,0,0));

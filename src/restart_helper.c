@@ -139,6 +139,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     DWORD pid=wcstoul(argv[1],NULL,10),parent=wcstoul(argv[3],NULL,10);
     if(lstrcmpiW(argv[2],expected_launcher)){log_line("Rejected mismatched launcher path.");return 2;}
     HANDLE game=open_matching(pid,expected_game);
+    if(!game){swprintf(expected_game,1200,L"%ls\\UFC 6 Parsec.exe",directory);game=open_matching(pid,expected_game);}
     if(!game){log_line("Could not verify the game process; restart cancelled.");return 3;}
     HANDLE launcher=parent?open_matching(parent,expected_launcher):NULL;
     if((shutdown_pc||reboot_pc)&&!prepare_shutdown()){log_line("Windows shutdown privilege is unavailable; game left running.");CloseHandle(game);if(launcher)CloseHandle(launcher);return 6;}

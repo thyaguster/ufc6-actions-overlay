@@ -61,5 +61,30 @@ int main(void) {
     for(int i=0;i<4;++i) CloseHandle(threads[i]);
     assert(!failures);
     puts("Absolute hook tests passed: all three exact prologues, trampolines, signature rejection, concurrent calls.");
+    unsigned char *parsec=VirtualAlloc(NULL,4096,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);assert(parsec);memset(parsec,0xcc,4096);
+    unsigned char entries[3][5];
+    for(int i=0;i<3;++i){
+        unsigned char *target=parsec+i*128,*wrapper=parsec+0x300+i*32;size_t copied=i==2?7:5;
+        memcpy(target,prefix[i],lengths[i]);memcpy(target+lengths[i],suffix[i],tail[i]);
+        memcpy(wrapper,prefix[i],copied);wrapper[copied]=0xe9;
+        int32_t back=(int32_t)((target+copied)-(wrapper+copied+5));memcpy(wrapper+copied+1,&back,4);
+        target[0]=0xe9;int32_t forward=(int32_t)(wrapper-(target+5));memcpy(target+1,&forward,4);
+        memcpy(entries[i],target,5);functions[i]=(Fn)target;
+        hooks[i]=(ExactHook){target,detours[i],(void**)&originals[i],entries[i],5};
+    }
+    assert(VirtualProtect(parsec,4096,PAGE_EXECUTE_READ,&old));
+    for(int i=0;i<3;++i)assert(functions[i](NULL,7,11,1)==(i==2?7:11));
+    assert(!install_parsec_hooks(hooks,3,parsec,&error)); /* Occupied padding must be rejected. */
+    InterlockedExchange(&stop,0);
+    for(int i=0;i<4;++i){threads[i]=CreateThread(NULL,0,stress,NULL,0,NULL);assert(threads[i]);}
+    Sleep(20);assert(install_parsec_hooks(hooks,3,parsec+0x600,&error));
+    for(int i=0;i<3;++i){
+        assert(functions[i](NULL,7,11,1)==(i==2?107:111));
+        assert(originals[i](NULL,7,11,1)==(i==2?7:11));
+        assert(!memcmp(parsec+i*128+5,prefix[i]+5,lengths[i]-5));
+    }
+    Sleep(100);InterlockedExchange(&stop,1);assert(WaitForMultipleObjects(4,threads,TRUE,5000)==WAIT_OBJECT_0);
+    for(int i=0;i<4;++i)CloseHandle(threads[i]);assert(!failures);
+    puts("Parsec relay tests passed: routing wrappers preserved, continuation bytes intact, padding rejection and concurrent calls.");
     return 0;
 }
