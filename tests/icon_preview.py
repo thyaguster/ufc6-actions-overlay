@@ -15,6 +15,8 @@ parser.add_argument("--reboot",action="store_true")
 parser.add_argument("--auto-launch",action="store_true")
 parser.add_argument("--reload-auto-off",action="store_true")
 parser.add_argument("--scale",action="store_true")
+parser.add_argument("--guide",action="store_true")
+parser.add_argument("--reload-guide-off",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
 if args.reset:
@@ -78,7 +80,21 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     assert dll.MenuTestSnapshot()&0x100
-    if args.auto_launch or args.reload_auto_off:
+    if args.guide or args.reload_guide_off:
+        assert dll.MenuTestGuideEnabled()==(0 if args.reload_guide_off else 1)
+        for _ in range(3):press(0x40)
+        press(0x4000)
+        for _ in range(4):press(0x40)
+        assert dll.MenuTestSnapshot()&0xf==4
+        render("guide-off-reloaded.png" if args.reload_guide_off else "guide-on.png")
+        if not args.reload_guide_off:
+            press(0x4000);assert dll.MenuTestGuideEnabled()==0
+            render("guide-off.png")
+            press(0x80);assert dll.MenuTestGuideEnabled()==1
+            press(0x20);assert dll.MenuTestGuideEnabled()==0
+            assert "GuideButtonOpensMenu=0" in (folder/"ufc6-quit-menu.test.ini").read_text()
+        print("PASS: Guide setting defaults On, toggles and saves Off." if not args.reload_guide_off else "PASS: fresh process loaded Guide Off and rendered the saved setting.")
+    elif args.auto_launch or args.reload_auto_off:
         assert dll.MenuTestAutoLaunch()==(0 if args.reload_auto_off else 1)
         render("main-auto-off.png" if args.reload_auto_off else "main-auto-on.png")
         if not args.reload_auto_off:

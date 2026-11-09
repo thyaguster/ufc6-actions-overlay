@@ -11,9 +11,9 @@ enum {
 };
 enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT };
 enum { MAIN_RESUME, MAIN_SCREENSHOT, MAIN_RESTART, MAIN_SETTINGS, MAIN_QUIT, MAIN_REBOOT, MAIN_SHUTDOWN, MAIN_COUNT };
-enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_BACK, SETTING_COUNT };
+enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_BACK, SETTING_COUNT };
 enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
-       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED };
+       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED };
 
 typedef struct {
     int visible,selection,armed,chord_latched,draining;
@@ -25,11 +25,16 @@ typedef struct {
     uint64_t shutdown_hold_since,shutdown_countdown_since;
     int ui_scale_percent;
     int disable_auto_launch;
+    int disable_guide;
 } MenuState;
 
 static int menu_power_page(const MenuState *s){return s->page==PAGE_SHUTDOWN||s->page==PAGE_REBOOT;}
 static int menu_power_selection(const MenuState *s){return s->page==PAGE_REBOOT?MAIN_REBOOT:MAIN_SHUTDOWN;}
 static int menu_auto_launch(const MenuState *s){return !s->disable_auto_launch;}
+static int menu_guide_enabled(const MenuState *s){return !s->disable_guide;}
+static int menu_hotkey_pressed(const MenuState *s,int guide,int was_guide,int f10,int was_f10){
+    return (menu_guide_enabled(s)&&guide&&!was_guide)||(f10&&!was_f10);
+}
 
 static unsigned menu_button_count(uint32_t mask) {
     unsigned count=0;for(;mask;mask&=mask-1)++count;return count;
@@ -123,6 +128,9 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         return MENU_CHANGED;
     }
     if(s->page==PAGE_SETTINGS) {
+        if(s->selection==SETTING_GUIDE&&(button==PAD_LEFT||button==PAD_RIGHT||button==PAD_A)){
+            s->disable_guide=!s->disable_guide;return MENU_GUIDE_CHANGED;
+        }
         if(s->selection==SETTING_AUTO_LAUNCH&&(button==PAD_LEFT||button==PAD_RIGHT||button==PAD_A)){
             s->disable_auto_launch=!s->disable_auto_launch;return MENU_AUTO_LAUNCH_CHANGED;
         }

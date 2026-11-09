@@ -181,13 +181,14 @@ static void dpad_icon(HDC dc, int x, int y) {
     SelectObject(dc,old_pen); SelectObject(dc,old_brush); DeleteObject(pen); DeleteObject(brush);
 }
 static void save_settings(void) {
-    EnterCriticalSection(&lock); int ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu);uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
+    EnterCriticalSection(&lock); int ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu),guide_enabled=menu_guide_enabled(&menu);uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
     wchar_t value[24];swprintf(value,24,L"0x%08lx",(unsigned long)chord);
     BOOL saved=WritePrivateProfileStringW(L"Menu",L"ButtonIcons",ps?L"PlayStation":L"Xbox",settings_path);
     saved=WritePrivateProfileStringW(L"Menu",L"OpeningShortcut",value,settings_path)&&saved;
     swprintf(value,24,L"%d",scale);
     saved=WritePrivateProfileStringW(L"Menu",L"UIScale",value,settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"AutoLaunchAfterRestart",auto_launch?L"1":L"0",settings_path)&&saved;
+    saved=WritePrivateProfileStringW(L"Menu",L"GuideButtonOpensMenu",guide_enabled?L"1":L"0",settings_path)&&saved;
     EnterCriticalSection(&lock); settings_save_failed=!saved; LeaveCriticalSection(&lock);
     log_line(saved ? "Overlay settings saved." : "Could not save overlay settings.");
 }
@@ -204,8 +205,8 @@ static void shortcut_label(uint32_t chord,int ps,wchar_t *out,size_t capacity) {
     }
 }
 static void row_geometry(int page,int index,int *top,int *height) {
-    *top=page==PAGE_MAIN?86+29*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?90+36*index:100+56*index;
-    *height=page==PAGE_MAIN?27:page==PAGE_SETTINGS?32:50;
+    *top=page==PAGE_MAIN?86+29*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?90+30*index:100+56*index;
+    *height=page==PAGE_MAIN?27:page==PAGE_SETTINGS?27:50;
 }
 static void draw_menu(HDC dc, RECT r) {
     HBRUSH bg = CreateSolidBrush(RGB(19, 23, 30));
@@ -222,7 +223,7 @@ static void draw_menu(HDC dc, RECT r) {
     RECT sub = {38, 57, r.right - 36, 84};
     text(dc,font_small,state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and relaunch through PORTHEON.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,RGB(176,184,197),DT_LEFT);
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
-    const wchar_t *setting_labels[]={L"Button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Back"};
+    const wchar_t *setting_labels[]={L"Button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Back"};
     const wchar_t *restart_labels[]={L"Cancel",L"Restart now"};
     const wchar_t *shutdown_labels[]={state.shutdown_countdown?L"Cancel":L"Cancel",state.page==PAGE_REBOOT?L"Hold to restart PC":L"Hold to shut down"};
     for(int i=0;i<menu_rows(&state);++i) {
@@ -231,7 +232,7 @@ static void draw_menu(HDC dc, RECT r) {
         HBRUSH fill=CreateSolidBrush(i==selection?RGB(106,194,68):RGB(36,43,54));
         FillRect(dc, &row, fill); DeleteObject(fill);
         COLORREF color=i == selection ? RGB(11,24,7) : RGB(234,238,244);
-        row.left+=18;row.top+=state.page==PAGE_MAIN?-2:state.page==PAGE_SETTINGS?0:9;
+        row.left+=18;row.top+=(state.page==PAGE_MAIN||state.page==PAGE_SETTINGS)?-2:9;
         text(dc,font_body,state.page==PAGE_MAIN?main_labels[i]:state.page==PAGE_SETTINGS?setting_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],row,color,DT_LEFT);
         if(menu_power_page(&state)&&i==1&&state.shutdown_holding){
             wchar_t progress[40];swprintf(progress,40,L"%.1f / 3 s",state.shutdown_progress/1000.0);
@@ -243,6 +244,10 @@ static void draw_menu(HDC dc, RECT r) {
             RECT value={350,row.top+4,r.right-50,row.bottom};
             const wchar_t *label=state.page==PAGE_MAIN?(menu_auto_launch(&state)?L"Auto-launch: On":L"Auto-launch: Off"):(menu_auto_launch(&state)?L"< On >":L"< Off >");
             text(dc,font_small,label,value,color,DT_RIGHT|DT_SINGLELINE);
+        }
+        if(state.page==PAGE_SETTINGS&&i==SETTING_GUIDE){
+            RECT value={350,row.top+4,r.right-50,row.bottom};
+            text(dc,font_small,menu_guide_enabled(&state)?L"< On >":L"< Off >",value,color,DT_RIGHT|DT_SINGLELINE);
         }
         if(state.page==PAGE_SETTINGS&&i==SETTING_ICONS) {
             RECT value={300,row.top,r.right-50,row.bottom};
@@ -272,7 +277,7 @@ static void draw_menu(HDC dc, RECT r) {
         dpad_icon(dc,44,y);
         RECT select={84,y+5,190,y+28};text(dc,font_small,L"Select",select,RGB(187,196,209),DT_LEFT);
         button_icon(dc,210,y,0,ps);
-        const wchar_t *confirm=state.page==PAGE_SETTINGS?(selection==SETTING_SHORTCUT?L"Record":(selection==SETTING_ICONS||selection==SETTING_AUTO_LAUNCH)?L"Change":selection==SETTING_SCALE?L"Reset":L"Confirm"):menu_power_page(&state)?(state.shutdown_countdown?L"Cancel":selection==1?L"Hold 3s":L"Confirm"):L"Confirm";
+        const wchar_t *confirm=state.page==PAGE_SETTINGS?(selection==SETTING_SHORTCUT?L"Record":(selection==SETTING_ICONS||selection==SETTING_AUTO_LAUNCH||selection==SETTING_GUIDE)?L"Change":selection==SETTING_SCALE?L"Reset":L"Confirm"):menu_power_page(&state)?(state.shutdown_countdown?L"Cancel":selection==1?L"Hold 3s":L"Confirm"):L"Confirm";
         RECT yes={250,y+5,367,y+28};text(dc,font_small,confirm,yes,RGB(187,196,209),DT_LEFT);
         button_icon(dc,386,y,1,ps);
         RECT back={426,y+5,530,y+28};text(dc,font_small,state.page==PAGE_MAIN?L"Resume":L"Back",back,RGB(187,196,209),DT_LEFT);
@@ -281,6 +286,7 @@ static void draw_menu(HDC dc, RECT r) {
             swprintf(line,130,L"Open: %ls  |  F10",chord);
             if(selection==SETTING_SCALE)wcscpy(line,L"Left/right: resize   |   Confirm: reset to 100%");
             if(selection==SETTING_AUTO_LAUNCH)wcscpy(line,L"Reopen UFC 6 after PC restart and Windows sign-in.");
+            if(selection==SETTING_GUIDE)wcscpy(line,L"Use the Xbox / Guide button to open or close this menu.");
             RECT shortcut={30,314,r.right-30,336};text(dc,font_small,line,shortcut,RGB(158,170,188),DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         }
     }
@@ -413,7 +419,8 @@ static void tick(void) {
     int active = foreground();
     int guide = guide_down();
     int f10 = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
-    if (active && ((guide && !guide_was_down) || (f10 && !f10_was_down))) toggle_menu();
+    EnterCriticalSection(&lock);int hotkey=menu_hotkey_pressed(&menu,guide,guide_was_down,f10,f10_was_down);LeaveCriticalSection(&lock);
+    if (active && hotkey) toggle_menu();
     guide_was_down = guide; f10_was_down = f10;
     EnterCriticalSection(&lock);
     uint64_t now = GetTickCount64();
@@ -490,6 +497,8 @@ static DWORD WINAPI worker(void *unused) {
     EnterCriticalSection(&lock);menu.ui_scale_percent=overlay_valid_scale(scale)?scale:MENU_SCALE_DEFAULT;LeaveCriticalSection(&lock);
     int auto_launch=(int)GetPrivateProfileIntW(L"Menu",L"AutoLaunchAfterRestart",1,settings_path);
     EnterCriticalSection(&lock);menu.disable_auto_launch=auto_launch==0;LeaveCriticalSection(&lock);
+    int guide_enabled=(int)GetPrivateProfileIntW(L"Menu",L"GuideButtonOpensMenu",1,settings_path);
+    EnterCriticalSection(&lock);menu.disable_guide=guide_enabled==0;LeaveCriticalSection(&lock);
     log_line("UFC6 quit menu loaded inside engine process.");
     if (!test_mode && !install_hooks()) return 0;
     while (!game_window) { EnumWindows(find_window, 0); Sleep(100); }
@@ -524,7 +533,7 @@ static DWORD WINAPI worker(void *unused) {
                 ShowWindow(overlay, SW_HIDE); log_line("Quit selected: posting WM_CLOSE to game window.");
                 PostMessageW(game_window, WM_CLOSE, 0, 0);
             }
-            else if(msg.wParam==MENU_STYLE_CHANGED||msg.wParam==MENU_SHORTCUT_CHANGED||msg.wParam==MENU_SCALE_CHANGED||msg.wParam==MENU_AUTO_LAUNCH_CHANGED)save_settings();
+            else if(msg.wParam==MENU_STYLE_CHANGED||msg.wParam==MENU_SHORTCUT_CHANGED||msg.wParam==MENU_SCALE_CHANGED||msg.wParam==MENU_AUTO_LAUNCH_CHANGED||msg.wParam==MENU_GUIDE_CHANGED)save_settings();
             else if(msg.wParam==MENU_SCREENSHOT)request_screenshot();
             else if(msg.wParam==MENU_RESTART) {
                 ShowWindow(overlay,SW_HIDE);
@@ -580,6 +589,7 @@ __declspec(dllexport) int MenuTestSnapshot(void) {
 __declspec(dllexport) uint32_t MenuTestShortcut(void){EnterCriticalSection(&lock);uint32_t result=menu_shortcut(&menu);LeaveCriticalSection(&lock);return result;}
 __declspec(dllexport) void MenuTestScreenshot(void){request_screenshot();}
 __declspec(dllexport) int MenuTestShutdownRemaining(void){EnterCriticalSection(&lock);int seconds=menu.shutdown_countdown?menu.shutdown_seconds:0;LeaveCriticalSection(&lock);return seconds;}
+__declspec(dllexport) int MenuTestGuideEnabled(void){EnterCriticalSection(&lock);int value=menu_guide_enabled(&menu);LeaveCriticalSection(&lock);return value;}
 __declspec(dllexport) int MenuTestAutoLaunch(void){EnterCriticalSection(&lock);int value=menu_auto_launch(&menu);LeaveCriticalSection(&lock);return value;}
 __declspec(dllexport) int MenuTestScale(void){EnterCriticalSection(&lock);int scale=menu_scale(&menu);LeaveCriticalSection(&lock);return scale;}
 #endif

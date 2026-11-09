@@ -48,7 +48,7 @@ The two game-background images are real game-window captures. The isolated page 
 - Default opening shortcut: hold **LB + RB + Menu/Start** for **0.8 seconds**, then release. On PlayStation this is **L1 + R1 + Options**.
 - **D-pad up/down** selects; **A / cross** confirms; **B / circle** goes back. Back resumes the game from the main menu.
 - **F10** always opens or closes the overlay, including while recording a new shortcut.
-- The Xbox/Guide button is also attempted through an optional XInput extension. Windows/Steam and controller drivers may intercept it; no system settings are changed.
+- The Xbox/Guide button opens or closes the overlay by default. Disable it under **Settings → Xbox / Guide button** if you use that button for something else. Windows/Steam and controller drivers may intercept it; no system settings are changed.
 
 Select **Settings** to open the second settings box:
 
@@ -56,6 +56,7 @@ Select **Settings** to open the second settings box:
 - **Opening shortcut:** confirm starts recording. Release the confirmation button, hold a combination of **2–4 digital buttons** for about half a second, then release to save it. Supported buttons are shoulders, stick clicks, D-pad, face buttons, and Menu/Options. Analog triggers and Guide are not recorded. B/circle alone cancels recording; F10 closes the overlay without changing the shortcut.
 - **UI scale:** left/right changes the whole overlay from **50% to 300%**, in **25% steps**. Confirm resets it to **100%**. The overlay stays centred and automatically shrinks to fit smaller game windows with a margin.
 - **Launch UFC 6 after PC restart:** On by default. Confirm or left/right toggles whether Restart PC reopens UFC 6 at your next Windows sign-in. The Restart PC row and its confirmation show the current On/Off status; the confirmation also points to Settings.
+- **Xbox / Guide button:** On by default. Confirm or left/right toggles opening/closing this overlay with Guide. The controller shortcut and F10 stay available when Off. The preference saves automatically; enabling it while Guide is already held requires releasing and pressing again.
 - **Back:** returns to the main menu.
 
 Preferences save automatically to `bin/ufc6-quit-menu.ini` and are preserved when upgrading. A custom shortcut uses the same 0.8-second hold time. The INI can also be edited while the game is closed:
@@ -66,6 +67,7 @@ ButtonIcons=PlayStation
 OpeningShortcut=0x00000c08
 UIScale=100
 AutoLaunchAfterRestart=1
+GuideButtonOpensMenu=1
 ```
 
 `Xbox` is the other icon style. The hexadecimal value above is the default shoulder/Menu combination; use the recorder to choose a different combination.
@@ -106,7 +108,7 @@ Verification uses the test helper with power APIs compiled out and a file in pla
 
 ## Install, upgrade, and remove
 
-Download **`UFC6-Actions-Overlay-Setup-0.8.2.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
+Download **`UFC6-Actions-Overlay-Setup-0.8.3.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
 
 1. Close UFC 6 and its launcher.
 2. Click **Browse** and select the UFC 6 game folder or its **bin** folder containing **`UFC 6.exe`**.
@@ -118,7 +120,7 @@ To uninstall, run the same setup EXE, choose the same folder, and click **Remove
 
 Version 0.8.2 fixes startup when Windows prefers system DLLs, which can bypass an app-local `version.dll`. The bridge uses the engine's existing non-system runtime import and enables the Vulkan layer only inside the game process. It preserves the Windows security policy, checks all required overlay files before enabling the layer, and does not register a system-wide Vulkan layer. The installer accepts only the verified original runtime SHA-256, and rejects unknown replacements.
 
-The full **`UFC6-Actions-Overlay-0.8.2.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
+The full **`UFC6-Actions-Overlay-0.8.3.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
 
 The Python command-line manager remains available for development and scripting:
 

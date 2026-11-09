@@ -22,11 +22,11 @@ if (-not $Test) {
     if ($LASTEXITCODE) { throw 'Vulkan layer compilation failed' }
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     $manifest = [ordered]@{
-        version = '0.8.2'
+        version = '0.8.3'
         engine_revision = '3309ab23f'
         engine_sha256 = 'f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2'
         dll_sha256 = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()
-        previous_dll_sha256 = @('84504fd97f7eac21209b7ea8a1a6f005c591edac762efee5d10dc4a67c3a91a6','0ffacad46cc88cd6861e4fc940e44277a0145af5003fb9d2be55786318bb56e8','29450785d6e50686e1cec9e81f9bada4240772da58b1667ab8ecec682a961d75','69d6b4a0223702e3896cc02f370b6505b542472fb28163fe123b53f5bd30ea2f','a331d902a47023b261e0d696fe64ae65c80aea65bc850a72a9d9f32c4fca55a0','5bc45aabf9607a228c0c2d7544855fe678b5ff3f720d86f9bfa0ea57d90bfc6a','62b6b7970f3235125c913728997b9f44cf751d832a2ba6c364da78f48a5b8d3c','c64da30447e65a1e6628492a78ba733bf26b9eb1c1bd2e60983fcf94f79b3980','9a6bb5b6d4a1d3a77a116ac1b84ab103f5e07b75ef1d4ae87cd21d08963c493f','75221511636af4f553ef7a86aedf0606485d9f93e83ffe7c6e496cc5f0d390f5','20826c7d547e51f61c3bf1706746f279504e7c8a16afbb3ae0cd7799fe317270','9d7a5429ccf1e79e3c98b9c82248414698e9000daa95ba2f125863dcf09e54fb')
+        previous_dll_sha256 = @('84504fd97f7eac21209b7ea8a1a6f005c591edac762efee5d10dc4a67c3a91a6','0ffacad46cc88cd6861e4fc940e44277a0145af5003fb9d2be55786318bb56e8','29450785d6e50686e1cec9e81f9bada4240772da58b1667ab8ecec682a961d75','69d6b4a0223702e3896cc02f370b6505b542472fb28163fe123b53f5bd30ea2f','a331d902a47023b261e0d696fe64ae65c80aea65bc850a72a9d9f32c4fca55a0','5bc45aabf9607a228c0c2d7544855fe678b5ff3f720d86f9bfa0ea57d90bfc6a','62b6b7970f3235125c913728997b9f44cf751d832a2ba6c364da78f48a5b8d3c','c64da30447e65a1e6628492a78ba733bf26b9eb1c1bd2e60983fcf94f79b3980','9a6bb5b6d4a1d3a77a116ac1b84ab103f5e07b75ef1d4ae87cd21d08963c493f','75221511636af4f553ef7a86aedf0606485d9f93e83ffe7c6e496cc5f0d390f5','20826c7d547e51f61c3bf1706746f279504e7c8a16afbb3ae0cd7799fe317270','9d7a5429ccf1e79e3c98b9c82248414698e9000daa95ba2f125863dcf09e54fb','cb032e3b275ab2b608839f0d5ff518e3c38d8a13a8333bb65792059121216b36')
         runtime_bridge = @{target='libwinpthread-1.dll'; original_name='ufc6_pthread_original.dll'; original_sha256='78ebbc1480d62098aa66307db2ff139abc07c137bc188f5b73bf7b131492932c'}
         companion_files = [ordered]@{
             'libwinpthread-1.dll' = (Get-FileHash -LiteralPath 'dist/libwinpthread-1.dll').Hash.ToLowerInvariant()

@@ -23,7 +23,7 @@ namespace UFC6OverlaySetup {
                 Assert(Manager.Normalize(Directory.GetParent(folder).FullName) == folder,"Game root must resolve to bin.");
                 Assert(manager.Inspect(folder).Supported,"Fixture engine must be supported.");
                 string ini = Path.Combine(folder,"ufc6-quit-menu.ini"), screenshot = Path.Combine(folder,"existing-screenshot.png");
-                File.WriteAllText(ini,"[Menu]\nUIScale=175\nAutoLaunchAfterRestart=0\n"); File.WriteAllBytes(screenshot,Bytes("existing image"));
+                File.WriteAllText(ini,"[Menu]\nUIScale=175\nAutoLaunchAfterRestart=0\nGuideButtonOpensMenu=0\n"); File.WriteAllBytes(screenshot,Bytes("existing image"));
                 string settings = File.ReadAllText(ini);
                 manager.Apply(folder,false); Assert(manager.Inspect(folder).Current == 4,"Installation must match every release hash.");
                 manager.Apply(folder,false); Assert(!Directory.GetFiles(folder,"*.bak").Any(),"Idempotent install must not create backups.");

@@ -126,6 +126,21 @@ int main(void) {
         int aspect=(int)(width*372)-(int)(height*570);assert(aspect>=-1140&&aspect<=1140);
     }
     overlay_extent(300,32,32,&width,&height);assert(!width&&!height);
-    puts("PASS: menu safeguards, UI scaling bounds/reset/persistence, and fitting from 320x240 to 4K.");
+    s=(MenuState){.visible=1,.armed=1,.page=PAGE_SETTINGS,.selection=SETTING_GUIDE};
+    assert(menu_guide_enabled(&s));
+    assert(menu_hotkey_pressed(&s,1,0,0,0));
+    assert(!menu_hotkey_pressed(&s,1,1,0,0));
+    assert(menu_button(&s,PAD_A,1)==MENU_GUIDE_CHANGED&&!menu_guide_enabled(&s));
+    assert(!menu_hotkey_pressed(&s,1,0,0,0));
+    assert(menu_hotkey_pressed(&s,1,0,1,0)); /* F10 remains available with Guide off. */
+    assert(!menu_hotkey_pressed(&s,0,0,1,1));
+    assert(menu_button(&s,PAD_LEFT,1)==MENU_GUIDE_CHANGED&&menu_guide_enabled(&s));
+    assert(!menu_hotkey_pressed(&s,1,1,0,0)); /* Enabling while held requires a new press. */
+    assert(menu_hotkey_pressed(&s,1,0,0,0));
+    assert(menu_button(&s,PAD_RIGHT,1)==MENU_GUIDE_CHANGED&&!menu_guide_enabled(&s));
+    menu_close(&s,MENU_RESUME);menu_show(&s);assert(!menu_guide_enabled(&s));
+    s=(MenuState){.disable_guide=1};
+    menu_tick(&s,OPEN_CHORD,1000,1);assert(menu_tick(&s,OPEN_CHORD,1800,1)==MENU_OPEN);
+    puts("PASS: menu safeguards, UI scaling, Guide default/toggle/edge behavior and independent F10/chord access.");
     return 0;
 }

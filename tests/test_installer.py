@@ -133,7 +133,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_settings_survive_install_and_remove(self):
         settings=self.bin/"ufc6-quit-menu.ini"
-        contents=b"[Menu]\nButtonIcons=PlayStation\nOpeningShortcut=0x6\nUIScale=175\nAutoLaunchAfterRestart=0\n"
+        contents=b"[Menu]\nButtonIcons=PlayStation\nOpeningShortcut=0x6\nUIScale=175\nAutoLaunchAfterRestart=0\nGuideButtonOpensMenu=0\n"
         settings.write_bytes(contents)
         self.run_action("install");self.run_action("remove")
         self.assertEqual(settings.read_bytes(),contents)
