@@ -139,6 +139,12 @@ int main(void) {
     assert(menu_button(&s,PAD_DOWN,1)==MENU_CHANGED&&s.selection==SETTING_LAUNCHER);
     assert(menu_button(&s,PAD_A,1)==MENU_LAUNCHER_SETTINGS&&!s.armed);
     menu_tick(&s,0,9100,1);
+    assert(menu_button(&s,PAD_DOWN,1)==MENU_CHANGED&&s.selection==SETTING_ACCESS);
+    assert(menu_controller_allowed(&s,0)&&menu_controller_allowed(&s,1)&&menu_controller_allowed(&s,2));
+    assert(menu_button(&s,PAD_A,1)==MENU_ACCESS_CHANGED&&s.first_player_only&&!s.armed);
+    assert(menu_controller_allowed(&s,1)&&!menu_controller_allowed(&s,0)&&!menu_controller_allowed(&s,2));
+    assert(menu_button(&s,PAD_A,1)==MENU_NONE);
+    menu_tick(&s,0,9200,1);
     assert(menu_button(&s,PAD_DOWN,1)==MENU_CHANGED&&s.selection==SETTING_BACK);
     s=(MenuState){.visible=1,.armed=1,.page=PAGE_SETTINGS,.selection=SETTING_GUIDE};
     assert(menu_guide_enabled(&s));

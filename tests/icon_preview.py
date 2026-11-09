@@ -21,6 +21,9 @@ parser.add_argument("--no-render",action="store_true")
 parser.add_argument("--reload-guide-off",action="store_true")
 parser.add_argument("--controllers",action="store_true")
 parser.add_argument("--raw-controllers",action="store_true")
+parser.add_argument("--access",action="store_true")
+parser.add_argument("--reload-access",action="store_true")
+parser.add_argument("--raw-access",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
 if args.reset:
@@ -77,6 +80,7 @@ def render(name,viewport=(2560,1440)):
 
 try:
     dll.MenuTestStart(window);pump(.4)
+    dll.Ufc6VulkanActive() # Match production before opening; no desktop-fit/render extent race.
     assert (dll.MenuTestSnapshot()>>4)&1 == int(args.reload),"Stored profile was not loaded"
     assert dll.MenuTestScale()==(175 if args.reload and args.scale else 100)
     if args.reload:
@@ -86,7 +90,77 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     assert dll.MenuTestSnapshot()&0x100
-    if args.raw_controllers:
+    if args.access or args.reload_access:
+        dll.MenuTestPlayers.argtypes=[c.c_int,c.c_int];dll.MenuTestPlayers(42,7)
+        dll.MenuTestButtonDevice.argtypes=[c.c_int,w.DWORD,c.c_int]
+        def native(button,pad=42):dll.MenuTestButtonDevice(pad,button,1);dll.MenuTestButtonDevice(pad,button,0);pump(.06)
+        dll.MenuTestButtonDevice(7,0x20,0);pump(.04) # Player 2 is observed before Player 1.
+        if args.reload_access:
+            assert dll.MenuTestAccess()==1
+            native(0x40,7);assert dll.MenuTestPlayer()==0 and dll.MenuTestSnapshot()&0xf==0
+            native(0x40);assert dll.MenuTestPlayer()==1 and dll.MenuTestSnapshot()&0xf==1
+            print("PASS: a fresh process loaded Player 1-only access and kept keyboard opening available.")
+            raise SystemExit(0)
+        assert dll.MenuTestAccess()==0
+        native(0x40);assert dll.MenuTestPlayer()==1
+        native(0x10);render("owner-player1.png");native(0x40)
+        native(0x40,7);assert dll.MenuTestSnapshot()&0xf==1
+        native(0x2000);dll.MenuTestToggle();pump(.1)
+        native(0x40,7);assert dll.MenuTestPlayer()==2
+        render("owner-player2.png")
+        native(0x40,7);native(0x40,7);native(0x4000,7)
+        for _ in range(7):native(0x40,7)
+        assert dll.MenuTestSnapshot()&0xf==7
+        render("access-either.png")
+        dll.MenuTestButtonDevice(7,0x4000,1);pump(.25)
+        assert dll.MenuTestAccess()==1 and dll.MenuTestPlayer()==0
+        render("access-waiting-player1.png")
+        dll.MenuTestButtonDevice(7,0x4000,0);pump(.05)
+        native(0x40,7);assert dll.MenuTestSnapshot()&0xf==7 and dll.MenuTestPlayer()==0
+        native(0x40);assert dll.MenuTestPlayer()==1 and dll.MenuTestSnapshot()&0xf==8
+        render("access-player1-only.png")
+        native(0x2000);native(0x2000)
+        assert not dll.MenuTestSnapshot()&0x100
+        dll.MenuTestButtonDevice(7,0xc08,1);pump(.95)
+        assert not dll.MenuTestSnapshot()&0x100,"Player 2 chord must be blocked"
+        dll.MenuTestButtonDevice(7,0xc08,0);pump(.06)
+        dll.MenuTestButtonDevice(42,0xc08,1);pump(.95)
+        dll.MenuTestButtonDevice(42,0xc08,0);pump(.06)
+        assert dll.MenuTestSnapshot()&0x100 and dll.MenuTestPlayer()==1
+        native(0x2000);dll.MenuTestToggle();pump(.08)
+        native(0x40,7);assert dll.MenuTestPlayer()==0
+        native(0x40);assert dll.MenuTestPlayer()==1
+        assert "ControllerAccess=Player1" in (folder/"ufc6-quit-menu.test.ini").read_text()
+        print("PASS: engine-assigned players with arbitrary IDs/arrival order, both owners, held-mode change, Player 2 rejection, Player 1 chord, keyboard access and persistence.")
+        raise SystemExit(0)
+    elif args.raw_access:
+        dll.MenuTestRawPad.argtypes=[c.c_int,c.c_int,c.c_int]
+        def raw(slot,buttons,connected=1):dll.MenuTestRawPad(slot,buttons,connected);pump(.05)
+        def rpress(slot,buttons):raw(slot,buttons);raw(slot,0)
+        press(0x2000);raw(0,0);raw(1,0x400);raw(1,0)
+        rpress(1,2);assert dll.MenuTestPlayer()==2
+        rpress(0,2);assert dll.MenuTestSnapshot()&0xf==1
+        for _ in range(2):rpress(1,2)
+        rpress(1,0x1000)
+        for _ in range(7):rpress(1,2)
+        raw(1,0x1000);pump(.2)
+        assert dll.MenuTestAccess()==1 and dll.MenuTestPlayer()==0
+        raw(1,0);rpress(1,2);assert dll.MenuTestPlayer()==0
+        rpress(0,2);assert dll.MenuTestPlayer()==1 and dll.MenuTestSnapshot()&0xf==8
+        rpress(1,0x2000);assert (dll.MenuTestSnapshot()>>12)&7==1
+        rpress(0,0x2000);rpress(0,0x2000)
+        assert not dll.MenuTestSnapshot()&0x100
+        raw(1,0x400);raw(1,0);assert not dll.MenuTestSnapshot()&0x100,"Player 2 Guide must be blocked"
+        raw(0,0x400);raw(0,0);assert dll.MenuTestSnapshot()&0x100
+        rpress(0,2);assert dll.MenuTestPlayer()==1
+        raw(0,0,0);assert not dll.MenuTestSnapshot()&0x100
+        raw(1,0x400);raw(1,0);assert not dll.MenuTestSnapshot()&0x100
+        dll.MenuTestToggle();pump(.08);assert dll.MenuTestSnapshot()&0x100
+        rpress(1,2);assert dll.MenuTestPlayer()==0
+        dll.MenuTestToggle();pump(.08);assert not dll.MenuTestSnapshot()&0x100
+        print("PASS: direct XInput Player 1/2 owners, access-mode transfer, non-owner isolation, Guide restriction, owner disconnect and keyboard recovery.")
+        raise SystemExit(0)
+    elif args.raw_controllers:
         dll.MenuTestRawPad.argtypes=[c.c_int,c.c_int,c.c_int]
         dll.MenuTestButtonDevice.argtypes=[c.c_int,w.DWORD,c.c_int]
         dll.MenuTestAxisDevice.argtypes=[c.c_int,c.c_int,c.c_int]
@@ -221,6 +295,7 @@ try:
         press(0x20);assert dll.MenuTestGameBar()==0
         press(0x40);assert dll.MenuTestSnapshot()&0xf==6
         press(0x40);assert dll.MenuTestSnapshot()&0xf==7
+        press(0x40);assert dll.MenuTestSnapshot()&0xf==8
         render("settings-back.png")
         press(0x4000);assert (dll.MenuTestSnapshot()>>12)&7==0
         assert windows_preference()==original_windows,"UI test must never change the actual Windows Game Bar preference"

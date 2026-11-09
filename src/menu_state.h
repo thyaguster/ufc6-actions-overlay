@@ -11,9 +11,9 @@ enum {
 };
 enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT };
 enum { MAIN_RESUME, MAIN_SCREENSHOT, MAIN_RESTART, MAIN_SETTINGS, MAIN_QUIT, MAIN_REBOOT, MAIN_SHUTDOWN, MAIN_COUNT };
-enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_LAUNCHER, SETTING_BACK, SETTING_COUNT };
+enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_LAUNCHER, SETTING_ACCESS, SETTING_BACK, SETTING_COUNT };
 enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
-       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED, MENU_LAUNCHER_SETTINGS };
+       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED, MENU_LAUNCHER_SETTINGS, MENU_ACCESS_CHANGED };
 
 typedef struct {
     int visible,selection,armed,chord_latched,draining;
@@ -27,12 +27,14 @@ typedef struct {
     int disable_auto_launch;
     int disable_guide;
     int gamebar_shortcut;
+    int first_player_only;
 } MenuState;
 
 static int menu_power_page(const MenuState *s){return s->page==PAGE_SHUTDOWN||s->page==PAGE_REBOOT;}
 static int menu_power_selection(const MenuState *s){return s->page==PAGE_REBOOT?MAIN_REBOOT:MAIN_SHUTDOWN;}
 static int menu_auto_launch(const MenuState *s){return !s->disable_auto_launch;}
 static int menu_guide_enabled(const MenuState *s){return !s->disable_guide;}
+static int menu_controller_allowed(const MenuState *s,int player){return !s->first_player_only||player==1;}
 static int menu_hotkey_pressed(const MenuState *s,int guide,int was_guide,int f10,int was_f10){
     return (menu_guide_enabled(s)&&guide&&!was_guide)||(f10&&!was_f10);
 }
@@ -129,6 +131,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         return MENU_CHANGED;
     }
     if(s->page==PAGE_SETTINGS) {
+        if(s->selection==SETTING_ACCESS&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){s->first_player_only=!s->first_player_only;s->armed=0;menu_cancel_shutdown(s);return MENU_ACCESS_CHANGED;}
         if(s->selection==SETTING_LAUNCHER&&button==PAD_A){s->armed=0;return MENU_LAUNCHER_SETTINGS;}
         if(s->selection==SETTING_GAMEBAR&&(button==PAD_LEFT||button==PAD_RIGHT||button==PAD_A)){
             s->armed=0;return MENU_GAMEBAR_CHANGED;

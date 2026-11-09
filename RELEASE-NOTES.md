@@ -1,3 +1,17 @@
+# UFC 6 Actions Overlay v0.8.7
+
+Adds a controller ownership indicator and **Settings > Controller access**.
+
+- Shows Player 1/2 for assigned navigation input, or a waiting indicator before an eligible controller claims the menu.
+- Choose **Either** (default) or **Player 1 only**. The restriction applies to navigation, opening combinations and Guide; F10 remains available.
+- Native input uses the verified engine's player assignment rather than treating SDL instance IDs or arrival order as player numbers. Direct XInput uses Windows controller slots, with slot 1 as Player 1. Unassigned native input displays Controller.
+- Switching access releases the old owner and waits for eligible held controls to be released. Other controllers cannot take over an already-owned menu, and owner disconnection closes the menu safely.
+- Settings scrolls to keep the selected item visible, with direction indicators.
+
+Tests cover arbitrary native IDs and reversed arrival order, both owner labels, held buttons during access changes, saved preferences in a fresh process, restricted Guide/chord/navigation, owner disconnect and keyboard recovery. Existing launcher, Parsec routing, power-stub and installer checks remain included.
+
+Downloads: **UFC6-Actions-Overlay-Setup-0.8.7.exe** (recommended) or **UFC6-Actions-Overlay-0.8.7.zip** (installer, prebuilt files, complete source and licenses).
+
 # UFC 6 Actions Overlay v0.8.6
 
 Adds **Settings > Launcher setup...** for Restart game and post-reboot auto-launch.

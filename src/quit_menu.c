@@ -51,6 +51,7 @@ static int test_guide;
 static int test_gamebar_shortcut=1;
 static volatile LONG test_gamebar_redirected;
 static int test_raw_input;
+static int test_primary_id=1,test_secondary_id=2;
 #endif
 static XINPUT_STATE raw_states[4];
 static int raw_connected[4],guide_source=-1,raw_owner=-1,raw_navigation;
@@ -75,9 +76,14 @@ typedef struct {
 static InputDevice devices[16];
 static int menu_device = -1;
 static int wait_guide_release;
+static int wait_access_release;
 static uint64_t next_gamebar_read;
 static int gamebar_conflict;
 static int launcher_setup_active;
+static uintptr_t engine_base;
+static int engine_parsec;
+static void *native_manager;
+static int native_primary_id=-1,native_secondary_id=-1;
 static int input_redirected(void){
 #ifdef QUIT_MENU_TEST
     if(test_mode)return InterlockedCompareExchange(&test_gamebar_redirected,0,0)!=0;
@@ -133,6 +139,32 @@ static InputDevice *device_for(void *controller, int id) {
     }
     return NULL;
 }
+/* Only exact, verified engine profiles enable these read-only identity offsets.
+ * SDL instance IDs are arbitrary; they are not player numbers. */
+static void refresh_native_players(void){
+#ifdef QUIT_MENU_TEST
+    if(test_mode){native_manager=(void*)1;native_primary_id=test_primary_id;native_secondary_id=test_secondary_id;return;}
+#endif
+    native_primary_id=-1;native_secondary_id=-1;native_manager=NULL;
+    if(!engine_base)return;
+    HANDLE self=GetCurrentProcess();void *manager=NULL;int primary=-1;
+    if(!ReadProcessMemory(self,(void*)(engine_base+CONTROLLER_RVA),&manager,sizeof(manager),NULL)||!manager)return;
+    if(!ReadProcessMemory(self,(BYTE*)manager+0x28,&primary,sizeof(primary),NULL))return;
+    native_manager=manager;native_primary_id=primary;
+    if(engine_parsec){int state[2];if(ReadProcessMemory(self,(void*)(engine_base+0x3c04008),state,sizeof(state),NULL)&&state[1])native_secondary_id=state[0];}
+}
+static int native_player(const InputDevice *d){
+    if(d->controller!=native_manager||d->id<0)return 0;
+    return d->id==native_primary_id?1:d->id==native_secondary_id?2:0;
+}
+static int native_allowed(const InputDevice *d){return menu_controller_allowed(&menu,native_player(d));}
+static int raw_allowed(int slot){return menu_controller_allowed(&menu,slot+1);}
+static uint32_t raw_menu_buttons(int slot);
+static void reset_menu_owner(void){
+    menu_device=-1;raw_owner=-1;raw_previous=0;raw_navigation=0;
+    for(int slot=0;slot<4;++slot){raw_idle_previous[slot]=raw_menu_buttons(slot);if(raw_connected[slot])raw_navigation=1;}
+    menu.armed=0;wait_access_release=1;
+}
 static int foreground(void) {
     HWND f = GetForegroundWindow();
     return f && (f == game_window || f == overlay);
@@ -147,11 +179,12 @@ static void neutralize(void) {
     }
 }
 static void action(int result) {
+    if(result==MENU_ACCESS_CHANGED)reset_menu_owner();
     if (result != MENU_NONE) PostThreadMessageW(ui_thread, WM_MENU_ACTION, result, 0);
 }
 static void navigate_device(int index,uint32_t pressed){
     const uint32_t navigation[]={PAD_B,PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_A};
-    if(launcher_setup_active||input_redirected()||!menu.visible||!menu.armed||menu.capturing||!(pressed&(PAD_B|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A)))return;
+    if(wait_access_release||!native_allowed(&devices[index])||launcher_setup_active||input_redirected()||!menu.visible||!menu.armed||menu.capturing||!(pressed&(PAD_B|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A)))return;
     if(raw_navigation){
         if(raw_owner>=0)return;
         /* Guide can be reported by an XInput bridge while actual navigation
@@ -248,7 +281,7 @@ static void dpad_icon(HDC dc, int x, int y) {
     SelectObject(dc,old_pen); SelectObject(dc,old_brush); DeleteObject(pen); DeleteObject(brush);
 }
 static void save_settings(void) {
-    EnterCriticalSection(&lock); int ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu),guide_enabled=menu_guide_enabled(&menu);uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
+    EnterCriticalSection(&lock); int ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu),guide_enabled=menu_guide_enabled(&menu),first_only=menu.first_player_only;uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
     wchar_t value[24];swprintf(value,24,L"0x%08lx",(unsigned long)chord);
     BOOL saved=WritePrivateProfileStringW(L"Menu",L"ButtonIcons",ps?L"PlayStation":L"Xbox",settings_path);
     saved=WritePrivateProfileStringW(L"Menu",L"OpeningShortcut",value,settings_path)&&saved;
@@ -256,6 +289,7 @@ static void save_settings(void) {
     saved=WritePrivateProfileStringW(L"Menu",L"UIScale",value,settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"AutoLaunchAfterRestart",auto_launch?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"GuideButtonOpensMenu",guide_enabled?L"1":L"0",settings_path)&&saved;
+    saved=WritePrivateProfileStringW(L"Menu",L"ControllerAccess",first_only?L"Player1":L"Either",settings_path)&&saved;
     EnterCriticalSection(&lock); settings_save_failed=!saved; LeaveCriticalSection(&lock);
     log_line(saved ? "Overlay settings saved." : "Could not save overlay settings.");
 }
@@ -272,29 +306,37 @@ static void shortcut_label(uint32_t chord,int ps,wchar_t *out,size_t capacity) {
     }
 }
 static void row_geometry(int page,int index,int *top,int *height) {
-    *top=page==PAGE_MAIN?86+29*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?88+23*index:100+56*index;
-    *height=page==PAGE_MAIN?27:page==PAGE_SETTINGS?22:50;
+    *top=page==PAGE_MAIN?86+29*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?88+26*index:100+56*index;
+    *height=page==PAGE_MAIN?27:page==PAGE_SETTINGS?25:50;
 }
 static void draw_menu(HDC dc, RECT r) {
     HBRUSH bg = CreateSolidBrush(RGB(19, 23, 30));
     FillRect(dc, &r, bg); DeleteObject(bg);
     SetBkMode(dc, TRANSPARENT);
-    MenuState state;int save_failed,conflict;wchar_t message[120];
+    MenuState state;int save_failed,conflict,owner_player=0,has_owner=0;wchar_t message[120];
     EnterCriticalSection(&lock);
     state=menu;save_failed=settings_save_failed;conflict=gamebar_conflict;
+    if(raw_navigation&&raw_owner>=0){has_owner=1;owner_player=raw_owner+1;}
+    else if(menu_device>=0&&devices[menu_device].used){has_owner=1;owner_player=native_player(&devices[menu_device]);}
     lstrcpynW(message,GetTickCount64()<status_until?status_text:L"",120);
     LeaveCriticalSection(&lock);
     int selection=state.selection,ps=state.playstation_icons;
     RECT title = {36, 13, r.right - 36, 57};
     text(dc,font_title,state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
+    wchar_t owner_label[64];
+    if(owner_player>0)swprintf(owner_label,64,L"Player %d",owner_player);
+    else wcscpy(owner_label,has_owner?L"Controller":state.first_player_only?L"Waiting for Player 1":L"Waiting for controller");
+    RECT owner_rect={330,25,r.right-36,48};text(dc,font_small,owner_label,owner_rect,RGB(176,184,197),DT_RIGHT|DT_SINGLELINE);
     RECT sub = {38, 57, r.right - 36, 84};
     text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):RGB(176,184,197),DT_LEFT);
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
-    const wchar_t *setting_labels[]={L"Button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Back"};
+    const wchar_t *setting_labels[]={L"Button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Back"};
     const wchar_t *restart_labels[]={L"Cancel",L"Restart now"};
     const wchar_t *shutdown_labels[]={state.shutdown_countdown?L"Cancel":L"Cancel",state.page==PAGE_REBOOT?L"Hold to restart PC":L"Hold to shut down"};
+    int first=state.page==PAGE_SETTINGS&&selection>=7?selection-6:0;
     for(int i=0;i<menu_rows(&state);++i) {
-        int top,height;row_geometry(state.page,i,&top,&height);
+        if(state.page==PAGE_SETTINGS&&(i<first||i>=first+7))continue;
+        int top,height;row_geometry(state.page,state.page==PAGE_SETTINGS?i-first:i,&top,&height);
         RECT row={36,top,r.right-36,top+height};
         HBRUSH fill=CreateSolidBrush(i==selection?RGB(106,194,68):RGB(36,43,54));
         FillRect(dc, &row, fill); DeleteObject(fill);
@@ -317,6 +359,9 @@ static void draw_menu(HDC dc, RECT r) {
             const wchar_t *label=i==SETTING_GUIDE?(menu_guide_enabled(&state)?L"< On >":L"< Off >"):(state.gamebar_shortcut<0?L"Unavailable":state.gamebar_shortcut?L"< On >":L"< Off >");
             text(dc,font_small,label,value,color,DT_RIGHT|DT_SINGLELINE);
         }
+        if(state.page==PAGE_SETTINGS&&i==SETTING_ACCESS){
+            RECT value={330,row.top+4,r.right-50,row.bottom};text(dc,font_small,state.first_player_only?L"< Player 1 only >":L"< Either >",value,color,DT_RIGHT|DT_SINGLELINE);
+        }
         if(state.page==PAGE_SETTINGS&&i==SETTING_ICONS) {
             RECT value={300,row.top,r.right-50,row.bottom};
             text(dc,font_body,ps?L"< PlayStation >":L"< Xbox >",value,color,DT_RIGHT|DT_SINGLELINE);
@@ -330,6 +375,11 @@ static void draw_menu(HDC dc, RECT r) {
             wchar_t scale[40];swprintf(scale,40,L"< %d%% >",menu_scale(&state));
             RECT value={300,row.top,r.right-50,row.bottom};text(dc,font_body,scale,value,color,DT_RIGHT|DT_SINGLELINE);
         }
+    }
+    if(state.page==PAGE_SETTINGS){
+        RECT above={538,87,560,109},below={538,246,560,269};
+        if(first>0)text(dc,font_small,L"\x25b2",above,RGB(176,184,197),DT_CENTER|DT_SINGLELINE);
+        if(first+7<SETTING_COUNT)text(dc,font_small,L"\x25bc",below,RGB(176,184,197),DT_CENTER|DT_SINGLELINE);
     }
     if(menu_power_page(&state)&&state.shutdown_countdown){
         wchar_t countdown[40];swprintf(countdown,40,L"%d seconds",state.shutdown_seconds);
@@ -351,7 +401,7 @@ static void draw_menu(HDC dc, RECT r) {
         dpad_icon(dc,44,y);
         RECT select={84,y+5,190,y+28};text(dc,font_small,L"Select",select,RGB(187,196,209),DT_LEFT);
         button_icon(dc,210,y,0,ps);
-        const wchar_t *confirm=state.page==PAGE_SETTINGS?(selection==SETTING_SHORTCUT?L"Record":(selection==SETTING_ICONS||selection==SETTING_AUTO_LAUNCH||selection==SETTING_GUIDE||selection==SETTING_GAMEBAR)?L"Change":selection==SETTING_SCALE?L"Reset":L"Confirm"):menu_power_page(&state)?(state.shutdown_countdown?L"Cancel":selection==1?L"Hold 3s":L"Confirm"):L"Confirm";
+        const wchar_t *confirm=state.page==PAGE_SETTINGS?(selection==SETTING_SHORTCUT?L"Record":(selection==SETTING_ICONS||selection==SETTING_AUTO_LAUNCH||selection==SETTING_GUIDE||selection==SETTING_GAMEBAR||selection==SETTING_ACCESS)?L"Change":selection==SETTING_SCALE?L"Reset":L"Confirm"):menu_power_page(&state)?(state.shutdown_countdown?L"Cancel":selection==1?L"Hold 3s":L"Confirm"):L"Confirm";
         RECT yes={250,y+5,367,y+28};text(dc,font_small,confirm,yes,RGB(187,196,209),DT_LEFT);
         button_icon(dc,386,y,1,ps);
         RECT back={426,y+5,530,y+28};text(dc,font_small,state.page==PAGE_MAIN?L"Resume":L"Back",back,RGB(187,196,209),DT_LEFT);
@@ -363,6 +413,7 @@ static void draw_menu(HDC dc, RECT r) {
             if(selection==SETTING_GUIDE)wcscpy(line,L"Turn Game Bar shortcut Off if Guide navigation stalls.");
             if(selection==SETTING_GAMEBAR)wcscpy(line,L"Windows setting for this user. Win+G still opens Game Bar.");
             if(selection==SETTING_LAUNCHER)wcscpy(line,L"Opens desktop launcher settings. Mouse/keyboard required.");
+            if(selection==SETTING_ACCESS)wcscpy(line,L"Player 1 only, or either controller. F10 always works.");
             RECT shortcut={30,314,r.right-30,336};text(dc,font_small,line,shortcut,RGB(158,170,188),DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         }
     }
@@ -455,7 +506,11 @@ static LRESULT CALLBACK overlay_proc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         x=(int)((int64_t)x*MENU_BASE_WIDTH/r.right);y=(int)((int64_t)y*MENU_BASE_HEIGHT/r.bottom);
         EnterCriticalSection(&lock);
         int selected=-1;
-        for(int i=0;i<menu_rows(&menu);++i){int top,height;row_geometry(menu.page,i,&top,&height);if(y>=top&&y<top+height)selected=i;}
+        int first=menu.page==PAGE_SETTINGS&&menu.selection>=7?menu.selection-6:0;
+        for(int i=0;i<menu_rows(&menu);++i){
+            if(menu.page==PAGE_SETTINGS&&(i<first||i>=first+7))continue;
+            int top,height;row_geometry(menu.page,menu.page==PAGE_SETTINGS?i-first:i,&top,&height);if(y>=top&&y<top+height)selected=i;
+        }
         if (selected >= 0 && x >= 36 && x < (int)MENU_BASE_WIDTH-36 && menu.armed) {
             menu.selection = selected;
             action(menu_button(&menu, PAD_A, 1));
@@ -495,7 +550,7 @@ static int guide_down(void) {
         if(!test_mode||!test_raw_input)
 #endif
         raw_connected[i]=xstate&&xstate(i,&raw_states[i])==ERROR_SUCCESS;
-        if(raw_connected[i]&&(raw_states[i].Gamepad.wButtons&0x0400)&&guide_source<0)guide_source=(int)i;
+        if(raw_connected[i]&&raw_allowed((int)i)&&(raw_states[i].Gamepad.wButtons&0x0400)&&guide_source<0)guide_source=(int)i;
     }
     return guide_source>=0;
 }
@@ -508,9 +563,8 @@ static void tick(void) {
     int active = test_mode||foreground();
     int controller_active=active&&!input_redirected();
     if(GetTickCount64()>=next_gamebar_read){refresh_gamebar();next_gamebar_read=GetTickCount64()+1000;}
-    int guide = guide_down();
     int f10 = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
-    EnterCriticalSection(&lock);int guide_pressed=menu_guide_enabled(&menu)&&guide&&!guide_was_down;int hotkey=menu_hotkey_pressed(&menu,guide,guide_was_down,f10,f10_was_down);LeaveCriticalSection(&lock);
+    EnterCriticalSection(&lock);refresh_native_players();int guide=guide_down();int guide_pressed=menu_guide_enabled(&menu)&&guide&&!guide_was_down;int hotkey=menu_hotkey_pressed(&menu,guide,guide_was_down,f10,f10_was_down);LeaveCriticalSection(&lock);
     if (active && hotkey) toggle_menu();
     guide_was_down = guide; f10_was_down = f10;
     EnterCriticalSection(&lock);
@@ -525,18 +579,24 @@ static void tick(void) {
     uint64_t now = GetTickCount64();
     uint32_t all_buttons = 0;
     for (int i = 0; i < 16; ++i) if (devices[i].used) all_buttons |= devices[i].buttons;
+    if(wait_access_release){
+        uint32_t held=0;
+        for(int i=0;i<16;++i)if(devices[i].used&&native_allowed(&devices[i]))held|=devices[i].buttons|native_menu_stick(devices[i].axes[0],devices[i].axes[1]);
+        for(int slot=0;slot<4;++slot)if(raw_connected[slot]&&raw_allowed(slot))held|=raw_menu_buttons(slot);
+        if(!held)wait_access_release=0;
+    }
     if (!menu.visible && !menu.draining) {
         /* A chord must come entirely from one controller. */
         int owner = -1;
         for (int i = 0; i < 16; ++i)
-            if (devices[i].used && (devices[i].buttons & menu_shortcut(&menu)) == menu_shortcut(&menu)) { owner = i; break; }
+            if (devices[i].used && native_allowed(&devices[i]) && (devices[i].buttons & menu_shortcut(&menu)) == menu_shortcut(&menu)) { owner = i; break; }
         if (owner != menu_device) { menu.chord_since = 0; menu.chord_latched = 0; }
         menu_device = owner;
         int result = menu_tick(&menu, owner >= 0 ? devices[owner].buttons : 0, now, controller_active);
         if (result == MENU_OPEN) {
             /* XInput chords use the same navigation path as Guide, so SDL focus
              * transitions cannot leave an opened menu without a controller. */
-            for(int slot=0;slot<4;++slot)if(raw_connected[slot]&&(xinput_menu_buttons(raw_states[slot].Gamepad.wButtons)&menu_shortcut(&menu))==menu_shortcut(&menu)){
+            for(int slot=0;slot<4;++slot)if(raw_connected[slot]&&raw_allowed(slot)&&(xinput_menu_buttons(raw_states[slot].Gamepad.wButtons)&menu_shortcut(&menu))==menu_shortcut(&menu)){
                 raw_navigation=1;raw_owner=slot;raw_previous=raw_menu_buttons(slot);menu_device=-1;break;
             }
             neutralize(); action(result);
@@ -548,14 +608,14 @@ static void tick(void) {
             source=raw_owner>=0&&raw_connected[raw_owner]?raw_menu_buttons(raw_owner):0;
             if(raw_owner>=0&&!raw_connected[raw_owner]){action(menu_close(&menu,MENU_RESUME));was_draining=1;}
         }
-        if(wait_guide_release)source|=PAD_MENU;
+        if(wait_guide_release||wait_access_release)source|=PAD_MENU;
         action(menu_tick(&menu, source, now, controller_active));
         if(raw_navigation){
             if(raw_owner<0&&menu.visible&&!wait_guide_release){
                 for(int slot=0;slot<4;++slot){
                     uint32_t buttons=raw_connected[slot]?raw_menu_buttons(slot):0;
                     uint32_t pressed=buttons&~raw_idle_previous[slot];
-                    if(raw_owner<0&&controller_active&&menu.armed&&(pressed&(PAD_B|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A))){raw_owner=slot;raw_previous=raw_idle_previous[slot];log_line("Guide navigation acquired through XInput.");}
+                    if(raw_owner<0&&raw_allowed(slot)&&controller_active&&menu.armed&&(pressed&(PAD_B|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A))){raw_owner=slot;raw_previous=raw_idle_previous[slot];log_line("Guide navigation acquired through XInput.");}
                     raw_idle_previous[slot]=buttons;
                 }
             }
@@ -589,6 +649,7 @@ static int install_hooks(void) {
     static const unsigned char disconnect_bytes[] = {0x55,0x56,0x57,0x48,0x83,0xec,0x30,0x48,0x8d,0x6c,0x24,0x30,0x48,0xc7,0x45,0xf8,0xfe,0xff,0xff,0xff};
 #ifndef QUIT_MENU_TEST
     int profile=engine_fingerprint();
+    engine_base=(uintptr_t)base;engine_parsec=profile==2;
     if(profile==2&&nt->OptionalHeader.SizeOfImage==0x3c05000&&nt->FileHeader.TimeDateStamp==0x6adf7fd0){
         static const unsigned char pb[]={0xe9,0x56,0x40,0x99,0x02},pa[]={0xe9,0x17,0x3e,0x99,0x02},pd[]={0xe9,0xb0,0x41,0x99,0x02};
         ExactHook hooks[]={
@@ -640,6 +701,8 @@ static DWORD WINAPI worker(void *unused) {
     EnterCriticalSection(&lock);menu.ui_scale_percent=overlay_valid_scale(scale)?scale:MENU_SCALE_DEFAULT;LeaveCriticalSection(&lock);
     int auto_launch=(int)GetPrivateProfileIntW(L"Menu",L"AutoLaunchAfterRestart",1,settings_path);
     EnterCriticalSection(&lock);menu.disable_auto_launch=auto_launch==0;LeaveCriticalSection(&lock);
+    wchar_t access[32];GetPrivateProfileStringW(L"Menu",L"ControllerAccess",L"Either",access,32,settings_path);
+    EnterCriticalSection(&lock);menu.first_player_only=!lstrcmpiW(access,L"Player1");LeaveCriticalSection(&lock);
     int guide_enabled=(int)GetPrivateProfileIntW(L"Menu",L"GuideButtonOpensMenu",1,settings_path);
     EnterCriticalSection(&lock);menu.disable_guide=guide_enabled==0;LeaveCriticalSection(&lock);
     log_line("UFC6 quit menu loaded inside engine process.");
@@ -678,7 +741,7 @@ static DWORD WINAPI worker(void *unused) {
                 ShowWindow(overlay, SW_HIDE); log_line("Quit selected: posting WM_CLOSE to game window.");
                 PostMessageW(game_window, WM_CLOSE, 0, 0);
             }
-            else if(msg.wParam==MENU_STYLE_CHANGED||msg.wParam==MENU_SHORTCUT_CHANGED||msg.wParam==MENU_SCALE_CHANGED||msg.wParam==MENU_AUTO_LAUNCH_CHANGED||msg.wParam==MENU_GUIDE_CHANGED)save_settings();
+            else if(msg.wParam==MENU_STYLE_CHANGED||msg.wParam==MENU_SHORTCUT_CHANGED||msg.wParam==MENU_SCALE_CHANGED||msg.wParam==MENU_AUTO_LAUNCH_CHANGED||msg.wParam==MENU_GUIDE_CHANGED||msg.wParam==MENU_ACCESS_CHANGED)save_settings();
             else if(msg.wParam==MENU_LAUNCHER_SETTINGS){
 #ifdef QUIT_MENU_TEST
                 status(L"Test launcher setup requested; no desktop dialog opened.");
@@ -739,6 +802,9 @@ __declspec(dllexport) void MenuTestStart(HWND owner) {
 }
 __declspec(dllexport) void MenuTestButton(uint32_t button,int down) {hooked_button((void*)1,1,button,down != 0);}
 __declspec(dllexport) void MenuTestButtonDevice(int id,uint32_t button,int down){hooked_button((void*)1,id,button,down!=0);}
+__declspec(dllexport) void MenuTestPlayers(int primary,int secondary){EnterCriticalSection(&lock);test_primary_id=primary;test_secondary_id=secondary;refresh_native_players();LeaveCriticalSection(&lock);}
+__declspec(dllexport) int MenuTestAccess(void){EnterCriticalSection(&lock);int value=menu.first_player_only;LeaveCriticalSection(&lock);return value;}
+__declspec(dllexport) int MenuTestPlayer(void){EnterCriticalSection(&lock);int value=raw_navigation&&raw_owner>=0?raw_owner+1:menu_device>=0?native_player(&devices[menu_device]):0;LeaveCriticalSection(&lock);return value;}
 __declspec(dllexport) void MenuTestRedirected(int value){InterlockedExchange(&test_gamebar_redirected,value!=0);PostThreadMessageW(ui_thread,WM_TIMER,1,0);}
 __declspec(dllexport) int MenuTestConflict(void){EnterCriticalSection(&lock);int value=gamebar_conflict;LeaveCriticalSection(&lock);return value;}
 __declspec(dllexport) int MenuTestGameBar(void){EnterCriticalSection(&lock);int value=menu.gamebar_shortcut;LeaveCriticalSection(&lock);return value;}
