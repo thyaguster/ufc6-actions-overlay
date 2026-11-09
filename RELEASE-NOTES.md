@@ -1,3 +1,17 @@
+# UFC 6 Actions Overlay v0.8.5
+
+Adds a persistent warning when Game Bar takes controller input while the overlay is open, including when Game Bar itself is invisible.
+
+- Shows the configured fallback combination using Xbox or PlayStation labels, plus F10.
+- Explains how to restore input and directs users to turn **Windows Game Bar shortcut** Off in Settings.
+- Clears automatically when input returns; no repeated notifications or automatic Windows preference changes.
+- Cancels PC shutdown/restart holds and countdowns when input is redirected, and rejects queued power actions while input is unavailable.
+- Reads the Windows Game Bar input-redirection API on a background thread, so service delays cannot block the overlay or game renderer. If the API is unavailable, normal overlay behavior remains available.
+
+Validation: real-DLL tests cover warning/clear behavior, redirected-input suppression, a recorded custom PlayStation shortcut, keyboard closing, fallback reopening, and power-countdown cancellation. Existing controller, Parsec routing, restart/power stub, and installer checks remain included. The native background monitor was smoke-tested against Windows without changing Game Bar settings.
+
+Downloads: **UFC6-Actions-Overlay-Setup-0.8.5.exe** (recommended) or **UFC6-Actions-Overlay-0.8.5.zip** (installer, prebuilt files, complete source and licenses).
+
 # UFC 6 Actions Overlay v0.8.4
 
 Adds a Windows Game Bar shortcut setting to resolve Guide navigation conflicts, plus compatibility with PORTHEON's verified Parsec/two-player engine.

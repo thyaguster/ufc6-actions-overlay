@@ -14,6 +14,7 @@
 #include "restart_client.h"
 #include "xinput_menu.h"
 #include "gamebar_shortcut.h"
+#include "gamebar_monitor.h"
 #ifndef QUIT_MENU_TEST
 #include "engine_fingerprint.h"
 #endif
@@ -47,6 +48,7 @@ static int test_mode;
 #ifdef QUIT_MENU_TEST
 static int test_guide;
 static int test_gamebar_shortcut=1;
+static volatile LONG test_gamebar_redirected;
 static int test_raw_input;
 #endif
 static XINPUT_STATE raw_states[4];
@@ -73,6 +75,13 @@ static InputDevice devices[16];
 static int menu_device = -1;
 static int wait_guide_release;
 static uint64_t next_gamebar_read;
+static int gamebar_conflict;
+static int input_redirected(void){
+#ifdef QUIT_MENU_TEST
+    if(test_mode)return InterlockedCompareExchange(&test_gamebar_redirected,0,0)!=0;
+#endif
+    return gamebar_input_redirected();
+}
 
 static void log_line(const char *line) {
     HANDLE h = CreateFileW(log_path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -140,7 +149,7 @@ static void action(int result) {
 }
 static void navigate_device(int index,uint32_t pressed){
     const uint32_t navigation[]={PAD_B,PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_A};
-    if(!menu.visible||!menu.armed||menu.capturing||!(pressed&(PAD_B|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A)))return;
+    if(input_redirected()||!menu.visible||!menu.armed||menu.capturing||!(pressed&(PAD_B|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A)))return;
     if(raw_navigation){
         if(raw_owner>=0)return;
         /* Guide can be reported by an XInput bridge while actual navigation
@@ -268,16 +277,16 @@ static void draw_menu(HDC dc, RECT r) {
     HBRUSH bg = CreateSolidBrush(RGB(19, 23, 30));
     FillRect(dc, &r, bg); DeleteObject(bg);
     SetBkMode(dc, TRANSPARENT);
-    MenuState state;int save_failed;wchar_t message[120];
+    MenuState state;int save_failed,conflict;wchar_t message[120];
     EnterCriticalSection(&lock);
-    state=menu;save_failed=settings_save_failed;
+    state=menu;save_failed=settings_save_failed;conflict=gamebar_conflict;
     lstrcpynW(message,GetTickCount64()<status_until?status_text:L"",120);
     LeaveCriticalSection(&lock);
     int selection=state.selection,ps=state.playstation_icons;
     RECT title = {36, 13, r.right - 36, 57};
     text(dc,font_title,state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
     RECT sub = {38, 57, r.right - 36, 84};
-    text(dc,font_small,state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and relaunch through PORTHEON.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,RGB(176,184,197),DT_LEFT);
+    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and relaunch through PORTHEON.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):RGB(176,184,197),DT_LEFT);
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
     const wchar_t *setting_labels[]={L"Button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Back"};
     const wchar_t *restart_labels[]={L"Cancel",L"Restart now"};
@@ -325,7 +334,13 @@ static void draw_menu(HDC dc, RECT r) {
         RECT number={36,187,r.right-36,239};text(dc,font_title,countdown,number,RGB(246,247,250),DT_CENTER|DT_SINGLELINE);
     }
     int y=state.page==PAGE_MAIN?304:279;
-    if(state.capturing) {
+    if(conflict){
+        wchar_t chord[100],fallback[150];shortcut_label(menu_shortcut(&state),ps,chord,100);
+        swprintf(fallback,150,L"Fallback: %ls  |  F10",chord);
+        RECT help={30,y,r.right-30,y+22},keys={30,y+22,r.right-30,y+44};
+        text(dc,font_small,L"Press Guide again or click the game to restore input.",help,RGB(255,196,94),DT_CENTER|DT_SINGLELINE);
+        text(dc,font_small,fallback,keys,RGB(255,196,94),DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+    }else if(state.capturing) {
         RECT prompt={36,279,r.right-36,307};
         text(dc,font_small,state.capture_error?L"Use 2 to 4 buttons; hold briefly, then release.":L"Hold 2 to 4 buttons, then release to save.",prompt,RGB(220,231,245),DT_CENTER|DT_SINGLELINE);
         RECT cancel={36,308,r.right-36,333};
@@ -349,7 +364,7 @@ static void draw_menu(HDC dc, RECT r) {
         }
     }
     RECT note = {20, 345, r.right - 20, 366};
-    text(dc,font_small,menu_power_page(&state)?(state.shutdown_countdown?L"Back or F10 cancels. Switching apps also cancels.":L"Unsaved game progress may be lost."):message[0]?message:save_failed?L"Settings could not be saved.":state.page==PAGE_RESTART?L"Unsaved progress may be lost.":L"The game keeps running while this menu is open.",note,
+    text(dc,font_small,conflict?L"In Settings, turn Windows Game Bar shortcut Off.":menu_power_page(&state)?(state.shutdown_countdown?L"Back or F10 cancels. Switching apps also cancels.":L"Unsaved game progress may be lost."):message[0]?message:save_failed?L"Settings could not be saved.":state.page==PAGE_RESTART?L"Unsaved progress may be lost.":L"The game keeps running while this menu is open.",note,
          RGB(137,148,164), DT_CENTER | DT_SINGLELINE);
 }
 static void paint(HWND w) {
@@ -488,6 +503,7 @@ static uint32_t raw_menu_buttons(int slot){
 }
 static void tick(void) {
     int active = test_mode||foreground();
+    int controller_active=active&&!input_redirected();
     if(GetTickCount64()>=next_gamebar_read){refresh_gamebar();next_gamebar_read=GetTickCount64()+1000;}
     int guide = guide_down();
     int f10 = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
@@ -495,6 +511,7 @@ static void tick(void) {
     if (active && hotkey) toggle_menu();
     guide_was_down = guide; f10_was_down = f10;
     EnterCriticalSection(&lock);
+    gamebar_conflict=menu.visible&&active&&!controller_active;
     if(guide_pressed&&hotkey&&menu.visible&&guide_source>=0){
         raw_navigation=1;raw_owner=-1;raw_previous=0;
         for(int slot=0;slot<4;++slot)raw_idle_previous[slot]=raw_connected[slot]?raw_menu_buttons(slot):0;
@@ -512,7 +529,7 @@ static void tick(void) {
             if (devices[i].used && (devices[i].buttons & menu_shortcut(&menu)) == menu_shortcut(&menu)) { owner = i; break; }
         if (owner != menu_device) { menu.chord_since = 0; menu.chord_latched = 0; }
         menu_device = owner;
-        int result = menu_tick(&menu, owner >= 0 ? devices[owner].buttons : 0, now, test_mode||active);
+        int result = menu_tick(&menu, owner >= 0 ? devices[owner].buttons : 0, now, controller_active);
         if (result == MENU_OPEN) {
             /* XInput chords use the same navigation path as Guide, so SDL focus
              * transitions cannot leave an opened menu without a controller. */
@@ -529,20 +546,20 @@ static void tick(void) {
             if(raw_owner>=0&&!raw_connected[raw_owner]){action(menu_close(&menu,MENU_RESUME));was_draining=1;}
         }
         if(wait_guide_release)source|=PAD_MENU;
-        action(menu_tick(&menu, source, now, test_mode||active));
+        action(menu_tick(&menu, source, now, controller_active));
         if(raw_navigation){
             if(raw_owner<0&&menu.visible&&!wait_guide_release){
                 for(int slot=0;slot<4;++slot){
                     uint32_t buttons=raw_connected[slot]?raw_menu_buttons(slot):0;
                     uint32_t pressed=buttons&~raw_idle_previous[slot];
-                    if(raw_owner<0&&active&&menu.armed&&(pressed&(PAD_B|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A))){raw_owner=slot;raw_previous=raw_idle_previous[slot];log_line("Guide navigation acquired through XInput.");}
+                    if(raw_owner<0&&controller_active&&menu.armed&&(pressed&(PAD_B|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A))){raw_owner=slot;raw_previous=raw_idle_previous[slot];log_line("Guide navigation acquired through XInput.");}
                     raw_idle_previous[slot]=buttons;
                 }
             }
             uint32_t buttons=raw_owner>=0&&raw_connected[raw_owner]?raw_menu_buttons(raw_owner):0;
             uint32_t pressed=buttons&~raw_previous;
             const uint32_t navigation[]={PAD_B,PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_A};
-            if(active&&menu.visible&&!wait_guide_release)
+            if(controller_active&&menu.visible&&!wait_guide_release)
                 for(unsigned i=0;i<sizeof(navigation)/sizeof(navigation[0]);++i)if(pressed&navigation[i]){action(menu_button(&menu,navigation[i],1));break;}
             raw_previous=buttons;
             if(!menu.visible&&!menu.draining){raw_navigation=0;raw_owner=-1;for(int i=0;i<16;++i)devices[i].buttons=0;}
@@ -645,6 +662,7 @@ static DWORD WINAPI worker(void *unused) {
     if (xi) xstate = (XStateFn)GetProcAddress(xi, (LPCSTR)100);
     log_line(xstate ? "Ready. LB+RB+Menu (800ms), Guide (if available), or F10." : "Ready. LB+RB+Menu (800ms) or F10. Guide unavailable.");
     refresh_gamebar();
+    if(!test_mode)gamebar_monitor_start();
     SetTimer(NULL, 1, 16, NULL);
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {
         if (msg.message == WM_TIMER) {
@@ -674,9 +692,9 @@ static DWORD WINAPI worker(void *unused) {
             }
             else if(msg.wParam==MENU_SHUTDOWN||msg.wParam==MENU_REBOOT) {
                 ShowWindow(overlay,SW_HIDE);
-                if(!test_mode&&!foreground()){
+                if(!test_mode&&(!foreground()||input_redirected())){
                     EnterCriticalSection(&lock);menu.draining=0;menu_show(&menu);LeaveCriticalSection(&lock);
-                    status(L"Power action cancelled because the game lost focus.");continue;
+                    status(L"Power action cancelled because controller input is unavailable.");continue;
                 }
 #ifdef QUIT_MENU_TEST
                 log_line("Test shutdown requested; no Windows power operation was called.");
@@ -692,6 +710,7 @@ static DWORD WINAPI worker(void *unused) {
         } else if (msg.message == WM_MENU_TOGGLE && (test_mode||foreground())) toggle_menu();
         else { TranslateMessage(&msg); DispatchMessageW(&msg); }
     }
+    gamebar_monitor_stop();
     DestroyWindow(overlay);
     /* Keep hooks and their code mapped until the engine exits. Never unload this DLL live. */
     return 0;
@@ -707,6 +726,8 @@ __declspec(dllexport) void MenuTestStart(HWND owner) {
 }
 __declspec(dllexport) void MenuTestButton(uint32_t button,int down) {hooked_button((void*)1,1,button,down != 0);}
 __declspec(dllexport) void MenuTestButtonDevice(int id,uint32_t button,int down){hooked_button((void*)1,id,button,down!=0);}
+__declspec(dllexport) void MenuTestRedirected(int value){InterlockedExchange(&test_gamebar_redirected,value!=0);PostThreadMessageW(ui_thread,WM_TIMER,1,0);}
+__declspec(dllexport) int MenuTestConflict(void){EnterCriticalSection(&lock);int value=gamebar_conflict;LeaveCriticalSection(&lock);return value;}
 __declspec(dllexport) int MenuTestGameBar(void){EnterCriticalSection(&lock);int value=menu.gamebar_shortcut;LeaveCriticalSection(&lock);return value;}
 __declspec(dllexport) void MenuTestAxisDevice(int id,int axis,int value){hooked_axis((void*)1,id,axis,value);}
 __declspec(dllexport) void MenuTestDisconnect(int id){hooked_disconnect((void*)1,id);}

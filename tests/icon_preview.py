@@ -16,6 +16,7 @@ parser.add_argument("--reload-auto-off",action="store_true")
 parser.add_argument("--scale",action="store_true")
 parser.add_argument("--guide",action="store_true")
 parser.add_argument("--gamebar",action="store_true")
+parser.add_argument("--conflict",action="store_true")
 parser.add_argument("--no-render",action="store_true")
 parser.add_argument("--reload-guide-off",action="store_true")
 parser.add_argument("--controllers",action="store_true")
@@ -166,6 +167,40 @@ try:
         dll.MenuTestButtonDevice(1,0x4000,1);dll.MenuTestButtonDevice(1,0x4000,0);pump(.07)
         assert dll.MenuTestSnapshot()&0x10,"Reconnected pad must not inherit stale held buttons"
         print("PASS: Guide release, two-controller ownership, held secondary input, non-owner isolation, disconnect/reconnect and B resume.")
+        raise SystemExit(0)
+    elif args.conflict:
+        dll.MenuTestRedirected.argtypes=[c.c_int]
+        assert dll.MenuTestConflict()==0
+        render("conflict-clear.png")
+        dll.MenuTestRedirected(1);pump(.08)
+        assert dll.MenuTestConflict()==1
+        render("gamebar-conflict-xbox.png")
+        press(0x40);assert dll.MenuTestSnapshot()&0xf==0,"Redirected controller must not activate menu actions"
+        dll.MenuTestRedirected(0);pump(.08)
+        assert dll.MenuTestConflict()==0
+        for _ in range(3):press(0x40)
+        press(0x4000);press(0x4000) # Settings, PlayStation prompts.
+        press(0x40);press(0x4000) # Record custom LS + RS shortcut.
+        dll.MenuTestButton(2,1);dll.MenuTestButton(4,1);pump(.4)
+        dll.MenuTestButton(2,0);dll.MenuTestButton(4,0);pump(.08)
+        assert dll.MenuTestShortcut()==6
+        dll.MenuTestRedirected(1);pump(.08)
+        render("gamebar-conflict-custom-playstation.png")
+        dll.MenuTestToggle();pump(.08);assert not dll.MenuTestSnapshot()&0x100,"Keyboard fallback toggle must still close during conflict"
+        assert not dll.MenuTestConflict()
+        dll.MenuTestRedirected(0);pump(.08)
+        dll.MenuTestButton(2,1);dll.MenuTestButton(4,1);pump(.95)
+        dll.MenuTestButton(2,0);dll.MenuTestButton(4,0);pump(.08)
+        assert dll.MenuTestSnapshot()&0x100,"Custom fallback still opens after Game Bar is dismissed"
+        for _ in range(6):press(0x40)
+        press(0x4000);press(0x40)
+        dll.MenuTestButton(0x4000,1);pump(3.2)
+        dll.MenuTestButton(0x4000,0);pump(.05)
+        assert dll.MenuTestShutdownRemaining()>0
+        dll.MenuTestRedirected(1);pump(.08)
+        assert dll.MenuTestShutdownRemaining()==0,"Game Bar redirection must cancel power countdown"
+        render("gamebar-conflict-power-cancelled.png")
+        print("PASS: persistent warning/clear, blocked redirected input, custom PlayStation fallback, keyboard close, fallback reopening and power countdown cancellation.")
         raise SystemExit(0)
     elif args.gamebar:
         import winreg

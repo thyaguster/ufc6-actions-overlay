@@ -45,7 +45,7 @@ Install into the same `bin` folder, then launch with PORTHEON's Parsec option en
   </tr>
 </table>
 
-[Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
+[Game Bar conflict warning](docs/screenshots/gamebar-conflict.png) � [Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
 
 The two game-background images are real game-window captures. The isolated page images come from the same overlay renderer in a test host with power actions disabled.
 
@@ -65,6 +65,7 @@ Select **Settings** to open the second settings box:
 - **Launch UFC 6 after PC restart:** On by default. Confirm or left/right toggles whether Restart PC reopens UFC 6 at your next Windows sign-in. The Restart PC row and its confirmation show the current On/Off status; the confirmation also points to Settings.
 - **Xbox / Guide button:** On by default. Confirm or left/right toggles opening/closing this overlay with Guide. The controller shortcut and F10 stay available when Off. The preference saves automatically; enabling it while Guide is already held requires releasing and pressing again.
 - **Windows Game Bar shortcut:** shows Windows' actual controller-shortcut preference. Confirm or left/right changes it for the current Windows user. Turn it **Off** if Guide opens this overlay but navigation stalls; Game Bar can redirect controller input even with no visible window. **Win+G** still opens Game Bar. This setting affects other games too and persists after uninstall. Startup and setup only read it; they never change it automatically. Use the fallback controller combination or F10 to reach Settings if Guide is intercepted.
+- **Game Bar conflict warning:** if Windows reports controller input redirected to Game Bar while this menu is open, an amber warning stays visible until input returns. It shows your configured fallback shortcut with Xbox/PlayStation labels and F10, plus recovery instructions. PC power holds/countdowns cancel when redirection begins. Detection only reads Windows state; it never changes the Game Bar preference automatically.
 - **Back:** returns to the main menu.
 
 Preferences save automatically to `bin/ufc6-quit-menu.ini` and are preserved when upgrading. A custom shortcut uses the same 0.8-second hold time. The INI can also be edited while the game is closed:
