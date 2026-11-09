@@ -77,6 +77,7 @@ static InputDevice devices[16];
 static int menu_device = -1;
 static int wait_guide_release;
 static int wait_access_release;
+static int wait_access_guide_release;
 static uint64_t next_gamebar_read;
 static int gamebar_conflict;
 static int launcher_setup_active;
@@ -163,7 +164,7 @@ static uint32_t raw_menu_buttons(int slot);
 static void reset_menu_owner(void){
     menu_device=-1;raw_owner=-1;raw_previous=0;raw_navigation=0;
     for(int slot=0;slot<4;++slot){raw_idle_previous[slot]=raw_menu_buttons(slot);if(raw_connected[slot])raw_navigation=1;}
-    menu.armed=0;wait_access_release=1;
+    menu.armed=0;wait_access_release=1;wait_access_guide_release=1;
 }
 static int foreground(void) {
     HWND f = GetForegroundWindow();
@@ -564,7 +565,7 @@ static void tick(void) {
     int controller_active=active&&!input_redirected();
     if(GetTickCount64()>=next_gamebar_read){refresh_gamebar();next_gamebar_read=GetTickCount64()+1000;}
     int f10 = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
-    EnterCriticalSection(&lock);refresh_native_players();int guide=guide_down();int guide_pressed=menu_guide_enabled(&menu)&&guide&&!guide_was_down;int hotkey=menu_hotkey_pressed(&menu,guide,guide_was_down,f10,f10_was_down);LeaveCriticalSection(&lock);
+    EnterCriticalSection(&lock);refresh_native_players();int guide=guide_down();if(wait_access_guide_release){guide_was_down=guide;if(!guide)wait_access_guide_release=0;}int guide_pressed=menu_guide_enabled(&menu)&&guide&&!guide_was_down;int hotkey=menu_hotkey_pressed(&menu,guide,guide_was_down,f10,f10_was_down);LeaveCriticalSection(&lock);
     if (active && hotkey) toggle_menu();
     guide_was_down = guide; f10_was_down = f10;
     EnterCriticalSection(&lock);

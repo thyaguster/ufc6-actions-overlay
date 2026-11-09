@@ -158,7 +158,16 @@ try:
         dll.MenuTestToggle();pump(.08);assert dll.MenuTestSnapshot()&0x100
         rpress(1,2);assert dll.MenuTestPlayer()==0
         dll.MenuTestToggle();pump(.08);assert not dll.MenuTestSnapshot()&0x100
-        print("PASS: direct XInput Player 1/2 owners, access-mode transfer, non-owner isolation, Guide restriction, owner disconnect and keyboard recovery.")
+        raw(0,0,1);dll.MenuTestToggle();pump(.08)
+        for _ in range(3):rpress(0,2)
+        rpress(0,0x1000)
+        for _ in range(7):rpress(0,2)
+        raw(1,0x400) # Held Guide becomes newly eligible when switching to Either.
+        rpress(0,0x1000);pump(.15)
+        assert dll.MenuTestAccess()==0 and dll.MenuTestSnapshot()&0x100,"A newly eligible held Guide must not close the menu"
+        raw(1,0);raw(1,0x400);assert not dll.MenuTestSnapshot()&0x100
+        raw(1,0)
+        print("PASS: direct XInput owners, access transfer, Guide restriction/held-mode edge, disconnect and keyboard recovery.")
         raise SystemExit(0)
     elif args.raw_controllers:
         dll.MenuTestRawPad.argtypes=[c.c_int,c.c_int,c.c_int]
