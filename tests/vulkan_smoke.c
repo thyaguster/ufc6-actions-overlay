@@ -130,6 +130,11 @@ int main(void){
         VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.waitSemaphoreCount=1,.pWaitSemaphores=&acquire,.pWaitDstStageMask=&stage,.commandBufferCount=1,.pCommandBuffers=&cmd,.signalSemaphoreCount=1,.pSignalSemaphores=&ready};CHECK(QueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
         VkPresentInfoKHR present={.sType=VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,.waitSemaphoreCount=1,.pWaitSemaphores=&ready,.swapchainCount=1,.pSwapchains=&swap,.pImageIndices=&index};CHECK(QueuePresentKHR(queue,&present));CHECK(DeviceWaitIdle(device));
     }
+    typedef void (*ScreenshotNameFn)(wchar_t*,int);
+    ScreenshotNameFn screenshot_name=(ScreenshotNameFn)GetProcAddress(core,"MenuTestScreenshotName");
+    wchar_t saved_name[128]=L"";if(screenshot_name)screenshot_name(saved_name,128);
+    if(!saved_name[0]){puts("FAIL: screenshot path did not reach the core");return 1;}
+    puts("PASS: saved screenshot filename returned from Vulkan capture to overlay core.");
     DestroySemaphore(device,acquire,NULL);DestroySemaphore(device,ready,NULL);DestroyCommandPool(device,pool,NULL);
     DestroySwapchainKHR(device,swap,NULL);DestroyDevice(device,NULL);DestroySurfaceKHR(instance,surface,NULL);DestroyInstance(instance,NULL);
     puts("PASS: Vulkan frames presented at 50/100/175/200/300% with upload growth, viewport fitting and cleanup.");

@@ -45,7 +45,7 @@ Install into the same `bin` folder, then launch with PORTHEON's Parsec option en
   </tr>
 </table>
 
-[Controller access](docs/screenshots/controller-access.png) · [Game Bar conflict warning](docs/screenshots/gamebar-conflict.png) · [Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
+[Screenshot result](docs/screenshots/screenshot-saved.png) · [Reset confirmation](docs/screenshots/reset-confirmation.png) · [Controller access](docs/screenshots/controller-access.png) · [Game Bar conflict warning](docs/screenshots/gamebar-conflict.png) · [Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
 
 The two game-background images are real game-window captures. The isolated page images come from the same overlay renderer in a test host with power actions disabled.
 
@@ -68,6 +68,8 @@ Select **Settings** to open the second settings box:
 - **Game Bar conflict warning:** if Windows reports controller input redirected to Game Bar while this menu is open, an amber warning stays visible until input returns. It shows your configured fallback shortcut with Xbox/PlayStation labels and F10, plus recovery instructions. PC power holds/countdowns cancel when redirection begins. Detection only reads Windows state; it never changes the Game Bar preference automatically.
 - **Launcher setup...:** opens a desktop configuration window (mouse/keyboard required). The game minimizes while it is open and restores afterward. Leave Custom unchecked for the current PORTHEON defaults, or browse to another launcher **or the supported game engine itself** and enter its launch arguments. The start folder defaults to the executable's folder when blank. Leave **Wait for the previous launcher to exit** Off for launchers that stay open; PORTHEON keeps its cleanup wait. These settings apply to both Restart game and post-reboot auto-launch. Launcher selection does not add support for unknown engine builds.
 - **Controller access:** **Either** by default, or **Player 1 only**. The top-right indicator shows the player owning navigation, or waits for an eligible fresh press. Other controllers cannot navigate an owned menu. Switching access releases the old owner; held navigation controls must be released before claiming again. A newly eligible held Guide button also needs releasing and pressing again. Player 1-only applies to controller navigation, opening combinations and Guide; **F10 always remains available**. Native input follows the verified engine's active player IDs (including Parsec Player 2); direct XInput uses Windows slots 1-4, with slot 1 as Player 1. If native input has no known player assignment, the badge says Controller instead of inventing a player number. Settings scrolls to keep the selected row visible.
+- **Screenshots folder:** opens the Windows screenshots folder in Explorer and minimizes the game. Available even before taking a screenshot.
+- **Reset overlay settings...:** opens a confirmation with **Cancel** selected. Reset restores icons, shortcut, scale, post-restart game launch, Guide, controller access, and launcher defaults. Saved screenshots and the Windows Game Bar preference are kept. If saving fails, previous settings remain active.
 - **Back:** returns to the main menu.
 
 Preferences save automatically to `bin/ufc6-quit-menu.ini` and are preserved when upgrading. A custom shortcut uses the same 0.8-second hold time. The INI can also be edited while the game is closed:
@@ -90,7 +92,7 @@ The menu does **not pause emulation**. Its opening combination can trigger norma
 
 Choose **Take screenshot**. A full-resolution PNG is saved in the Windows **Pictures → Screenshots** folder, with a unique timestamped filename. The destination is resolved through the Windows Screenshots known folder, so folder redirection and OneDrive are respected. If that known folder is unavailable, the mod uses the Windows Pictures known folder plus `Screenshots`. The folder is created as needed. Existing screenshots in the old `bin/Screenshots` folder are left in place.
 
-The Vulkan layer copies the game image **before drawing this menu**, so the menu and its notifications are absent from the saved image. The menu can stay open during capture. A saved/failed notification appears afterward.
+The Vulkan layer copies the game image **before drawing this menu**, so the menu and its notifications are absent from the saved image. The menu can stay open during capture. Success shows the saved filename and a result page with **Open screenshots folder** and **Back**. The result page starts on Back and appears only if you are still on Take screenshot; a late capture never reopens the overlay or replaces another page. Failures show a notification.
 
 This captures the game swapchain, not the desktop. Screenshot capture requires a surface that supports transfer-source images; unsupported display modes report that capture is unavailable. The current rendering path supports 8-bit BGRA/RGBA SDR swapchains at least 320×240 pixels, not 10-bit HDR formats.
 

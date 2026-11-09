@@ -9,11 +9,11 @@ enum {
     OPEN_CHORD=PAD_LB|PAD_RB|PAD_MENU,
     SHORTCUT_BUTTONS=0x0000fcfe
 };
-enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT };
+enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT, PAGE_SCREENSHOT, PAGE_RESET };
 enum { MAIN_RESUME, MAIN_SCREENSHOT, MAIN_RESTART, MAIN_SETTINGS, MAIN_QUIT, MAIN_REBOOT, MAIN_SHUTDOWN, MAIN_COUNT };
-enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_LAUNCHER, SETTING_ACCESS, SETTING_BACK, SETTING_COUNT };
+enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_LAUNCHER, SETTING_ACCESS, SETTING_SCREENSHOTS, SETTING_RESET, SETTING_BACK, SETTING_COUNT };
 enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
-       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED, MENU_LAUNCHER_SETTINGS, MENU_ACCESS_CHANGED };
+       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED, MENU_LAUNCHER_SETTINGS, MENU_ACCESS_CHANGED, MENU_OPEN_SCREENSHOTS, MENU_RESET_SETTINGS };
 
 typedef struct {
     int visible,selection,armed,chord_latched,draining;
@@ -121,6 +121,8 @@ static int menu_tick(MenuState *s,uint32_t buttons,uint64_t now,int foreground) 
 static int menu_button(MenuState *s,uint32_t button,int down) {
     if(!s->visible||!s->armed||!down||s->capturing)return MENU_NONE;
     if(button==PAD_B) {
+        if(s->page==PAGE_RESET){s->page=PAGE_SETTINGS;s->selection=SETTING_RESET;s->armed=0;return MENU_CHANGED;}
+        if(s->page==PAGE_SCREENSHOT){s->page=PAGE_MAIN;s->selection=MAIN_SCREENSHOT;s->armed=0;return MENU_CHANGED;}
         if(menu_power_page(s)){menu_cancel_shutdown(s);s->selection=menu_power_selection(s);s->page=PAGE_MAIN;s->armed=0;return MENU_CHANGED;}
         if(s->page!=PAGE_MAIN){s->selection=s->page==PAGE_RESTART?MAIN_RESTART:MAIN_SETTINGS;s->page=PAGE_MAIN;s->armed=0;return MENU_CHANGED;}
         return menu_close(s,MENU_RESUME);
@@ -131,6 +133,8 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         return MENU_CHANGED;
     }
     if(s->page==PAGE_SETTINGS) {
+        if(s->selection==SETTING_SCREENSHOTS&&button==PAD_A){s->armed=0;return MENU_OPEN_SCREENSHOTS;}
+        if(s->selection==SETTING_RESET&&button==PAD_A){s->page=PAGE_RESET;s->selection=0;s->armed=0;return MENU_CHANGED;}
         if(s->selection==SETTING_ACCESS&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){s->first_player_only=!s->first_player_only;s->armed=0;menu_cancel_shutdown(s);return MENU_ACCESS_CHANGED;}
         if(s->selection==SETTING_LAUNCHER&&button==PAD_A){s->armed=0;return MENU_LAUNCHER_SETTINGS;}
         if(s->selection==SETTING_GAMEBAR&&(button==PAD_LEFT||button==PAD_RIGHT||button==PAD_A)){
@@ -159,6 +163,15 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         s->page=PAGE_MAIN;s->selection=MAIN_SETTINGS;s->armed=0;return MENU_CHANGED;
     }
     if(button!=PAD_A)return MENU_NONE;
+    if(s->page==PAGE_SCREENSHOT){
+        if(s->selection==0){s->armed=0;return MENU_OPEN_SCREENSHOTS;}
+        s->page=PAGE_MAIN;s->selection=MAIN_SCREENSHOT;s->armed=0;return MENU_CHANGED;
+    }
+    if(s->page==PAGE_RESET){
+        s->armed=0;
+        if(s->selection==1)return MENU_RESET_SETTINGS;
+        s->page=PAGE_SETTINGS;s->selection=SETTING_RESET;return MENU_CHANGED;
+    }
     if(menu_power_page(s)) {
         if(s->shutdown_countdown||s->selection==0){menu_cancel_shutdown(s);s->selection=menu_power_selection(s);s->page=PAGE_MAIN;s->armed=0;return MENU_CHANGED;}
         s->shutdown_holding=1;s->shutdown_hold_since=0;s->shutdown_progress=0;return MENU_CHANGED;

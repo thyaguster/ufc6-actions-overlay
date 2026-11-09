@@ -24,6 +24,7 @@ parser.add_argument("--raw-controllers",action="store_true")
 parser.add_argument("--access",action="store_true")
 parser.add_argument("--reload-access",action="store_true")
 parser.add_argument("--raw-access",action="store_true")
+parser.add_argument("--screenshot-reset",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
 if args.reset:
@@ -90,7 +91,58 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     assert dll.MenuTestSnapshot()&0x100
-    if args.access or args.reload_access:
+    if args.screenshot_reset:
+        dll.Ufc6ScreenshotResultPath.argtypes=[w.BOOL,w.LPCWSTR]
+        dll.MenuTestScreenshotName.argtypes=[w.LPWSTR,c.c_int]
+        def page():return (dll.MenuTestSnapshot()>>12)&7
+        def selected():return dll.MenuTestSnapshot()&15
+        dll.Ufc6ScreenshotCapability(1)
+        press(0x40);press(0x4000)
+        assert dll.Ufc6ScreenshotRequest(),"Screenshot request missing"
+        dll.Ufc6ScreenshotResultPath(True,r"C:\Pictures\Screenshots\UFC6_test.png");pump(.15)
+        assert page()==5 and selected()==1,"Screenshot result must start on Back"
+        name=c.create_unicode_buffer(128);dll.MenuTestScreenshotName(name,128)
+        assert name.value=="UFC6_test.png"
+        render("screenshot-saved.png")
+        press(0x10);press(0x4000)
+        assert dll.MenuTestFolderRequests()==1 and not dll.MenuTestSnapshot()&0x100
+        dll.Ufc6ScreenshotResultPath(True,r"C:\Pictures\Screenshots\UFC6_hidden.png");pump(.1)
+        assert not dll.MenuTestSnapshot()&0x100,"Late completion must not reopen overlay"
+        dll.MenuTestToggle();pump(.1)
+        for _ in range(3):press(0x40)
+        press(0x4000);assert page()==1
+        dll.Ufc6ScreenshotResultPath(True,r"C:\Pictures\Screenshots\UFC6_settings.png");pump(.1)
+        assert page()==1,"Late completion must not replace Settings"
+        press(0x4000) # PlayStation
+        press(0x40);press(0x40);press(0x20) # scale 125
+        press(0x40);press(0x4000) # auto launch Off
+        press(0x40);press(0x4000) # Guide Off
+        press(0x40);press(0x4000) # mocked Game Bar Off
+        assert dll.MenuTestGameBar()==0
+        ini=folder/"ufc6-quit-menu.test.ini"
+        with ini.open("a",encoding="utf-8") as f:f.write("\n[Launch]\nMode=Custom\nExecutable=missing.exe\n[Other]\nKeep=yes\n")
+        for _ in range(4):press(0x40)
+        assert selected()==9
+        render("settings-reset-row.png")
+        press(0x4000);assert page()==6 and selected()==0
+        render("reset-confirmation.png")
+        press(0x4000);assert page()==1 and dll.MenuTestScale()==125,"Cancel changed settings"
+        press(0x4000);press(0x40);press(0x4000)
+        assert page()==1 and selected()==9
+        assert dll.MenuTestScale()==100 and dll.MenuTestAutoLaunch()==1
+        assert dll.MenuTestGuideEnabled()==1 and dll.MenuTestAccess()==0
+        assert dll.MenuTestShortcut()==0xc08 and not dll.MenuTestSnapshot()&16
+        assert dll.MenuTestGameBar()==0,"Reset changed Windows Game Bar preference"
+        content=ini.read_text(encoding="utf-16")
+        assert "[Launch]" not in content and "Keep=yes" in content
+        assert "ButtonIcons=Xbox" in content and "GuideButtonOpensMenu=1" in content
+        render("settings-reset-done.png")
+        press(0x10);assert selected()==8
+        press(0x4000)
+        assert dll.MenuTestFolderRequests()==2 and not dll.MenuTestSnapshot()&0x100
+        print("PASS: filename feedback, result-page defaults, folder actions, late capture focus, Cancel-first reset, persisted defaults, launcher reset and Game Bar preservation; Explorer mocked.")
+        raise SystemExit(0)
+    elif args.access or args.reload_access:
         dll.MenuTestPlayers.argtypes=[c.c_int,c.c_int];dll.MenuTestPlayers(42,7)
         dll.MenuTestButtonDevice.argtypes=[c.c_int,w.DWORD,c.c_int]
         def native(button,pad=42):dll.MenuTestButtonDevice(pad,button,1);dll.MenuTestButtonDevice(pad,button,0);pump(.06)
@@ -305,6 +357,7 @@ try:
         press(0x40);assert dll.MenuTestSnapshot()&0xf==6
         press(0x40);assert dll.MenuTestSnapshot()&0xf==7
         press(0x40);assert dll.MenuTestSnapshot()&0xf==8
+        press(0x40);press(0x40);assert dll.MenuTestSnapshot()&0xf==10
         render("settings-back.png")
         press(0x4000);assert (dll.MenuTestSnapshot()>>12)&7==0
         assert windows_preference()==original_windows,"UI test must never change the actual Windows Game Bar preference"

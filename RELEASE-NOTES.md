@@ -1,3 +1,17 @@
+# UFC 6 Actions Overlay v0.8.8
+
+Adds screenshot filename feedback, folder access, and confirmed settings reset.
+
+- Successful screenshots show the saved filename and a result page with Open screenshots folder / Back, starting on Back. Captures still exclude all overlay pixels.
+- Settings > Screenshots folder opens the destination even before the first capture. Explorer opens with the game minimized.
+- Late captures never reopen a hidden overlay or replace another settings/confirmation page.
+- Settings > Reset overlay settings... starts on Cancel and restores overlay preferences and launcher defaults only after confirmation.
+- Reset keeps saved screenshots, unrelated INI sections, and the Windows Game Bar preference. Settings save atomically; save failures keep previous settings active.
+
+Validated with real-DLL navigation/rendering checks, reset persistence and save-failure tests, a GPU screenshot readback test, and existing controller, launcher, power-stub and installer checks. No real PC shutdown/restart is used in tests.
+
+Downloads: **UFC6-Actions-Overlay-Setup-0.8.8.exe** (recommended) or **UFC6-Actions-Overlay-0.8.8.zip** (installer, prebuilt files, complete source and licenses).
+
 # UFC 6 Actions Overlay v0.8.7
 
 Adds a controller ownership indicator and **Settings > Controller access**.

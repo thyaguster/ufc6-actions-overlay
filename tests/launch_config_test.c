@@ -24,6 +24,17 @@ int wmain(int argc,wchar_t **argv){
     assert(launch_config_load(bin,&c)&&!wcscmp(c.arguments,loaded.arguments));
     assert(WritePrivateProfileStringW(L"Launch",L"WorkingDirectory",L"",ini));assert(launch_config_load(bin,&c)&&!wcscmp(c.directory,root));
     assert(WritePrivateProfileStringW(L"Launch",L"Mode",L"unknown",ini));assert(!launch_config_load(bin,&c));
+    assert(WritePrivateProfileStringW(L"Menu",L"ButtonIcons",L"PlayStation",ini));
+    assert(WritePrivateProfileStringW(L"Menu",L"GuideButtonOpensMenu",L"0",ini));
+    assert(WritePrivateProfileStringW(L"Menu",L"ControllerAccess",L"Player1",ini));
+    assert(overlay_settings_reset(ini)&&launch_config_load(bin,&c)&&!c.custom&&c.wait_parent);
+    assert(GetPrivateProfileIntW(L"Menu",L"UIScale",0,ini)==100&&GetPrivateProfileIntW(L"Menu",L"GuideButtonOpensMenu",0,ini)==1);
+    GetPrivateProfileStringW(L"Menu",L"ButtonIcons",L"",value,100,ini);assert(!wcscmp(value,L"Xbox"));
+    GetPrivateProfileStringW(L"Menu",L"ControllerAccess",L"",value,100,ini);assert(!wcscmp(value,L"Either"));
+    GetPrivateProfileStringW(L"Other",L"Keep",L"",value,100,ini);assert(!wcscmp(value,L"untouched"));
+    assert(WritePrivateProfileStringW(L"Menu",L"UIScale",L"225",ini));WritePrivateProfileStringW(NULL,NULL,NULL,ini);
+    assert(SetFileAttributesW(ini,FILE_ATTRIBUTE_READONLY));assert(!overlay_settings_reset(ini));
+    assert(SetFileAttributesW(ini,FILE_ATTRIBUTE_NORMAL));assert(GetPrivateProfileIntW(L"Menu",L"UIScale",0,ini)==225);
     DeleteFileW(ini);DeleteFileW(exe);RemoveDirectoryW(bin);RemoveDirectoryW(root);
     puts("PASS: PORTHEON defaults, Unicode/quoted arguments, atomic persistence, unrelated settings, invalid/missing paths and working-folder fallback.");return 0;
 }

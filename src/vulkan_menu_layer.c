@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "screenshot_png.h"
+#include <objbase.h>
 #include "overlay_layout.h"
 
 #define MENU_W 570
@@ -20,6 +21,7 @@ typedef void (*ExtentFn)(uint32_t,uint32_t,uint32_t *,uint32_t *);
 typedef void (*ActiveFn)(void);
 typedef BOOL (*ScreenshotRequestFn)(void);
 typedef void (*ScreenshotResultFn)(BOOL);
+typedef void (*ScreenshotResultPathFn)(BOOL,const wchar_t*);
 typedef void (*ScreenshotCapabilityFn)(BOOL);
 static HINSTANCE self;
 static SRWLOCK guard=SRWLOCK_INIT;
@@ -28,6 +30,7 @@ static ExtentFn menu_extent;
 static ActiveFn mark_active;
 static ScreenshotRequestFn screenshot_request;
 static ScreenshotResultFn screenshot_result;
+static ScreenshotResultPathFn screenshot_result_path;
 static ScreenshotCapabilityFn screenshot_capability;
 static VkInstance instance;
 static PFN_vkGetInstanceProcAddr next_gipa;
@@ -110,6 +113,7 @@ static void bind_menu(void) {
     mark_active=(ActiveFn)GetProcAddress(core,"Ufc6VulkanActive");
     screenshot_request=(ScreenshotRequestFn)GetProcAddress(core,"Ufc6ScreenshotRequest");
     screenshot_result=(ScreenshotResultFn)GetProcAddress(core,"Ufc6ScreenshotResult");
+    screenshot_result_path=(ScreenshotResultPathFn)GetProcAddress(core,"Ufc6ScreenshotResultPath");
     screenshot_capability=(ScreenshotCapabilityFn)GetProcAddress(core,"Ufc6ScreenshotCapability");
 }
 typedef struct {VkBuffer buffer;VkDeviceMemory memory;void *mapped;int coherent;} Capture;
@@ -283,15 +287,16 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     result=d->QueueSubmit(queue,1,&submit,f->fence);HeapFree(GetProcessHeap(),0,stages);
     if(result!=VK_SUCCESS){s->failed=1;free_capture(d,&shot);if(capture&&screenshot_result)screenshot_result(FALSE);ReleaseSRWLockExclusive(&guard);return result;}
     if(capture){
-        BOOL saved=FALSE;
+        BOOL saved=FALSE;PWSTR path=NULL;
         if(d->WaitForFences(d->device,1,&f->fence,VK_TRUE,UINT64_MAX)==VK_SUCCESS){
             if(!shot.coherent){VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=shot.memory,.size=VK_WHOLE_SIZE};
                 d->InvalidateMappedMemoryRanges(d->device,1,&range);}
             int rgba=s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB;
-            saved=menu_save_png(self,s->extent.width,s->extent.height,shot.mapped,rgba);
+            saved=menu_save_png_path(self,s->extent.width,s->extent.height,shot.mapped,rgba,&path);
         }
         log_line(saved?"Clean pre-overlay game frame saved as PNG.":"PNG screenshot failed.");
-        free_capture(d,&shot);if(screenshot_result)screenshot_result(saved);
+        free_capture(d,&shot);if(screenshot_result_path)screenshot_result_path(saved,path);else if(screenshot_result)screenshot_result(saved);
+        if(path)CoTaskMemFree(path);
     }
     VkPresentInfoKHR present=*info;present.waitSemaphoreCount=1;present.pWaitSemaphores=&f->semaphore;
     if(draw&&!s->logged){log_line("Menu drawn directly into a presented game frame.");s->logged=1;}

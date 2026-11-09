@@ -80,3 +80,14 @@ BOOL launch_config_save(const wchar_t *ini,const LaunchConfig *c){
     if(!ok)DeleteFileW(temp);
     WritePrivateProfileStringW(NULL,NULL,NULL,ini);return ok;
 }
+
+BOOL overlay_settings_reset(const wchar_t *ini){
+    wchar_t temp[LAUNCH_PATH+80];swprintf(temp,LAUNCH_PATH+80,L"%ls.reset-%lu-%llu.tmp",ini,GetCurrentProcessId(),(unsigned long long)GetTickCount64());
+    if(!copy_ini(ini,temp)){DeleteFileW(temp);return FALSE;}
+    const wchar_t *keys[]={L"ButtonIcons",L"OpeningShortcut",L"UIScale",L"AutoLaunchAfterRestart",L"GuideButtonOpensMenu",L"ControllerAccess"};
+    const wchar_t *values[]={L"Xbox",L"0x00000c08",L"100",L"1",L"1",L"Either"};BOOL ok=TRUE;
+    for(unsigned i=0;i<sizeof(keys)/sizeof(keys[0]);++i)ok=WritePrivateProfileStringW(L"Menu",keys[i],values[i],temp)&&ok;
+    ok=WritePrivateProfileStringW(L"Launch",NULL,NULL,temp)&&ok;WritePrivateProfileStringW(NULL,NULL,NULL,temp);
+    if(ok)ok=MoveFileExW(temp,ini,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
+    if(!ok)DeleteFileW(temp);WritePrivateProfileStringW(NULL,NULL,NULL,ini);return ok;
+}

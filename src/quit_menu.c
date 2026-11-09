@@ -9,6 +9,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <xinput.h>
+#include <shellapi.h>
+#include <objbase.h>
 #include "exact_hooks.h"
 #include "menu_state.h"
 #include "restart_client.h"
@@ -16,12 +18,15 @@
 #include "gamebar_shortcut.h"
 #include "gamebar_monitor.h"
 #include "launcher_dialog.h"
+#include "launch_config.h"
+#include "screenshot_folder.h"
 #ifndef QUIT_MENU_TEST
 #include "engine_fingerprint.h"
 #endif
 
 #define WM_MENU_ACTION (WM_APP + 40)
 #define WM_MENU_TOGGLE (WM_APP + 41)
+#define WM_SCREENSHOT_READY (WM_APP + 42)
 #define BUTTON_RVA 0x126f040
 #define AXIS_RVA 0x126f270
 #define DISCONNECT_RVA 0x126ef60
@@ -52,6 +57,7 @@ static int test_gamebar_shortcut=1;
 static volatile LONG test_gamebar_redirected;
 static int test_raw_input;
 static int test_primary_id=1,test_secondary_id=2;
+static int test_folder_requests;
 #endif
 static XINPUT_STATE raw_states[4];
 static int raw_connected[4],guide_source=-1,raw_owner=-1,raw_navigation;
@@ -60,6 +66,8 @@ static uint32_t raw_idle_previous[4];
 static volatile LONG vulkan_active;
 static volatile LONG screenshot_request,screenshot_busy,screenshot_capable;
 static wchar_t status_text[120];
+static wchar_t last_screenshot_name[128];
+static PWSTR last_screenshot_path;
 static uint64_t status_until;
 static uint32_t render_width=MENU_BASE_WIDTH,render_height=MENU_BASE_HEIGHT;
 
@@ -307,31 +315,34 @@ static void shortcut_label(uint32_t chord,int ps,wchar_t *out,size_t capacity) {
     }
 }
 static void row_geometry(int page,int index,int *top,int *height) {
-    *top=page==PAGE_MAIN?86+29*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?88+26*index:100+56*index;
-    *height=page==PAGE_MAIN?27:page==PAGE_SETTINGS?25:50;
+    *top=page==PAGE_MAIN?86+29*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?88+26*index:(page==PAGE_SCREENSHOT||page==PAGE_RESET)?182+48*index:100+56*index;
+    *height=page==PAGE_MAIN?27:page==PAGE_SETTINGS?25:(page==PAGE_SCREENSHOT||page==PAGE_RESET)?42:50;
 }
 static void draw_menu(HDC dc, RECT r) {
     HBRUSH bg = CreateSolidBrush(RGB(19, 23, 30));
     FillRect(dc, &r, bg); DeleteObject(bg);
     SetBkMode(dc, TRANSPARENT);
-    MenuState state;int save_failed,conflict,owner_player=0,has_owner=0;wchar_t message[120];
+    MenuState state;int save_failed,conflict,owner_player=0,has_owner=0;wchar_t message[120],filename[128];
     EnterCriticalSection(&lock);
     state=menu;save_failed=settings_save_failed;conflict=gamebar_conflict;
+    lstrcpynW(filename,last_screenshot_name,128);
     if(raw_navigation&&raw_owner>=0){has_owner=1;owner_player=raw_owner+1;}
     else if(menu_device>=0&&devices[menu_device].used){has_owner=1;owner_player=native_player(&devices[menu_device]);}
     lstrcpynW(message,GetTickCount64()<status_until?status_text:L"",120);
     LeaveCriticalSection(&lock);
     int selection=state.selection,ps=state.playstation_icons;
     RECT title = {36, 13, r.right - 36, 57};
-    text(dc,font_title,state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
+    text(dc,font_title,state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_SCREENSHOT?L"Screenshot saved":state.page==PAGE_RESET?L"Reset settings?":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
     wchar_t owner_label[64];
     if(owner_player>0)swprintf(owner_label,64,L"Player %d",owner_player);
     else wcscpy(owner_label,has_owner?L"Controller":state.first_player_only?L"Waiting for Player 1":L"Waiting for controller");
     RECT owner_rect={330,25,r.right-36,48};text(dc,font_small,owner_label,owner_rect,RGB(176,184,197),DT_RIGHT|DT_SINGLELINE);
     RECT sub = {38, 57, r.right - 36, 84};
-    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):RGB(176,184,197),DT_LEFT);
+    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_SCREENSHOT?L"Clean game frame saved. The overlay is excluded.":state.page==PAGE_RESET?L"Restore overlay and launcher defaults?":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):RGB(176,184,197),DT_LEFT);
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
-    const wchar_t *setting_labels[]={L"Button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Back"};
+    const wchar_t *setting_labels[]={L"Button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Back"};
+    const wchar_t *screenshot_labels[]={L"Open screenshots folder",L"Back"};
+    const wchar_t *reset_labels[]={L"Cancel",L"Reset now"};
     const wchar_t *restart_labels[]={L"Cancel",L"Restart now"};
     const wchar_t *shutdown_labels[]={state.shutdown_countdown?L"Cancel":L"Cancel",state.page==PAGE_REBOOT?L"Hold to restart PC":L"Hold to shut down"};
     int first=state.page==PAGE_SETTINGS&&selection>=7?selection-6:0;
@@ -343,7 +354,7 @@ static void draw_menu(HDC dc, RECT r) {
         FillRect(dc, &row, fill); DeleteObject(fill);
         COLORREF color=i == selection ? RGB(11,24,7) : RGB(234,238,244);
         row.left+=18;row.top+=(state.page==PAGE_MAIN||state.page==PAGE_SETTINGS)?-2:9;
-        text(dc,font_body,state.page==PAGE_MAIN?main_labels[i]:state.page==PAGE_SETTINGS?setting_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],row,color,DT_LEFT);
+        text(dc,font_body,state.page==PAGE_MAIN?main_labels[i]:state.page==PAGE_SETTINGS?setting_labels[i]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],row,color,DT_LEFT);
         if(menu_power_page(&state)&&i==1&&state.shutdown_holding){
             wchar_t progress[40];swprintf(progress,40,L"%.1f / 3 s",state.shutdown_progress/1000.0);
             RECT value={330,row.top+5,r.right-55,row.bottom};text(dc,font_small,progress,value,color,DT_RIGHT|DT_SINGLELINE);
@@ -376,6 +387,15 @@ static void draw_menu(HDC dc, RECT r) {
             wchar_t scale[40];swprintf(scale,40,L"< %d%% >",menu_scale(&state));
             RECT value={300,row.top,r.right-50,row.bottom};text(dc,font_body,scale,value,color,DT_RIGHT|DT_SINGLELINE);
         }
+    }
+    if(state.page==PAGE_SCREENSHOT){
+        RECT label={36,94,r.right-36,117},name={36,121,r.right-36,161};
+        text(dc,font_small,L"Saved file",label,RGB(176,184,197),DT_CENTER|DT_SINGLELINE);
+        text(dc,font_small,filename,name,RGB(234,238,244),DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+    }else if(state.page==PAGE_RESET){
+        RECT scope={36,97,r.right-36,123},keep={36,130,r.right-36,159};
+        text(dc,font_small,L"Restores overlay preferences and launcher settings.",scope,RGB(234,238,244),DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+        text(dc,font_small,L"Windows Game Bar preference and screenshots are kept.",keep,RGB(176,184,197),DT_CENTER|DT_SINGLELINE);
     }
     if(state.page==PAGE_SETTINGS){
         RECT above={538,87,560,109},below={538,246,560,269};
@@ -415,6 +435,8 @@ static void draw_menu(HDC dc, RECT r) {
             if(selection==SETTING_GAMEBAR)wcscpy(line,L"Windows setting for this user. Win+G still opens Game Bar.");
             if(selection==SETTING_LAUNCHER)wcscpy(line,L"Opens desktop launcher settings. Mouse/keyboard required.");
             if(selection==SETTING_ACCESS)wcscpy(line,L"Player 1 only, or either controller. F10 always works.");
+            if(selection==SETTING_SCREENSHOTS)wcscpy(line,L"Open the Windows screenshots folder on the desktop.");
+            if(selection==SETTING_RESET)wcscpy(line,L"Restore overlay defaults. Windows Game Bar is kept.");
             RECT shortcut={30,314,r.right-30,336};text(dc,font_small,line,shortcut,RGB(158,170,188),DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         }
     }
@@ -446,10 +468,56 @@ __declspec(dllexport) void Ufc6ScreenshotCapability(BOOL supported) {
 __declspec(dllexport) BOOL Ufc6ScreenshotRequest(void) {
     return InterlockedExchange(&screenshot_request,0)!=0;
 }
-__declspec(dllexport) void Ufc6ScreenshotResult(BOOL saved) {
+__declspec(dllexport) void Ufc6ScreenshotResultPath(BOOL saved,const wchar_t *path){
+    wchar_t filename[128]=L"",feedback[256];
+    if(saved&&path&&wcslen(path)<32768){
+        const wchar_t *base=wcsrchr(path,L'\\');base=base?base+1:path;
+        lstrcpynW(filename,base,128);
+        size_t bytes=(wcslen(path)+1)*sizeof(wchar_t);PWSTR copy=HeapAlloc(GetProcessHeap(),0,bytes);
+        if(copy)memcpy(copy,path,bytes);
+        EnterCriticalSection(&lock);
+        if(last_screenshot_path)HeapFree(GetProcessHeap(),0,last_screenshot_path);
+        last_screenshot_path=copy;lstrcpynW(last_screenshot_name,filename,128);
+        LeaveCriticalSection(&lock);
+    }
     InterlockedExchange(&screenshot_busy,0);
-    status(saved?L"Saved to Windows Pictures / Screenshots.":L"Screenshot could not be saved.");
+    if(saved&&filename[0]){swprintf(feedback,256,L"Saved: %ls",filename);status(feedback);}
+    else status(saved?L"Saved to Windows Pictures / Screenshots.":L"Screenshot could not be saved.");
     log_line(saved?"Clean game screenshot saved.":"Screenshot capture failed.");
+    if(saved&&filename[0])PostThreadMessageW(ui_thread,WM_SCREENSHOT_READY,0,0);
+}
+__declspec(dllexport) void Ufc6ScreenshotResult(BOOL saved){Ufc6ScreenshotResultPath(saved,NULL);}
+static void open_screenshots_folder(void){
+#ifdef QUIT_MENU_TEST
+    if(test_mode){++test_folder_requests;EnterCriticalSection(&lock);action(menu_close(&menu,MENU_RESUME));LeaveCriticalSection(&lock);return;}
+#endif
+    if(!foreground())return;
+    HRESULT initialized=CoInitializeEx(NULL,COINIT_APARTMENTTHREADED);
+    if(FAILED(initialized)&&initialized!=RPC_E_CHANGED_MODE){status(L"Could not open the screenshots folder.");return;}
+    PWSTR directory=NULL;
+    EnterCriticalSection(&lock);
+    if(last_screenshot_path){size_t bytes=(wcslen(last_screenshot_path)+1)*sizeof(wchar_t);directory=CoTaskMemAlloc(bytes);if(directory)memcpy(directory,last_screenshot_path,bytes);}
+    LeaveCriticalSection(&lock);
+    if(directory){wchar_t *slash=wcsrchr(directory,L'\\');if(slash)*slash=0;else{CoTaskMemFree(directory);directory=NULL;}}
+    if(directory){DWORD attributes=GetFileAttributesW(directory);if(attributes==INVALID_FILE_ATTRIBUTES||!(attributes&FILE_ATTRIBUTE_DIRECTORY)){CoTaskMemFree(directory);directory=NULL;}}
+    if(!directory)directory=menu_screenshot_directory();
+    if(directory){
+        ShowWindow(game_window,SW_MINIMIZE);
+        INT_PTR result=(INT_PTR)ShellExecuteW(NULL,L"open",directory,NULL,NULL,SW_SHOWNORMAL);
+        if(result>32){EnterCriticalSection(&lock);action(menu_close(&menu,MENU_RESUME));LeaveCriticalSection(&lock);}
+        else{ShowWindow(game_window,SW_RESTORE);SetForegroundWindow(game_window);status(L"Could not open the screenshots folder.");}
+        CoTaskMemFree(directory);
+    }else status(L"The Windows screenshots folder is unavailable.");
+    if(SUCCEEDED(initialized))CoUninitialize();
+}
+static void reset_overlay_settings(void){
+    if(!test_mode&&!foreground())return;
+    if(!overlay_settings_reset(settings_path)){status(L"Could not reset settings; previous settings kept.");return;}
+    EnterCriticalSection(&lock);int gamebar=menu.gamebar_shortcut;
+    menu=(MenuState){.visible=1,.page=PAGE_SETTINGS,.selection=SETTING_RESET,.gamebar_shortcut=gamebar};
+    reset_menu_owner();settings_save_failed=0;
+    LeaveCriticalSection(&lock);
+    status(L"Overlay defaults restored. Windows Game Bar setting kept.");
 }
 static void request_screenshot(void) {
     if(InterlockedCompareExchange(&screenshot_capable,0,0)!=1){status(L"Screenshot is unavailable for this display mode.");return;}
@@ -755,6 +823,8 @@ static DWORD WINAPI worker(void *unused) {
                 status(saved?L"Launcher settings saved.":L"Launcher settings unchanged.");
 #endif
             }
+            else if(msg.wParam==MENU_OPEN_SCREENSHOTS)open_screenshots_folder();
+            else if(msg.wParam==MENU_RESET_SETTINGS)reset_overlay_settings();
             else if(msg.wParam==MENU_GAMEBAR_CHANGED)change_gamebar();
             else if(msg.wParam==MENU_SCREENSHOT)request_screenshot();
             else if(msg.wParam==MENU_RESTART) {
@@ -786,6 +856,10 @@ static DWORD WINAPI worker(void *unused) {
 #endif
             }
             InvalidateRect(overlay, NULL, FALSE);
+        } else if(msg.message==WM_SCREENSHOT_READY){
+            EnterCriticalSection(&lock);
+            if(menu.visible&&menu.page==PAGE_MAIN&&menu.selection==MAIN_SCREENSHOT){menu.page=PAGE_SCREENSHOT;menu.selection=1;menu.armed=0;}
+            LeaveCriticalSection(&lock);InvalidateRect(overlay,NULL,FALSE);
         } else if (msg.message == WM_MENU_TOGGLE && (test_mode||foreground())) toggle_menu();
         else { TranslateMessage(&msg); DispatchMessageW(&msg); }
     }
@@ -806,6 +880,8 @@ __declspec(dllexport) void MenuTestStart(HWND owner) {
 __declspec(dllexport) void MenuTestButton(uint32_t button,int down) {hooked_button((void*)1,1,button,down != 0);}
 __declspec(dllexport) void MenuTestButtonDevice(int id,uint32_t button,int down){hooked_button((void*)1,id,button,down!=0);}
 __declspec(dllexport) void MenuTestPlayers(int primary,int secondary){EnterCriticalSection(&lock);test_primary_id=primary;test_secondary_id=secondary;refresh_native_players();LeaveCriticalSection(&lock);}
+__declspec(dllexport) int MenuTestFolderRequests(void){return test_folder_requests;}
+__declspec(dllexport) void MenuTestScreenshotName(wchar_t *out,int count){EnterCriticalSection(&lock);if(count>0)lstrcpynW(out,last_screenshot_name,count);LeaveCriticalSection(&lock);}
 __declspec(dllexport) int MenuTestAccess(void){EnterCriticalSection(&lock);int value=menu.first_player_only;LeaveCriticalSection(&lock);return value;}
 __declspec(dllexport) int MenuTestPlayer(void){EnterCriticalSection(&lock);int value=raw_navigation&&raw_owner>=0?raw_owner+1:menu_device>=0?native_player(&devices[menu_device]):0;LeaveCriticalSection(&lock);return value;}
 __declspec(dllexport) void MenuTestRedirected(int value){InterlockedExchange(&test_gamebar_redirected,value!=0);PostThreadMessageW(ui_thread,WM_TIMER,1,0);}
