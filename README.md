@@ -26,6 +26,8 @@ The engine executable is not patched. The optional controller-icon patch changes
 
 This download contains the overlay, asset-free controller-icon patcher, and installer. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. It supports the **PORTHEON `3309ab23f` Windows engine**, including its verified Parsec/two-player derivative, rather than every KytyPS5 build. The installer checks the executable hash before installing.
 
+**The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
+
 ## Parsec / two controllers
 
 PORTHEON's **Parsec mode** uses a separate `UFC 6 Parsec.exe` with its own two-player routing. Version 0.8.4 supports the verified derivative with SHA-256 `ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d`. It preserves the routing wrappers using checked nearby relay padding; unknown engine revisions or occupied padding are rejected. The engine file is not modified or distributed.
@@ -52,6 +54,20 @@ Install into the same `bin` folder, then launch with PORTHEON's Parsec option en
 [Cheats over the game](docs/screenshots/cheats-in-game.png) · [Screenshot result](docs/screenshots/screenshot-saved.png) · [Reset confirmation](docs/screenshots/reset-confirmation.png) · [Controller access](docs/screenshots/controller-access.png) · [Game Bar conflict warning](docs/screenshots/gamebar-conflict.png) · [Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
 
 The game-background images are real game-window captures. The isolated page images come from the same overlay renderer in a test host with power actions disabled.
+
+## Change in-game controller icons (included)
+
+The overlay includes the patcher from [UFC 6 Xbox Icons](https://github.com/thyaguster/ufc6-xbox-icons), so one overlay installation provides both the actions menu and the game button-icons mod.
+
+1. Open the overlay and go to **Settings → Patch in-game controller icons...**. Scroll down in Settings to find it.
+2. Choose **Xbox game icons** or **PlayStation game icons** on the **Controller icon patch** page. It also shows which icons are currently installed.
+3. Confirm **Apply and restart game**. The game and its launcher close normally, the patch is applied, and UFC 6 relaunches through your saved launcher settings.
+
+**Overlay button icons** changes the prompts inside this overlay. **Patch in-game controller icons...** changes the prompts inside UFC 6 itself; the two choices are independent.
+
+The game-icons patch supports extracted **PPSA23566 01.006.000** game files. It verifies the files and keeps a local `.ufc6-xbox-icons-backup.zip` for restoring the original PlayStation icons. The download contains the patcher, not game artwork or game files. Uninstalling the overlay keeps the patched icons and restore backup; choose PlayStation icons first if you want the original artwork restored.
+
+[View the controller-icon patch page](docs/screenshots/game-button-icons.png) · [Standalone button-icons mod and documentation](https://github.com/thyaguster/ufc6-xbox-icons)
 
 ## Controls and Settings
 
