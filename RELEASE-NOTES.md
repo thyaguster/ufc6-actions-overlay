@@ -1,3 +1,10 @@
+# UFC 6 Actions Overlay v0.9.8
+
+- Recognize PORTHEON 6.2's rebuilt bundled overlay files and upgrade them through the existing verified, backed-up transaction. Unknown DLLs remain protected.
+- Install the current startup bridge together with the current menu; keep the player's original threading runtime. No manual DLL deletion is required.
+- Detect a missing original runtime during Check folder and explain recovery before enabling installation.
+- Preserve overlay preferences and launcher settings.
+
 # UFC 6 Actions Overlay v0.9.7
 
 - Replaces the classic installer and updater windows with a matching dark theme, rounded panels and buttons, a custom title bar, and crisp UFC 6 branding.

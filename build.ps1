@@ -30,7 +30,7 @@ if (-not $Test) {
     if ($LASTEXITCODE) { throw 'Vulkan layer compilation failed' }
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     $manifest = [ordered]@{
-        version = '0.9.7'
+        version = '0.9.8'
         parsec_engine_sha256 = 'ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d'
         engine_revision = '3309ab23f'
         engine_sha256 = 'f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2'
@@ -48,6 +48,12 @@ if (-not $Test) {
         previous_companion_sha256 = @{'ufc6_menu_icons.exe'=@('c15a1fe33f684fbc73be0bad5da032c4a8cb17ad14301134176bf923584d1d42','e14e61e0576ed9dec6265edb74a94d93c3b89f54c5f244a253e2af5c2fe46c4b');'libwinpthread-1.dll'=@('68a8ba895e4253e42577b1634b4f3421ff6f492c8f4de48d7a212a159b266143','7834ba478b95cc2e680dd7b61cc92fc61f73cd9d3de373121c3448ec0a701ba4');'ufc6_menu_layer.dll' = @('0936ce0405352b439f00dae84ba6dfb8bace20711177723700a1a34dff4dd255','d16d00f5e09687192f9f7243fb25844702a58ff531cf34cb32fb74caef95c9e4','620dc7fe02917c24ddb8476da90cd561030de6ed9e7e7e57b5c3c0a83ca0eebd','d943492814bec60b5b535fc31f33c9a1c2e809239f6e7022a95dfc964cf0e101','0b63b6657e5049609281bda3045c530333fc55c37ce38366bcf582141e036e83','bec28a5cad188a802063c2a0f5f7eac259882a6ff575bb7905f56ca1bbb34e7b','da7b6ca8e9ef149b37ed8986781db071899a843d4e12ab326ba65e7d196a72de','56a5a3dac1d174dc0825d95b0729969967b66ebd538e1263aa06b122d5ce0527');'ufc6_menu_restart.exe'=@('d1c9984d275b12348638d5b3a31c85e75fbf7d742b47680a05137f1f387ad2a7','ab28c2edbc12db244e13c2b2cddc82cbbf827dbf246b216deb87a78982d01b1a','36eaec21972661408381cbebb463c1c71bd57ac544fa3839bd36af3488adcca2','9234b1e02b3dc2e7ad804bdaeb20854898462de159a6a224444aba80325829c3','cc25fdf1e57cb63aa0a0dcb493a77cc5575abf692447713de75e84024bfa0618','92b747b7c5cacd7dfe9c97c085ba436bcd4b53a3272093aa781f991a3a272556','3ab575a182f6f8d899b9a7276c003941d7bd575d2f60738b3931e6db5cae65fd')}
         shortcut = 'Hold LB + RB + Menu for 800 ms'
     }
+    # PORTHEON 6.2 rebuilds our older sources with different binary fingerprints.
+    # Accept only these verified bundled builds; unknown mods remain blocked.
+    $manifest.previous_dll_sha256 += '67e5d77bd4940d9b53936909e0ed1181979bd219e6cfbda75e97b3b7b79ebb2b'
+    $manifest.previous_companion_sha256['libwinpthread-1.dll'] += @('24a6575bedb4bc91561a2e31a879613459793fe08cf127ac52b9b253bec53a6d')
+    $manifest.previous_companion_sha256['ufc6_menu_layer.dll'] += @('f8b38e46afa08a785bcd35c9a2a32faa9489899a342141b42d2b405a8c278a0b')
+    $manifest.previous_companion_sha256['ufc6_menu_restart.exe'] += @('bac16220717756de7141b53e9d14eadc692bdcf633a77f8d9d1d82104697e21e')
     if ($previousRelease -and $previousRelease.engine_sha256 -eq $manifest.engine_sha256 -and [version]$previousRelease.version -le [version]$manifest.version) {
         $oldCore = @($previousRelease.dll_sha256) + @($previousRelease.previous_dll_sha256)
         $manifest.previous_dll_sha256 = @(@($manifest.previous_dll_sha256) + $oldCore | Where-Object { $_ -match '^[a-fA-F0-9]{64}$' -and $_ -ne $manifest.dll_sha256 } | ForEach-Object { $_.ToLowerInvariant() } | Select-Object -Unique)

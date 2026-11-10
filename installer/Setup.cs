@@ -36,11 +36,13 @@ namespace UFC6OverlaySetup {
         public readonly Dictionary<string,string> Hashes = new Dictionary<string,string>();
         public int Installed;
         public int Current;
+        public bool RuntimeAvailable = true;
         public string Summary(Manager manager) {
             var lines = new List<string>();
             lines.Add(Supported ? "Compatible PORTHEON 3309ab23f engine." : "Unsupported engine. Installation is disabled.");
             if (ParsecStatus != null) lines.Add(ParsecStatus);
             lines.Add(Installed == 0 ? "Overlay is not installed." : Current == manager.Order.Count ? "Overlay v" + manager.Version + " is already installed." : "An existing overlay installation was found; it can be updated or removed.");
+            if (!RuntimeAvailable) lines.Add("Original threading runtime is missing. Restore libwinpthread-1.dll from your matching PORTHEON installation; do not delete the saved ufc6_pthread_original.dll.");
             if (Conflicts.Count != 0) lines.Add("Conflicting or linked files: " + string.Join(", ", Conflicts) + ". These files will not be replaced or removed.");
             lines.Add("\r\nSettings and screenshots are kept. Close UFC 6 before making changes.");
             return string.Join("\r\n", lines);
@@ -107,6 +109,7 @@ namespace UFC6OverlaySetup {
                     if (hash == expected[name]) ++result.Current;
                 }
             }
+            if (runtime != null) result.RuntimeAvailable = (result.Hashes.ContainsKey(runtime.target) && result.Hashes[runtime.target] == runtime.original_sha256) || (result.Hashes.ContainsKey(runtime.original_name) && result.Hashes[runtime.original_name] == runtime.original_sha256);
             return result;
         }
         public static void RequireClosed(string folder) {
@@ -241,7 +244,7 @@ namespace UFC6OverlaySetup {
                 else {
                     var values = (object[])e.Result; var state = (Inspection)values[0]; folder.Text = state.Folder;
                     status.Text = values[1] == null ? state.Summary(manager) : (string)values[1];
-                    install.Enabled = state.Supported && state.Conflicts.Count == 0; remove.Enabled = state.Installed > 0 && state.Conflicts.Count == 0;
+                    install.Enabled = state.Supported && state.RuntimeAvailable && state.Conflicts.Count == 0; remove.Enabled = state.Installed > 0 && state.Conflicts.Count == 0;
                 }
                 worker.Dispose();
             };

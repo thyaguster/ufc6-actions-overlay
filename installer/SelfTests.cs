@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+﻿// SPDX-License-Identifier: GPL-2.0-only
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -112,6 +112,41 @@ namespace UFC6OverlaySetup {
                 Assert(File.ReadAllBytes(runtime).SequenceEqual(original),"Reinstall after uninstall must remain safe.");
                 Assert(File.ReadAllText(ini) == settings,"Runtime bridge migration must preserve settings.");
                 passed.Add("PASS: runtime bridge install/remove/reinstall, every commit rollback, missing/corrupt original rejection, and byte-for-byte runtime restoration.");
+                // A launcher rebuild has different bytes even when it uses our older sources.
+                var bundled = new Dictionary<string,byte[]> {
+                    {"version.dll",Bytes("PORTHEON rebuilt old core")},
+                    {"libwinpthread-1.dll",Bytes("PORTHEON rebuilt old bridge")},
+                    {"ufc6_menu_layer.dll",Bytes("PORTHEON rebuilt old layer")},
+                    {"ufc6_menu_restart.exe",Bytes("PORTHEON rebuilt old restart helper")}
+                };
+                release.previous_dll_sha256 = release.previous_dll_sha256.Concat(new [] {Manager.Hash(bundled["version.dll"])}).ToArray();
+                foreach(var item in bundled.Where(p => p.Key != "version.dll")) {
+                    string[] old;release.previous_companion_sha256.TryGetValue(item.Key,out old);
+                    release.previous_companion_sha256[item.Key]=(old??new string[0]).Concat(new [] {Manager.Hash(item.Value)}).ToArray();
+                }
+                runtimeManager=new Manager(release,payload);
+                File.WriteAllBytes(originalCopy,original);
+                foreach(var item in bundled)File.WriteAllBytes(Path.Combine(folder,item.Key),item.Value);
+                File.WriteAllBytes(Path.Combine(folder,"ufc6_menu_layer.json"),payload["ufc6_menu_layer.json"]);
+                Assert(runtimeManager.Inspect(folder).Conflicts.Count==0 && runtimeManager.Inspect(folder).RuntimeAvailable,"Verified launcher rebuild must be upgradable using the preserved original runtime.");
+                var beforeMigration=runtimeManager.Order.ToDictionary(n=>n,n=>File.Exists(Path.Combine(folder,n))?Manager.HashFile(Path.Combine(folder,n)):null);
+                for(int fail=0;fail<runtimeManager.Order.Count;++fail) {
+                    int point=fail;runtimeManager.BeforeCommit=count=>{if(count==point)throw new IOException("Injected bundled migration failure");};
+                    // Some files are already current: only actual commits can fail.
+                    int changes=runtimeManager.Order.Count(n=>beforeMigration[n] != (n==release.runtime_bridge.original_name?release.runtime_bridge.original_sha256:n=="version.dll"?release.dll_sha256:release.companion_files[n]));
+                    if(point>=changes)continue;
+                    Reject(()=>runtimeManager.Apply(folder,false),"Bundled migration failure must propagate.");
+                    Assert(beforeMigration.All(p=>(File.Exists(Path.Combine(folder,p.Key))?Manager.HashFile(Path.Combine(folder,p.Key)):null)==p.Value),"Bundled migration rollback must preserve every original file.");
+                }
+                runtimeManager.BeforeCommit=null;runtimeManager.Apply(folder,false);
+                Assert(runtimeManager.Inspect(folder).Current==runtimeManager.Order.Count,"Bundled migration must install the complete current payload.");
+                Assert(File.ReadAllText(ini)==settings,"Bundled migration must keep user preferences.");
+                runtimeManager.Apply(folder,true);
+                File.Delete(runtime);
+                Assert(!runtimeManager.Inspect(folder).RuntimeAvailable,"Check folder must detect a missing original runtime before installation.");
+                Assert(runtimeManager.Inspect(folder).Summary(runtimeManager).Contains("Original threading runtime is missing"),"Missing original diagnostic must be actionable.");
+                File.WriteAllBytes(runtime,original);
+                passed.Add("PASS: verified launcher rebuild migration, every migration rollback, complete startup bridge update, settings preservation and missing-runtime diagnostics.");
                 // Verify the actual embedded release too, without touching a game directory.
                 var embedded = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Release>(Encoding.UTF8.GetString(Program.Resource("release.json")).TrimStart('\ufeff'));
                 new Manager(embedded,embedded.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n => n,n => Program.Resource(n)));
