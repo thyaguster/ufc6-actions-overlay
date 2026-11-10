@@ -1,3 +1,10 @@
+# UFC 6 Actions Overlay v0.9.6
+
+- Replaces the U6 monogram with a full **UFC 6** icon: white UFC lettering and a large red 6.
+- Updates the installer, updater, GitHub branding, and editable vector artwork. Windows ICO sizes cover 16–256 px.
+
+Icon-only release. Installer and updater validation checks passed; game behavior is unchanged.
+
 # UFC 6 Actions Overlay v0.9.5
 
 - Adds **Settings > Check for updates...** and an installer update button. The desktop checker finds the latest stable release on GitHub, offers newer versions, verifies the installer against release SHA-256 checksums (and the GitHub asset digest when provided), then opens setup with your game folder filled in. Downloads and installation require user actions; there are no silent startup updates.

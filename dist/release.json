@@ -1,5 +1,5 @@
 {
-  "version": "0.9.5",
+  "version": "0.9.6",
   "parsec_engine_sha256": "ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d",
   "engine_revision": "3309ab23f",
   "engine_sha256": "f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2",
@@ -48,12 +48,12 @@
     "f482758e1e9b4edc2b7865aa9cbe5a570a077841ef1b7abebfcf3b642f7836c9"
   ],
   "runtime_bridge": {
+    "original_sha256": "78ebbc1480d62098aa66307db2ff139abc07c137bc188f5b73bf7b131492932c",
     "target": "libwinpthread-1.dll",
-    "original_name": "ufc6_pthread_original.dll",
-    "original_sha256": "78ebbc1480d62098aa66307db2ff139abc07c137bc188f5b73bf7b131492932c"
+    "original_name": "ufc6_pthread_original.dll"
   },
   "companion_files": {
-    "ufc6_menu_update.exe": "a4e9e73f5b0b2d1870ac4fe619c3975858727675fc228d7e37ae28f7b20d44fc",
+    "ufc6_menu_update.exe": "e89b15c1b8c6cc25a74ecb4efe5a9caa3613fcba4cea1312b3eee690a59ae3f3",
     "ufc6_menu_icons.exe": "1f898f213b7d080164835eb8a7bb01ecbe530b163b911f81dbfcc76c1bd0e7ba",
     "libwinpthread-1.dll": "68a8ba895e4253e42577b1634b4f3421ff6f492c8f4de48d7a212a159b266143",
     "ufc6_menu_layer.dll": "d03e2630ca3d5f2c901ef278969be8ed603d316511efb0e9d18cb390c4033308",
@@ -61,20 +61,6 @@
     "ufc6_menu_restart.exe": "31e40051d3b827b162f3a7a85efac267955f1ed49d16d07dc5e9e99a78d608a2"
   },
   "previous_companion_sha256": {
-    "ufc6_menu_update.exe": [
-      "0afa2e4485d6f2b5d85deefc10703de259c6628547b263e8a591d51ba8fb0310",
-      "bcb81667fd923ab30784bf6bea1513a18cd39e4f682103478afadf675a7ec626"
-    ],
-    "ufc6_menu_layer.dll": [
-      "0936ce0405352b439f00dae84ba6dfb8bace20711177723700a1a34dff4dd255",
-      "d16d00f5e09687192f9f7243fb25844702a58ff531cf34cb32fb74caef95c9e4",
-      "620dc7fe02917c24ddb8476da90cd561030de6ed9e7e7e57b5c3c0a83ca0eebd",
-      "d943492814bec60b5b535fc31f33c9a1c2e809239f6e7022a95dfc964cf0e101",
-      "0b63b6657e5049609281bda3045c530333fc55c37ce38366bcf582141e036e83",
-      "bec28a5cad188a802063c2a0f5f7eac259882a6ff575bb7905f56ca1bbb34e7b",
-      "da7b6ca8e9ef149b37ed8986781db071899a843d4e12ab326ba65e7d196a72de",
-      "56a5a3dac1d174dc0825d95b0729969967b66ebd538e1263aa06b122d5ce0527"
-    ],
     "ufc6_menu_restart.exe": [
       "d1c9984d275b12348638d5b3a31c85e75fbf7d742b47680a05137f1f387ad2a7",
       "ab28c2edbc12db244e13c2b2cddc82cbbf827dbf246b216deb87a78982d01b1a",
@@ -88,9 +74,24 @@
       "c15a1fe33f684fbc73be0bad5da032c4a8cb17ad14301134176bf923584d1d42",
       "e14e61e0576ed9dec6265edb74a94d93c3b89f54c5f244a253e2af5c2fe46c4b"
     ],
-    "ufc6_menu_layer.json": [],
     "libwinpthread-1.dll": [
       "7834ba478b95cc2e680dd7b61cc92fc61f73cd9d3de373121c3448ec0a701ba4"
+    ],
+    "ufc6_menu_layer.dll": [
+      "0936ce0405352b439f00dae84ba6dfb8bace20711177723700a1a34dff4dd255",
+      "d16d00f5e09687192f9f7243fb25844702a58ff531cf34cb32fb74caef95c9e4",
+      "620dc7fe02917c24ddb8476da90cd561030de6ed9e7e7e57b5c3c0a83ca0eebd",
+      "d943492814bec60b5b535fc31f33c9a1c2e809239f6e7022a95dfc964cf0e101",
+      "0b63b6657e5049609281bda3045c530333fc55c37ce38366bcf582141e036e83",
+      "bec28a5cad188a802063c2a0f5f7eac259882a6ff575bb7905f56ca1bbb34e7b",
+      "da7b6ca8e9ef149b37ed8986781db071899a843d4e12ab326ba65e7d196a72de",
+      "56a5a3dac1d174dc0825d95b0729969967b66ebd538e1263aa06b122d5ce0527"
+    ],
+    "ufc6_menu_layer.json": [],
+    "ufc6_menu_update.exe": [
+      "a4e9e73f5b0b2d1870ac4fe619c3975858727675fc228d7e37ae28f7b20d44fc",
+      "0afa2e4485d6f2b5d85deefc10703de259c6628547b263e8a591d51ba8fb0310",
+      "bcb81667fd923ab30784bf6bea1513a18cd39e4f682103478afadf675a7ec626"
     ]
   },
   "shortcut": "Hold LB + RB + Menu for 800 ms"
