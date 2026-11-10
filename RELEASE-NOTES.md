@@ -1,3 +1,19 @@
+# UFC 6 Actions Overlay v0.9.3
+
+Adds Player 1 cheats, career additions, integrated controller-icon patching, and refreshed controls.
+
+- **Cheats** is on the main menu. Infinite stamina and No damage use labeled On/Off pill switches and follow Player 1's controller assignment in normal and Parsec mode. Choices can be set before a fight and remain session-only.
+- **Career cheats** adds selectable amounts of money or skill points to the loaded offline career, once per confirmation. Current balances are shown. Keep a save backup before experimenting; changes use the game's normal saving.
+- **Settings > Patch in-game controller icons...** changes Xbox/PlayStation game artwork separately from **Overlay button icons**. It checks the supported game build and all edited ranges, keeps a verified local restore backup, then applies after normal game/launcher shutdown and relaunches with saved settings. No game artwork is bundled.
+- Fixes repeated icon switches after restart by isolating each packaged helper's Python runtime and clearing its temporary state before launching the game.
+- Refreshes the UI with pill switches, compact value selectors, rounded rows, subtle focus outlines, and distinct quit/power styling. Fixes clipped text at different UI scales.
+- Restart PC's auto-launch indication is now inline text and a status dot, keeping it clear of the row borders. The confirmation also states whether auto-launch is enabled and where to change it.
+- Adds updated screenshots, including Cheats and the controller-icon patch page.
+
+Validation: controller ownership and Parsec regressions; native cheat fixtures; confirmed in-game stamina independence and career additions; font bounds at 50–300% scaling; game-icons validation/restore/rollback fixtures; a second packaged-helper launch after temporary-runtime cleanup; installer upgrade/removal/rollback checks. PC power tests use stubs and never power off or reboot the test machine.
+
+Downloads: **UFC6-Actions-Overlay-Setup-0.9.3.exe** (recommended) or **UFC6-Actions-Overlay-0.9.3.zip** (installer, prebuilt components, source and licenses).
+
 # UFC 6 Actions Overlay v0.8.8
 
 Adds screenshot filename feedback, folder access, and confirmed settings reset.

@@ -25,6 +25,8 @@ parser.add_argument("--access",action="store_true")
 parser.add_argument("--reload-access",action="store_true")
 parser.add_argument("--raw-access",action="store_true")
 parser.add_argument("--screenshot-reset",action="store_true")
+parser.add_argument("--cheats",action="store_true")
+parser.add_argument("--game-icons",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
 if args.reset:
@@ -74,7 +76,9 @@ def render(name,viewport=(2560,1440)):
     width,height=w.DWORD(),w.DWORD()
     dll.Ufc6MenuExtent(*viewport,c.byref(width),c.byref(height))
     pixels=c.create_string_buffer(width.value*height.value*4)
+    dll.MenuTestTextClips(1)
     assert dll.Ufc6RenderMenu(pixels,len(pixels)),"Real menu renderer was not ready"
+    assert dll.MenuTestTextClips(0)==0,"A rendered text line exceeds its rectangle height"
     image=Image.frombytes("RGBA",(width.value,height.value),pixels.raw,"raw","BGRA")
     image.save(folder/name)
 
@@ -91,10 +95,74 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     assert dll.MenuTestSnapshot()&0x100
-    if args.screenshot_reset:
+    if args.game_icons:
+        def page():return (dll.MenuTestSnapshot()>>12)&15
+        render("main-unclipped.png")
+        for _ in range(4):press(0x40)
+        press(0x4000);render("settings-overlay-icons.png")
+        for _ in range(10):press(0x40)
+        render("settings-game-icons.png")
+        press(0x4000);assert page()==9 and dll.MenuTestSnapshot()&15==2
+        render("game-icons-ps.png")
+        press(0x40);press(0x4000);assert page()==10 and dll.MenuTestSnapshot()&15==0
+        render("game-icons-xbox-confirm.png")
+        press(0x4000);assert page()==9 and dll.MenuTestGameIcons()==1
+        press(0x40);press(0x4000);press(0x40);press(0x4000)
+        assert page()==9 and dll.MenuTestGameIcons()==258
+        render("game-icons-xbox.png")
+        press(0x10);press(0x4000);assert page()==10
+        render("game-icons-restore-confirm.png")
+        press(0x40);press(0x4000);assert dll.MenuTestGameIcons()==513
+        press(0x2000);assert page()==1 and dll.MenuTestSnapshot()&15==10
+        print("PASS: distinct overlay/game icons, status, Cancel-first apply/restore, confirmation, Back; game files and launch mocked; all text rectangles fit their fonts.")
+        raise SystemExit(0)
+    elif args.cheats:
+        dll.MenuTestCheatStatus.argtypes=[c.c_int,c.c_int]
+        def cheat(i,value=-1):return dll.MenuTestCheatStatus(i,value)
+        def page():return (dll.MenuTestSnapshot()>>12)&15
+        render("main-menu-cheats.png")
+        for _ in range(3):press(0x40)
+        press(0x4000);assert page()==7
+        assert cheat(0)==1 and cheat(1)==1
+        render("cheats-player1.png")
+        cheat(0,0);assert dll.MenuTestCheatEnabled(0)==0
+        render("cheats-wait-off.png")
+        press(0x4000);assert cheat(0)==0 and dll.MenuTestCheatEnabled(0)==1
+        render("cheats-wait-on.png")
+        press(0x4000);assert dll.MenuTestCheatEnabled(0)==0
+        cheat(0,1)
+        press(0x4000);assert cheat(0)==2 and cheat(1)==1
+        press(0x40);press(0x20);assert cheat(0)==2 and cheat(1)==2
+        render("cheats-on.png")
+        press(0x80);assert cheat(1)==1
+        press(0x10);press(0x4000);assert cheat(0)==1
+        cheat(0,7);press(0x4000);assert cheat(0)==1
+        cheat(0,3);press(0x4000);assert cheat(0)==3
+        render("cheats-launcher.png")
+        cheat(0,4);press(0x4000);assert cheat(0)==4
+        render("cheats-unavailable.png")
+        cheat(0,1);press(0x4000);assert cheat(0)==2
+        press(0x40);press(0x40);press(0x20);render("cheats-career-money.png")
+        press(0x4000);assert page()==8 and dll.MenuTestSnapshot()&15==0
+        render("career-add-money-confirm.png")
+        press(0x4000);assert page()==7
+        press(0x4000);press(0x40);press(0x4000);assert page()==7
+        press(0x40);press(0x20);press(0x20);render("cheats-career-points.png")
+        press(0x4000);assert page()==8
+        render("career-add-points-confirm.png")
+        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==3
+        press(0x2000);assert page()==0 and dll.MenuTestSnapshot()&15==3
+        press(0x40);press(0x4000)
+        for _ in range(9):press(0x40)
+        press(0x4000);press(0x40);press(0x4000)
+        assert page()==1 and cheat(0)==1
+        press(0x2000);press(0x2000);assert not dll.MenuTestSnapshot()&0x100
+        print("PASS: main Cheats page, Player 1-only controls without a selector, confirm/left/right, Game On clears, launcher/unsupported gating, Back and reset; controller assignment tested by native fixture.")
+        raise SystemExit(0)
+    elif args.screenshot_reset:
         dll.Ufc6ScreenshotResultPath.argtypes=[w.BOOL,w.LPCWSTR]
         dll.MenuTestScreenshotName.argtypes=[w.LPWSTR,c.c_int]
-        def page():return (dll.MenuTestSnapshot()>>12)&7
+        def page():return (dll.MenuTestSnapshot()>>12)&15
         def selected():return dll.MenuTestSnapshot()&15
         dll.Ufc6ScreenshotCapability(1)
         press(0x40);press(0x4000)
@@ -109,7 +177,7 @@ try:
         dll.Ufc6ScreenshotResultPath(True,r"C:\Pictures\Screenshots\UFC6_hidden.png");pump(.1)
         assert not dll.MenuTestSnapshot()&0x100,"Late completion must not reopen overlay"
         dll.MenuTestToggle();pump(.1)
-        for _ in range(3):press(0x40)
+        for _ in range(4):press(0x40)
         press(0x4000);assert page()==1
         dll.Ufc6ScreenshotResultPath(True,r"C:\Pictures\Screenshots\UFC6_settings.png");pump(.1)
         assert page()==1,"Late completion must not replace Settings"
@@ -160,7 +228,7 @@ try:
         native(0x2000);dll.MenuTestToggle();pump(.1)
         native(0x40,7);assert dll.MenuTestPlayer()==2
         render("owner-player2.png")
-        native(0x40,7);native(0x40,7);native(0x4000,7)
+        native(0x40,7);native(0x40,7);native(0x40,7);native(0x4000,7)
         for _ in range(7):native(0x40,7)
         assert dll.MenuTestSnapshot()&0xf==7
         render("access-either.png")
@@ -192,7 +260,7 @@ try:
         press(0x2000);raw(0,0);raw(1,0x400);raw(1,0)
         rpress(1,2);assert dll.MenuTestPlayer()==2
         rpress(0,2);assert dll.MenuTestSnapshot()&0xf==1
-        for _ in range(2):rpress(1,2)
+        for _ in range(3):rpress(1,2)
         rpress(1,0x1000)
         for _ in range(7):rpress(1,2)
         raw(1,0x1000);pump(.2)
@@ -211,7 +279,7 @@ try:
         rpress(1,2);assert dll.MenuTestPlayer()==0
         dll.MenuTestToggle();pump(.08);assert not dll.MenuTestSnapshot()&0x100
         raw(0,0,1);dll.MenuTestToggle();pump(.08)
-        for _ in range(3):rpress(0,2)
+        for _ in range(4):rpress(0,2)
         rpress(0,0x1000)
         for _ in range(7):rpress(0,2)
         raw(1,0x400) # Held Guide becomes newly eligible when switching to Either.
@@ -295,7 +363,7 @@ try:
         dll.MenuTestDisconnect(1);pump(.08)
         assert not dll.MenuTestSnapshot()&0x100,"Disconnecting the owner must close the menu"
         dll.MenuTestGuide(1);pump(.06);dll.MenuTestGuide(0);pump(.06)
-        for _ in range(3):
+        for _ in range(4):
             dll.MenuTestButtonDevice(1,0x40,1);dll.MenuTestButtonDevice(1,0x40,0);pump(.05)
         dll.MenuTestButtonDevice(1,0x4000,1);dll.MenuTestButtonDevice(1,0x4000,0);pump(.07)
         assert (dll.MenuTestSnapshot()>>12)&7==1
@@ -313,7 +381,7 @@ try:
         press(0x40);assert dll.MenuTestSnapshot()&0xf==0,"Redirected controller must not activate menu actions"
         dll.MenuTestRedirected(0);pump(.08)
         assert dll.MenuTestConflict()==0
-        for _ in range(3):press(0x40)
+        for _ in range(4):press(0x40)
         press(0x4000);press(0x4000) # Settings, PlayStation prompts.
         press(0x40);press(0x4000) # Record custom LS + RS shortcut.
         dll.MenuTestButton(2,1);dll.MenuTestButton(4,1);pump(.4)
@@ -327,7 +395,7 @@ try:
         dll.MenuTestButton(2,1);dll.MenuTestButton(4,1);pump(.95)
         dll.MenuTestButton(2,0);dll.MenuTestButton(4,0);pump(.08)
         assert dll.MenuTestSnapshot()&0x100,"Custom fallback still opens after Game Bar is dismissed"
-        for _ in range(6):press(0x40)
+        for _ in range(7):press(0x40)
         press(0x4000);press(0x40)
         dll.MenuTestButton(0x4000,1);pump(3.2)
         dll.MenuTestButton(0x4000,0);pump(.05)
@@ -345,7 +413,7 @@ try:
                     return winreg.QueryValueEx(key,"UseNexusForGameBarEnabled")
             except FileNotFoundError:return None
         original_windows=windows_preference()
-        for _ in range(3):press(0x40)
+        for _ in range(4):press(0x40)
         press(0x4000)
         for _ in range(5):press(0x40)
         assert dll.MenuTestSnapshot()&0xf==5 and dll.MenuTestGameBar()==1
@@ -357,14 +425,14 @@ try:
         press(0x40);assert dll.MenuTestSnapshot()&0xf==6
         press(0x40);assert dll.MenuTestSnapshot()&0xf==7
         press(0x40);assert dll.MenuTestSnapshot()&0xf==8
-        press(0x40);press(0x40);assert dll.MenuTestSnapshot()&0xf==10
+        press(0x40);press(0x40);press(0x40);assert dll.MenuTestSnapshot()&0xf==11
         render("settings-back.png")
         press(0x4000);assert (dll.MenuTestSnapshot()>>12)&7==0
         assert windows_preference()==original_windows,"UI test must never change the actual Windows Game Bar preference"
         print("PASS: Game Bar settings row, On/Off, confirm/left/right and Back; actual Windows preference unchanged.")
     elif args.guide or args.reload_guide_off:
         assert dll.MenuTestGuideEnabled()==(0 if args.reload_guide_off else 1)
-        for _ in range(3):press(0x40)
+        for _ in range(4):press(0x40)
         press(0x4000)
         for _ in range(4):press(0x40)
         assert dll.MenuTestSnapshot()&0xf==4
@@ -380,7 +448,7 @@ try:
         assert dll.MenuTestAutoLaunch()==(0 if args.reload_auto_off else 1)
         render("main-auto-off.png" if args.reload_auto_off else "main-auto-on.png")
         if not args.reload_auto_off:
-            for _ in range(3):press(0x40)
+            for _ in range(4):press(0x40)
             press(0x4000)
             for _ in range(3):press(0x40)
             render("settings-auto-on.png")
@@ -393,7 +461,7 @@ try:
             press(0x2000)
             press(0x40);press(0x40)
         else:
-            for _ in range(5):press(0x40)
+            for _ in range(6):press(0x40)
         render("main-auto-off.png")
         press(0x4000)
         render("confirmation-auto-off.png")
@@ -401,7 +469,7 @@ try:
         print("PASS: auto-launch defaults On, toggles with confirm/left/right, saves Off, and renders status on both pages." if not args.reload_auto_off else "PASS: a fresh process loaded auto-launch Off and showed it in the reboot confirmation.")
     elif args.power or args.reboot:
         render("main-menu.png")
-        for _ in range(5 if args.reboot else 6):press(0x40)
+        for _ in range(6 if args.reboot else 7):press(0x40)
         press(0x4000)
         assert (dll.MenuTestSnapshot()>>12)&7 == (4 if args.reboot else 3) and dll.MenuTestSnapshot()&0xf == 0
         render("reboot-confirmation.png" if args.reboot else "shutdown-confirmation.png")
@@ -419,7 +487,7 @@ try:
         print("PASS: fresh process loaded PlayStation icons and opened using the saved custom shortcut.")
     else:
         render("main-menu.png")
-        for _ in range(3):press(0x40)
+        for _ in range(4):press(0x40)
         press(0x4000)  # Open the second settings box.
         assert (dll.MenuTestSnapshot()>>12)&3 == 1
         render("xbox-icons.png")

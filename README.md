@@ -20,11 +20,11 @@
 
 ![Actions overlay over the actual UFC 6 menu](docs/screenshots/overlay-in-game.png)
 
-An in-process extension for the **PORTHEON UFC 6 `3309ab23f` Windows engine**. It draws its menu directly into the game's Vulkan frames and keeps focus on the game. The main menu contains **Resume, Take screenshot, Restart game, Settings, and Quit game**, followed by a gap separating **Restart PC and Shut down PC**.
+An in-process extension for the **PORTHEON UFC 6 `3309ab23f` Windows engine**. It draws its menu directly into the game's Vulkan frames and keeps focus on the game. The main menu contains **Resume, Take screenshot, Restart game, Cheats, Settings, and Quit game**, followed by a gap separating **Restart PC and Shut down PC**.
 
-The engine executable and game assets are not patched. A startup bridge forwards calls to your verified original threading runtime, preserved byte-for-byte as `ufc6_pthread_original.dll` and restored by the uninstaller. A short-lived helper handles restart or confirmed shutdown after the old game has exited and, when configured, after launcher cleanup.
+The engine executable is not patched. The optional controller-icon patch changes verified game-asset ranges and keeps a local restore backup. A startup bridge forwards calls to your verified original threading runtime, preserved byte-for-byte as `ufc6_pthread_original.dll` and restored by the uninstaller. A short-lived helper handles restart or confirmed shutdown after the old game has exited and, when configured, after launcher cleanup.
 
-This download contains the overlay and installer only. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. It supports the **PORTHEON `3309ab23f` Windows engine**, including its verified Parsec/two-player derivative, rather than every KytyPS5 build. The installer checks the executable hash before installing.
+This download contains the overlay, asset-free controller-icon patcher, and installer. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. It supports the **PORTHEON `3309ab23f` Windows engine**, including its verified Parsec/two-player derivative, rather than every KytyPS5 build. The installer checks the executable hash before installing.
 
 ## Parsec / two controllers
 
@@ -43,11 +43,15 @@ Install into the same `bin` folder, then launch with PORTHEON's Parsec option en
     <td width="50%"><img src="docs/screenshots/settings-playstation.png" alt="PlayStation button prompts"><br><strong>Xbox or PlayStation overlay prompts</strong></td>
     <td width="50%"><img src="docs/screenshots/restart-pc.png" alt="Restart PC confirmation"><br><strong>Confirmed restart with optional game auto-launch</strong></td>
   </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/live-cheats.png" alt="Cheats with Player 1 pill switches and career additions"><br><strong>Player 1 cheats and career additions</strong></td>
+    <td width="50%"><img src="docs/screenshots/game-button-icons.png" alt="In-game controller icon patch"><br><strong>Xbox or PlayStation in-game controller icons</strong></td>
+  </tr>
 </table>
 
 [Screenshot result](docs/screenshots/screenshot-saved.png) · [Reset confirmation](docs/screenshots/reset-confirmation.png) · [Controller access](docs/screenshots/controller-access.png) · [Game Bar conflict warning](docs/screenshots/gamebar-conflict.png) · [Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
 
-The two game-background images are real game-window captures. The isolated page images come from the same overlay renderer in a test host with power actions disabled.
+The game-background images are real game-window captures. The isolated page images come from the same overlay renderer in a test host with power actions disabled.
 
 ## Controls and Settings
 
@@ -59,7 +63,8 @@ The two game-background images are real game-window captures. The isolated page 
 
 Select **Settings** to open the second settings box:
 
-- **Button icons:** left/right or confirm switches between Xbox A/B and PlayStation cross/circle prompts.
+- **Overlay button icons:** left/right or confirm switches this overlay between Xbox A/B and PlayStation cross/circle prompts.
+- **Patch in-game controller icons...:** choose Xbox or the original PlayStation artwork independently. The Cancel-first confirmation applies the selected theme after the game and its launcher close, then relaunches through your saved launcher settings. It supports extracted PPSA23566 01.006.000 and creates/verifies `.ufc6-xbox-icons-backup.zip` in the game folder. No game assets are bundled. Existing development installs must first be migrated/restored with their original tool; unknown data is left untouched. Uninstalling the overlay keeps game artwork and the backup; restore PlayStation icons before uninstalling if desired. This is labeled **Controller icon patch** on its own page.
 - **Opening shortcut:** confirm starts recording. Release the confirmation button, hold a combination of **2–4 digital buttons** for about half a second, then release to save it. Supported buttons are shoulders, stick clicks, D-pad, face buttons, and Menu/Options. Analog triggers and Guide are not recorded. B/circle alone cancels recording; F10 closes the overlay without changing the shortcut.
 - **UI scale:** left/right changes the whole overlay from **50% to 300%**, in **25% steps**. Confirm resets it to **100%**. The overlay stays centred and automatically shrinks to fit smaller game windows with a margin.
 - **Launch UFC 6 after PC restart:** On by default. Confirm or left/right toggles whether Restart PC reopens UFC 6 at your next Windows sign-in. The Restart PC row and its confirmation show the current On/Off status; the confirmation also points to Settings.
@@ -87,6 +92,30 @@ ControllerAccess=Either
 `Xbox` is the other icon style. The hexadecimal value above is the default shoulder/Menu combination; use the recorder to choose a different combination.
 
 The menu does **not pause emulation**. Its opening combination can trigger normal game bindings during the hold. While open, controller buttons and sticks are neutralized and withheld from the game until the menu closes and buttons are released. Native touchpad/motion paths are not intercepted.
+
+On/Off choices use labeled pill switches. Adjustable values use compact arrow controls, and the selected row has a green outline. Quit and PC power actions use a separate muted red accent.
+
+## Cheats
+
+The Cheats page also includes **Add money** and **Add skill points** for the loaded offline career. Select a row, use left/right to choose an amount, then confirm **Add now**. Opening the confirmation or changing amounts does not modify a balance. If pending, resume and reopen a career page within 30 seconds so the game's career lookup applies the addition. Balances are shown below the rows.
+
+These are one-time additions, saved through the game's normal saving. Keep a save backup before experimenting. Money choices are 1,000 / 10,000 / 100,000 / 1,000,000 / 10,000,000; skill-point choices are 1 / 5 / 10 / 25 / 50 / 100 / 250 / 500 / 1,000. The current verified schema allows up to 2,147,483,647 money and 16,383 skill points. Requests exceeding the actual schema limit are rejected. This changes career skill points, not fighter rating points or online currencies.
+
+Career checks are limited to four probes per second and cache verified schema positions; other lookups only forward to the original game function. Confirming an addition requests an immediate probe.
+
+Career additions execute on a checked default-user career lookup hook using the game's integer setter and change tracking. Root identity, collection, named schemas, row counts, packed buffers and limits are validated before each addition. Changed careers/buffers, missing users and requests not applied within 30 seconds cancel the request. Reset cancels pending additions; it cannot undo additions already saved by the game. Both engine modes use the same verified guest game code.
+
+Open **Cheats** from the main menu. **Infinite stamina** and **No damage** show your selected **On/Off** choice and apply only to **Player 1**. You can select On before entering a fight; it applies automatically when Player 1 is bound. The **Career cheats** heading separates money and skill-point additions from the fight toggles. Confirm or left/right toggles each cheat. Choices last for the current game session.
+
+Player 1 is resolved from the game's `Fighter_ControllerInputMask` binding, so the cheat follows controller assignment rather than assuming fighter index 0 or using the fighter's current screen position. Ambiguous or unavailable assignments wait for valid game data. If controller assignment changes, the old fighter's override is cleared before the new fighter receives it.
+
+The mod uses a checked in-memory hook in the game's binding update. It changes Player 1's bound boolean on the game thread and then calls the original synchronization function, keeping the game's authoritative values consistent. The opponent is left alone. Off maintains a disabled value for fighters previously controlled by the overlay. Settings reset stops active cheats. Earlier damage or lost maximum stamina is not undone.
+
+The hook waits for initialized named flags, validates its exact code signature, and uses the overlay's existing thread-freeze mechanism during installation. Names, binding types, controller masks, player indices and byte values are validated; relocated tables are handled without stale-pointer writes. The cheat hook supports verified game code 01.005/01.006. Other overlay features retain their existing support. No game/launcher files are changed by toggles.
+
+PORTHEON launch-time cheats display **PORTHEON On** and remain under launcher control. Disable them in PORTHEON and restart once before using live overlay control. **Game On** means an unmanaged game/practice flag is already enabled; confirming requests Off for Player 1.
+
+Stamina prevention and an unaffected opponent were verified in a fight. Native fixtures cover controller-to-fighter reassignment, stable Off, hook calling convention, relocated tables and failed writes. The final Player 1-only interface is being verified before a public release.
 
 ## Screenshots
 
@@ -122,7 +151,7 @@ Verification uses the test helper with power APIs compiled out and a file in pla
 
 ## Install, upgrade, and remove
 
-Download **`UFC6-Actions-Overlay-Setup-0.8.4.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
+Download **`UFC6-Actions-Overlay-Setup-0.9.3.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
 
 1. Close UFC 6 and its launcher.
 2. Click **Browse** and select the UFC 6 game folder or its **bin** folder containing **`UFC 6.exe`**.
@@ -134,7 +163,7 @@ To uninstall, run the same setup EXE, choose the same folder, and click **Remove
 
 Version 0.8.2 fixes startup when Windows prefers system DLLs, which can bypass an app-local `version.dll`. The bridge uses the engine's existing non-system runtime import and enables the Vulkan layer only inside the game process. It preserves the Windows security policy, checks all required overlay files before enabling the layer, and does not register a system-wide Vulkan layer. Production rendering is in-frame only; a desktop popup cannot appear behind the game. The installer accepts only the verified original runtime SHA-256, and rejects unknown replacements.
 
-The full **`UFC6-Actions-Overlay-0.8.4.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
+The full **`UFC6-Actions-Overlay-0.9.3.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
 
 The Python command-line manager remains available for development and scripting:
 
@@ -145,7 +174,7 @@ python manage_menu.py install --bin-dir "D:\Games\UFC6\bin"
 
 Restart UFC 6 once after installing an update. Already loaded DLLs remain active until the game exits. Replace the example path with your own game's bin folder. If omitted, `--bin-dir` defaults to `bin` under the current working directory.
 
-The installer manages `version.dll`, `ufc6_menu_layer.dll`, `ufc6_menu_layer.json`, `ufc6_menu_restart.exe`, and the `libwinpthread-1.dll` startup bridge. It verifies the original threading runtime before preserving it as `ufc6_pthread_original.dll`; that original is never downloaded or bundled. Uninstall restores it byte-for-byte. Keep this original-runtime copy and use the current setup to remove the overlay. It verifies all hashes, backs up recognized older versions, installs the core last, and rolls back changes if a commit fails. Unknown files, including unrelated mods using `version.dll`, are left untouched. Settings, screenshots, diagnostic logs, and backups are preserved.
+The installer manages `version.dll`, `ufc6_menu_layer.dll`, `ufc6_menu_layer.json`, `ufc6_menu_restart.exe`, `ufc6_menu_icons.exe`, and the `libwinpthread-1.dll` startup bridge. It verifies the original threading runtime before preserving it as `ufc6_pthread_original.dll`; that original is never downloaded or bundled. Uninstall restores it byte-for-byte. Keep this original-runtime copy and use the current setup to remove the overlay. It verifies all hashes, backs up recognized older versions, installs the core last, and rolls back changes if a commit fails. The bundled game-icons helper includes Python, so users do not need to install Python. Its source, recipe and runtime notices are under `vendor/xbox-icons` and `src/game_icons_helper.py`. Unknown files, including unrelated mods using `version.dll`, are left untouched. Settings, screenshots, diagnostic logs, and backups are preserved.
 
 Close the game before uninstalling:
 
@@ -166,7 +195,9 @@ The DLL separately verifies the image size, timestamp, and hook bytes. The exact
 ## Build and verification
 
 ```powershell
-python -m pip install --target .tools ziglang==0.17.1
+python -m pip install --target .tools ziglang==0.17.1 PyInstaller==6.22.3 pyinstaller-hooks-contrib==2026.9
+python -m pip install Pillow==12.1.0  # Screenshot/render verification
+.\build-icons.ps1 -DependencyPath .tools
 .\build.ps1
 .\build.ps1 -Test
 .\build-setup.ps1 -Test

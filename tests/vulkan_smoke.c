@@ -108,7 +108,7 @@ int main(void){
     Sleep(400);toggle();Sleep(100);if(screenshot)screenshot();
     for(int frame=0;frame<8;++frame){
         if(button&&scale){
-            if(frame==1){for(int i=0;i<3;++i)press(button,0x40);press(button,0x4000);press(button,0x40);press(button,0x40);}
+            if(frame==1){for(int i=0;i<4;++i)press(button,0x40);press(button,0x4000);press(button,0x40);press(button,0x40);}
             if(frame==2){for(int i=0;i<4;++i)press(button,0x20);if(scale()!=200)return 1;}
             if(frame==3){for(int i=0;i<4;++i)press(button,0x20);if(scale()!=300)return 1;}
             if(frame==4){for(int i=0;i<10;++i)press(button,0x80);if(scale()!=50)return 1;}

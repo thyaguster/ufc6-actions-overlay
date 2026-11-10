@@ -17,3 +17,7 @@ This is an unofficial community tool, not affiliated with EA, Sony, Microsoft, P
 ## User-provided threading runtime
 
 The startup bridge declares API forwarders for the engine's `libwinpthread-1.dll`. The original winpthreads DLL is not distributed. Setup verifies the user's installed original, preserves its bytes under `ufc6_pthread_original.dll`, and restores it on uninstall. Forwarder tests use a tiny source-built stand-in; it contains no original runtime or game bytes.
+
+## UFC 6 Xbox Controller Icons
+
+The asset-free `patcher_core.py` and version profile under `vendor/xbox-icons` come from [thyaguster/ufc6-xbox-icons](https://github.com/thyaguster/ufc6-xbox-icons), v1.0.1. They retain their MIT license and notices. Replacement artwork is generated exclusively from the user's own game files. No game assets or restore backups are distributed. The helper bundles CPython and PyInstaller; see `vendor/xbox-icons/THIRD-PARTY-NOTICES.md` and `runtime-licenses/` for the complete runtime terms.

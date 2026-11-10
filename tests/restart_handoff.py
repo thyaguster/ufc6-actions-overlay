@@ -57,6 +57,17 @@ with tempfile.TemporaryDirectory(prefix="restart fixture ",dir=root/".build") as
             text=marker.read_text(encoding="utf-8")
             assert f"cwd={working}" in text and "arg2=path with spaces" in text and "arg3=ação" in text
         else:assert marker.read_text()=="--play --headless --ui-lang en"
+        # The marker is written immediately before exit. Wait for the relaunched
+        # fixture's image mapping to be released before TemporaryDirectory removes it.
+        assert launcher.resolve().is_relative_to((root/".build").resolve())
+        deadline=time.monotonic()+5
+        while True:
+            try:
+                with launcher.open("r+b"):pass
+                break
+            except PermissionError:
+                if time.monotonic()>=deadline:raise
+                time.sleep(.02)
         print("PASS: rejected wrong launcher, waited for game AND launcher, and relaunched once with correct arguments and spaced paths.")
     finally:
         for event in events:k.SetEvent(event)

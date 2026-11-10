@@ -114,7 +114,7 @@ namespace UFC6OverlaySetup {
             foreach (var process in Process.GetProcesses()) using (process) {
                 string name;
                 try { name = process.ProcessName; } catch { continue; }
-                if (!string.Equals(name,"UFC 6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC 6 Parsec",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_restart",StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(name,"UFC 6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC 6 Parsec",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"UFC6",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_restart",StringComparison.OrdinalIgnoreCase) && !string.Equals(name,"ufc6_menu_icons",StringComparison.OrdinalIgnoreCase)) continue;
                 try {
                     string path = process.MainModule.FileName;
                     if (string.Equals(Path.GetDirectoryName(path),folder,StringComparison.OrdinalIgnoreCase) || string.Equals(path,Path.Combine(Directory.GetParent(folder).FullName,"UFC6.exe"),StringComparison.OrdinalIgnoreCase))

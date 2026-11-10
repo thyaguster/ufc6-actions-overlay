@@ -23,11 +23,15 @@ jobs:
           architecture: x64
 
       - name: Install pinned compiler
-        run: python -m pip install --target .tools ziglang==0.17.1
+        run: |
+          python -m pip install --target .tools ziglang==0.17.1 PyInstaller==6.22.3 pyinstaller-hooks-contrib==2026.9
+          python -m pip install Pillow==12.1.0
 
       - name: Build overlay
         shell: pwsh
-        run: .\build.ps1
+        run: |
+          .\build-icons.ps1 -DependencyPath .tools
+          .\build.ps1
 
       - name: Run safe controller and handoff tests
         shell: pwsh
