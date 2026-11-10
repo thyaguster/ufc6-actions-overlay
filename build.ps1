@@ -30,7 +30,7 @@ if (-not $Test) {
     if ($LASTEXITCODE) { throw 'Vulkan layer compilation failed' }
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     $manifest = [ordered]@{
-        version = '0.9.6'
+        version = '0.9.7'
         parsec_engine_sha256 = 'ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d'
         engine_revision = '3309ab23f'
         engine_sha256 = 'f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2'

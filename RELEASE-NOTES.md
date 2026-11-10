@@ -1,3 +1,11 @@
+# UFC 6 Actions Overlay v0.9.7
+
+- Replaces the classic installer and updater windows with a matching dark theme, rounded panels and buttons, a custom title bar, and crisp UFC 6 branding.
+- Adds the modern Windows Explorer folder picker for Browse.
+- Keeps the existing compatibility checks, installation/rollback behavior, update verification, and normal/Parsec support. Game code is unchanged.
+
+Validated installer/update checks, rendered both windows for visual review, and exercised Browse and cancellation in the actual modern folder picker without modifying game files.
+
 # UFC 6 Actions Overlay v0.9.6
 
 - Replaces the U6 monogram with a full **UFC 6** icon: white UFC lettering and a large red 6.

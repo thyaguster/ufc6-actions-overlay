@@ -24,7 +24,7 @@
 
 1. [Download the latest installer](https://github.com/thyaguster/ufc6-actions-overlay/releases/latest) — choose **UFC6-Actions-Overlay-Setup-*.exe**.
 2. Close UFC 6 and PORTHEON, run the installer, and choose your **UFC6 game folder** (or its **bin** folder).
-3. Click **Check folder**, then **Install / Update**.
+3. Click **Check folder**, then **Install / Update**. The installer checks compatibility before enabling installation.
 4. Launch UFC 6 normally. Hold **LB + RB + Menu/Start** for about one second, then release; **F10** also opens the overlay.
 
 **Install once for both normal UFC 6 and PORTHEON's supported Parsec/two-player mode. No extra overlay steps are needed for Parsec.** The Xbox game button-icons mod is included; no separate Python or button-mod installation is required.
@@ -195,7 +195,7 @@ Verification uses the test helper with power APIs compiled out and a file in pla
 
 ## Install, upgrade, and remove
 
-Download **`UFC6-Actions-Overlay-Setup-0.9.6.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
+Download **`UFC6-Actions-Overlay-Setup-0.9.7.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
 
 1. Close UFC 6 and its launcher.
 2. Click **Browse** and select the UFC 6 game folder or its **bin** folder containing **`UFC 6.exe`**.
@@ -207,7 +207,7 @@ To uninstall, run the same setup EXE, choose the same folder, and click **Remove
 
 Version 0.8.2 fixes startup when Windows prefers system DLLs, which can bypass an app-local `version.dll`. The bridge uses the engine's existing non-system runtime import and enables the Vulkan layer only inside the game process. It preserves the Windows security policy, checks all required overlay files before enabling the layer, and does not register a system-wide Vulkan layer. Production rendering is in-frame only; a desktop popup cannot appear behind the game. The installer accepts only the verified original runtime SHA-256, and rejects unknown replacements.
 
-The full **`UFC6-Actions-Overlay-0.9.6.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
+The full **`UFC6-Actions-Overlay-0.9.7.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
 
 The Python command-line manager remains available for development and scripting:
 

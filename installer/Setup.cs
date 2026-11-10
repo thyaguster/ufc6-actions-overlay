@@ -183,31 +183,40 @@ namespace UFC6OverlaySetup {
             return remove ? "Overlay removed. Settings, screenshots, and upgrade backups were kept." : "Overlay v" + Version + " installed.\r\nLaunch UFC 6 normally, then hold LB + RB + Menu for about one second, or press F10.\r\n\r\nSettings and screenshots were kept. Recognized older files were backed up.";
         }
     }
-    public sealed class SetupForm : Form {
+    public sealed class SetupForm : ModernForm {
         readonly Manager manager;
         readonly TextBox folder = new TextBox();
         readonly TextBox status = new TextBox();
-        readonly Button browse = new Button(), check = new Button(), install = new Button(), remove = new Button(), updates = new Button();
+        readonly ModernButton browse = new ModernButton(), check = new ModernButton(), install = new ModernButton(), remove = new ModernButton(), updates = new ModernButton();
         bool busy;
         public SetupForm(Manager manager) {
             this.manager = manager;
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             Text = "UFC 6 Actions Overlay Setup — v" + manager.Version;
-            Font = new Font("Segoe UI",10); ClientSize = new Size(680,440); MinimumSize = Size; MaximumSize = Size;
-            FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen; AutoScaleMode = AutoScaleMode.Dpi;
-            var title = new Label { Text = "UFC 6 Actions Overlay", Font = new Font("Segoe UI",18,FontStyle.Bold), Bounds = new Rectangle(24,20,630,42) };
-            var hint = new Label { Text = "Choose the UFC 6 game folder or its bin folder.\r\nOne install supports normal UFC 6 and verified Parsec mode.", Bounds = new Rectangle(26,68,620,52) };
-            folder.SetBounds(26,129,500,28); browse.Text = "Browse…"; browse.SetBounds(538,127,114,32);
-            updates.Text = "Check for updates"; updates.SetBounds(480,170,172,34);
-            updates.Click += delegate { using(var update = new UpdateForm(manager.Version,folder.Text)) { update.ShowDialog(this); if(update.InstallerOpened)Close(); } };
-            check.Text = "Check folder"; check.SetBounds(26,170,140,34);
-            status.SetBounds(26,215,626,142); status.Multiline = true; status.ReadOnly = true; status.BorderStyle = BorderStyle.FixedSingle; status.BackColor = SystemColors.Window; status.ScrollBars = ScrollBars.Vertical;
-            status.Text = "Select your game folder, then click Check folder.\r\nNo files are changed until you choose Install / Update or Remove.";
-            install.Text = "Install / Update"; install.SetBounds(306,378,170,38); install.Enabled = false;
-            remove.Text = "Remove overlay"; remove.SetBounds(488,378,164,38); remove.Enabled = false;
-            Controls.AddRange(new Control[] {title,hint,folder,browse,check,updates,status,install,remove});
-            AcceptButton = check;
-            browse.Click += delegate { using (var dialog = new FolderBrowserDialog { Description = "Select the UFC 6 game folder or its bin folder", ShowNewFolderButton = false }) { if (Directory.Exists(folder.Text)) dialog.SelectedPath = folder.Text; if (dialog.ShowDialog(this) == DialogResult.OK) { folder.Text = dialog.SelectedPath; Run(null); } } };
+            ClientSize=new Size(760,660);
+            var title=ModernUi.Label("UFC 6 Actions Overlay",116,74,600,38,21,true);
+            var hint=ModernUi.Label("INSTALL  /  UPDATE  /  REMOVE",118,116,580,24,9,false,true);
+            var version=ModernUi.Label("SETUP  v"+manager.Version,32,145,620,20,9,false,true);
+            var pathCard=new ModernCard {Bounds=new Rectangle(32,178,696,182)};
+            pathCard.Controls.Add(ModernUi.Label("1   Choose your game folder",20,16,650,28,12,true));
+            pathCard.Controls.Add(ModernUi.Label("Select the UFC6 folder or its bin folder.",20,48,650,22,10,false,true));
+            var input=new ModernCard {Bounds=new Rectangle(20,80,500,44)};
+            folder.SetBounds(14,11,472,26);folder.BorderStyle=BorderStyle.None;folder.BackColor=ModernUi.Card;folder.ForeColor=ModernUi.Text;folder.Font=new Font("Segoe UI",11);input.Controls.Add(folder);
+            browse.Text="Browse...";browse.SetBounds(536,80,140,44);
+            check.Text="Check folder";check.SetBounds(20,136,140,32);
+            updates.Text="Check for updates";updates.SetBounds(506,136,170,32);
+            pathCard.Controls.AddRange(new Control[]{input,browse,check,updates,ModernUi.Label("One install for normal + Parsec",176,141,320,24,9,false,true)});
+            var infoCard=new ModernCard {Bounds=new Rectangle(32,376,696,174)};
+            infoCard.Controls.Add(ModernUi.Label("2   Check compatibility",20,16,650,27,12,true));
+            status.SetBounds(20,52,656,104);ModernUi.Status(status);
+            status.Text="Select your game folder, then click Check folder.\r\nNothing changes until you choose Install / Update or Remove.";infoCard.Controls.Add(status);
+            install.Text="Install / Update";install.SetBounds(288,574,214,44);install.Tone=ButtonTone.Primary;install.Enabled=false;
+            remove.Text="Remove overlay";remove.SetBounds(518,574,210,44);remove.Tone=ButtonTone.Danger;remove.Enabled=false;
+            var kept=ModernUi.Label("Settings, screenshots and save backups are kept.",32,631,696,22,9,false,true);
+            Controls.AddRange(new Control[]{ModernUi.Logo(32,70,66),title,hint,version,pathCard,infoCard,install,remove,kept});
+            updates.Click+=delegate{using(var update=new UpdateForm(manager.Version,folder.Text)){update.ShowDialog(this);if(update.InstallerOpened)Close();}};
+            AcceptButton=check;
+            browse.Click+=delegate{try{string selected=FolderPicker.Select(Handle,folder.Text);if(selected!=null){folder.Text=selected;Run(null);}}catch(Exception error){status.Text="Could not open the folder picker: "+error.Message;}};
             folder.TextChanged += delegate { install.Enabled = remove.Enabled = false; };
             check.Click += delegate { Run(null); };
             install.Click += delegate { Run(false); };

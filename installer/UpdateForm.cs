@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+﻿// SPDX-License-Identifier: GPL-2.0-only
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -6,25 +6,26 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 namespace UFC6OverlaySetup {
- public sealed class UpdateForm:Form {
+ public sealed class UpdateForm:ModernForm {
   readonly string installed,folder;
   readonly TextBox status=new TextBox();
-  readonly Button check=new Button(),download=new Button(),details=new Button();
+  readonly ModernButton check=new ModernButton(),download=new ModernButton(),details=new ModernButton();
   OverlayUpdate release;
   public bool InstallerOpened {get;private set;}
   public UpdateForm(string installed,string folder,bool automatic=true){
    this.installed=installed;this.folder=folder;
-   Text="UFC 6 Actions Overlay Updates";Font=new Font("Segoe UI",10);ClientSize=new Size(620,310);FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;StartPosition=FormStartPosition.CenterParent;AutoScaleMode=AutoScaleMode.Dpi;
-   Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-   var title=new Label {Text="Overlay updates",Font=new Font("Segoe UI",18,FontStyle.Bold),Bounds=new Rectangle(24,18,560,40)};
-   var current=new Label {Text="Installed version: v"+installed,Bounds=new Rectangle(26,64,560,26)};
-   status.SetBounds(26,100,568,108);status.Multiline=true;status.ReadOnly=true;status.BackColor=SystemColors.Window;status.ScrollBars=ScrollBars.Vertical;
-   status.Text="Check the latest stable release on GitHub.\r\nClose UFC 6 and its launcher before installing an update.\r\nYour settings, screenshots and save backups are kept.";
-   check.Text="Check for updates";check.SetBounds(26,225,160,38);
-   details.Text="Release page";details.SetBounds(198,225,130,38);
-   download.Text="Download && open installer";download.SetBounds(340,225,254,38);download.Enabled=false;
-   var hint=new Label {Text="Downloads are verified before the installer opens.",Bounds=new Rectangle(26,276,568,24)};
-   Controls.AddRange(new Control[]{title,current,status,check,details,download,hint});
+   Text="UFC 6 Actions Overlay Updates";ClientSize=new Size(680,470);
+   var title=ModernUi.Label("Overlay updates",110,70,530,40,22,true);
+   var current=ModernUi.Label("Installed version  v"+installed,112,116,530,24,10,false,true);
+   var info=new ModernCard {Bounds=new Rectangle(28,164,624,172)};
+   info.Controls.Add(ModernUi.Label("Latest release",20,16,584,27,12,true));
+   status.SetBounds(20,52,584,100);ModernUi.Status(status);
+   status.Text="Check the latest stable release on GitHub.\r\nClose UFC 6 and its launcher before installing an update.\r\nYour settings, screenshots and save backups are kept.";info.Controls.Add(status);
+   check.Text="Check for updates";check.SetBounds(28,358,168,44);
+   details.Text="Release page";details.SetBounds(208,358,130,44);
+   download.Text="Download && open installer";download.SetBounds(350,358,302,44);download.Tone=ButtonTone.Primary;download.Enabled=false;
+   var hint=ModernUi.Label("Downloads are verified before the installer opens.",28,424,624,24,9,false,true);
+   Controls.AddRange(new Control[]{ModernUi.Logo(28,66,64),title,current,info,check,details,download,hint});
    check.Click+=delegate{Check();};details.Click+=delegate{Process.Start(new ProcessStartInfo(release==null?UpdateClient.LatestPage:release.Page){UseShellExecute=true});};download.Click+=delegate{Download();};
    if(automatic)Shown+=delegate{Check();};
   }
