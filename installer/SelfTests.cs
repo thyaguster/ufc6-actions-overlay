@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: GPL-2.0-only
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -151,6 +151,10 @@ namespace UFC6OverlaySetup {
                 var embedded = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Release>(Encoding.UTF8.GetString(Program.Resource("release.json")).TrimStart('\ufeff'));
                 new Manager(embedded,embedded.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n => n,n => Program.Resource(n)));
                 passed.Add("PASS: all actual bundled release files match the embedded manifest.");
+                var diagnosticHashes=new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Dictionary<string,string>>(Encoding.UTF8.GetString(Program.Resource("diagnostics-components.json")).TrimStart('\ufeff'));
+                Assert(diagnosticHashes["version.dll"]==embedded.dll_sha256,"Diagnostic core fingerprint must match the shipped core.");
+                foreach(var item in embedded.companion_files.Where(p=>p.Key!="ufc6_menu_update.exe"))Assert(diagnosticHashes[item.Key]==item.Value,"Diagnostic companion fingerprint must match the shipped payload: "+item.Key);
+                passed.Add(DiagnosticsTests.Run());
                 File.WriteAllLines(report,passed);
             } finally {
                 // Only this randomly created test directory is removed.

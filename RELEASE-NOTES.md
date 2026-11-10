@@ -1,3 +1,13 @@
+# UFC 6 Actions Overlay v0.9.9
+
+- Add local support-report export from Settings and setup, including component hashes/build comparisons, runtime/module information and bounded, path-redacted overlay logs. No uploads or save collection.
+- Add core build markers to logs and keep a desktop support path available when the overlay cannot be seen.
+- Add a confirmed one-time career fitness restoration to 100%, using the existing checked selected-user hook and game setter.
+- Scroll Cheats as it grows, preserving row spacing and controller/mouse navigation.
+- Add a confirmed one-time refill to seven training days, bound to the selected fighter's verified camp reference, row and week.
+
+Validated in a live Parsec career: fitness restores to 100%, training days refill to seven without changing the week, and days decrease normally afterward. Installer, diagnostics privacy/archive tests, 29 Python tests and native controller/rendering/handoff checks passed.
+
 # UFC 6 Actions Overlay v0.9.8
 
 - Recognize PORTHEON 6.2's rebuilt bundled overlay files and upgrade them through the existing verified, backed-up transaction. Unknown DLLs remain protected.

@@ -47,6 +47,16 @@ PORTHEON's **Parsec mode** uses a separate `UFC 6 Parsec.exe` with its own two-p
 
 Install into the same `bin` folder, then launch with PORTHEON's Parsec option enabled. Either pad can open a new menu; Guide and F10 let the first fresh navigation press claim the menu through XInput or the game's controller input. Xbox opening combinations use the matching XInput pad when available. Other pads cannot navigate an already-owned menu. Both pads are withheld from gameplay while the menu is open, and held digital buttons must be released before gameplay input resumes. Restart and quit recognize both supported engine filenames. This does not add Parsec networking or two-player routing itself; those remain PORTHEON's features.
 
+## Diagnostics and support reports
+
+Use **Settings → Export support report...**, then **Export support report** in the desktop window. If the overlay is invisible, run the installer, select your game folder, click **Check folder**, and use **Export support report...** there. Export does not require installing or closing the game.
+
+![Local support-report export](docs/screenshots/diagnostics.png)
+
+Reports are stored in **Documents\UFC6 Actions Overlay\SupportReports** as unique ZIP files. They contain component hashes and comparisons with the reporting build, supported-engine checks, loaded overlay module names, renderer state when opened from the overlay, and the last 512 KiB of each of the two overlay logs. Missing files and logs are recorded. Logs may include earlier sessions; v0.9.9 adds a core build marker to distinguish them.
+
+Windows and network paths are redacted. Saves, screenshots, launcher arguments, account details and game content are excluded. Nothing is uploaded; review the ZIP before sharing it in an issue. The desktop window's **Show report in folder** button selects the saved archive.
+
 ## Screenshots
 
 <table>
@@ -145,6 +155,10 @@ Each backup is a separate timestamped ZIP in your Windows **Documents / UFC6 Act
 
 The Cheats page also includes **Add money** and **Add skill points** for the loaded offline career. Select a row, use left/right to choose an amount, then confirm **Add now**. Opening the confirmation or changing amounts does not modify a balance. If pending, resume and reopen a career page within 30 seconds so the game's career lookup applies the addition. Balances are shown below the rows.
 
+**Restore fitness to 100%** is a one-time career action with a Cancel-first confirmation. It uses the selected career fighter's verified `Fitness` field and the game's setter/change tracking, preserving neighboring packed values. Resume and reopen a career screen if the action is queued. This sets fitness once; it does not freeze fitness or remove injuries. Back up your saves before testing career changes.
+
+**Refill training days** restores the active camp's remaining training days to **7**, with confirmation. It follows the selected fighter's checked camp reference and current record row, and leaves the training week unchanged. Requests are cancelled if the career, camp, week or packed storage changes. It applies once; days can be spent normally afterward. It is unavailable outside an active training camp.
+
 These are one-time additions, saved through the game's normal saving. Keep a save backup before experimenting. Money choices are 1,000 / 10,000 / 100,000 / 1,000,000 / 10,000,000; skill-point choices are 1 / 5 / 10 / 25 / 50 / 100 / 250 / 500 / 1,000. The current verified schema allows up to 2,147,483,647 money and 16,383 skill points. Requests exceeding the actual schema limit are rejected. This changes career skill points, not fighter rating points or online currencies.
 
 Career checks are limited to four probes per second and cache verified schema positions; other lookups only forward to the original game function. Confirming an addition requests an immediate probe.
@@ -197,7 +211,7 @@ Verification uses the test helper with power APIs compiled out and a file in pla
 
 ## Install, upgrade, and remove
 
-Download **`UFC6-Actions-Overlay-Setup-0.9.8.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
+Download **`UFC6-Actions-Overlay-Setup-0.9.9.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
 
 1. Close UFC 6 and its launcher.
 2. Click **Browse** and select the UFC 6 game folder or its **bin** folder containing **`UFC 6.exe`**.
@@ -209,7 +223,7 @@ To uninstall, run the same setup EXE, choose the same folder, and click **Remove
 
 Version 0.8.2 fixes startup when Windows prefers system DLLs, which can bypass an app-local `version.dll`. The bridge uses the engine's existing non-system runtime import and enables the Vulkan layer only inside the game process. It preserves the Windows security policy, checks all required overlay files before enabling the layer, and does not register a system-wide Vulkan layer. Production rendering is in-frame only; a desktop popup cannot appear behind the game. The installer accepts the verified original runtime and recognized overlay bridges, including PORTHEON 6.2's rebuild; it rejects unknown replacements. The original runtime must still be available in `libwinpthread-1.dll` or its preserved `ufc6_pthread_original.dll` copy.
 
-The full **`UFC6-Actions-Overlay-0.9.8.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
+The full **`UFC6-Actions-Overlay-0.9.9.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
 
 The Python command-line manager remains available for development and scripting:
 

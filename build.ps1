@@ -24,13 +24,13 @@ if ($LASTEXITCODE) { throw 'Restart helper compilation failed' }
 & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -shared -Isrc src/pthread_bridge.c src/pthread_bridge.def -lkernel32 -o dist/libwinpthread-1.dll
 if ($LASTEXITCODE) { throw 'Startup bridge compilation failed' }
 if (-not $Test) {
-    & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     if (-not (Test-Path -LiteralPath 'dist/ufc6_menu_icons.exe')) { & (Join-Path $root 'build-icons.ps1'); if ($LASTEXITCODE) { throw 'Icons helper build failed' } }
     & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -shared -Ivendor/vulkan-headers/include src/vulkan_menu_layer.c src/screenshot_png.c src/screenshot_folder.c src/vulkan_layer.def -lkernel32 -lole32 -lwindowscodecs -luuid -lshell32 -o dist/ufc6_menu_layer.dll
     if ($LASTEXITCODE) { throw 'Vulkan layer compilation failed' }
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
+    & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     $manifest = [ordered]@{
-        version = '0.9.8'
+        version = '0.9.9'
         parsec_engine_sha256 = 'ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d'
         engine_revision = '3309ab23f'
         engine_sha256 = 'f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2'

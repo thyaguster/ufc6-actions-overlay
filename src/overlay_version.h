@@ -1,0 +1,4 @@
+#ifndef UFC6_OVERLAY_VERSION_H
+#define UFC6_OVERLAY_VERSION_H
+#define UFC6_OVERLAY_VERSION "0.9.9"
+#endif

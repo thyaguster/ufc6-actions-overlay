@@ -153,13 +153,21 @@ try:
         press(0x4000);assert page()==8
         render("career-add-points-confirm.png")
         press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==3
+        press(0x40);press(0x4000);assert page()==8
+        render("career-fitness-confirm.png")
+        press(0x40);press(0x4000);assert page()==7
+        render("cheats-fitness.png")
+        press(0x40);press(0x4000);assert page()==8
+        render("career-training-days-confirm.png")
+        press(0x40);press(0x4000);assert page()==7
+        render("cheats-training-days.png")
         press(0x40);press(0x4000);assert page()==11
         render("savegame-backups.png")
         press(0x4000);assert page()==11
         render("savegame-backup-request.png")
         press(0x40);press(0x4000);assert page()==11
-        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==4
-        press(0x40);press(0x4000);assert page()==0 and dll.MenuTestSnapshot()&15==3
+        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==6
+        press(0x40);render("cheats-back-scrolled.png");press(0x4000);assert page()==0 and dll.MenuTestSnapshot()&15==3
         press(0x40);press(0x4000)
         for _ in range(9):press(0x40)
         press(0x4000);press(0x40);press(0x4000)
@@ -437,6 +445,9 @@ try:
         render("settings-updates.png")
         press(0x4000);assert (dll.MenuTestSnapshot()>>12)&15==1 and dll.MenuTestSnapshot()&0x100
         press(0x40);assert dll.MenuTestSnapshot()&0xf==12
+        render("settings-diagnostics.png")
+        press(0x4000);assert (dll.MenuTestSnapshot()>>12)&15==1 and dll.MenuTestSnapshot()&0x100
+        press(0x40);assert dll.MenuTestSnapshot()&0xf==13
         render("settings-back.png")
         press(0x4000);assert (dll.MenuTestSnapshot()>>12)&7==0
         assert windows_preference()==original_windows,"UI test must never change the actual Windows Game Bar preference"

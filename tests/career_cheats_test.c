@@ -6,6 +6,7 @@
 #define CAREER_CHEATS_TEST
 #include "../src/career_cheats.c"
 static unsigned writes,dirty_calls;
+static unsigned char camp_store[80],camp_schema[80],camp_descriptors[32*80],camp_buffer[2048];
 static unsigned char root[64],registry[80],registry_schema[80],registry_fields[5*80],owner[0x130];
 static uintptr_t stores[526];
 static unsigned char store[2][80],schemas[2][80],descriptors[2][64*80],buffers[2][2048];
@@ -16,15 +17,18 @@ static void label(unsigned char *where,const char *value){
     else{putptr(where,value);where[15]=128;}
 }
 static uint32_t __attribute__((sysv_abi)) mock_get(uintptr_t s,uint32_t row,uint32_t index){
-    assert(row==0);int k=s==(uintptr_t)store[0]?0:1;assert(index==(k==0?48u:10u));CareerField f;assert(describe(s,k,&f));return f.value;
+    if(s==(uintptr_t)camp_store){CareerField f;assert(index==10&&training_field(s,row,index,10,&f));return f.value;}
+    assert(row==0);int k=s==(uintptr_t)store[0]?(index==50?CAREER_FITNESS:0):1;assert(index==(k==0?48u:k==CAREER_FITNESS?50u:10u));CareerField f;assert(describe(s,k,&f));return f.value;
 }
 static void __attribute__((sysv_abi)) mock_set(uintptr_t s,uint32_t row,uint32_t index,uint32_t value){
-    assert(row==0);int k=s==(uintptr_t)store[0]?0:1;CareerField f;assert(describe(s,k,&f)&&f.index==index);uint32_t word=0;assert(u32(f.address,&word));
+    if(s==(uintptr_t)camp_store){CareerField f;uint32_t word=0;assert(index==10&&training_field(s,row,index,10,&f)&&u32(f.address,&word));word=(word&~(f.maximum<<f.shift))|((value<<f.shift)&(f.maximum<<f.shift));memcpy((void*)f.address,&word,4);++writes;return;}
+    assert(row==0);int k=s==(uintptr_t)store[0]?(index==50?CAREER_FITNESS:0):1;CareerField f;assert(describe(s,k,&f)&&f.index==index);uint32_t word=0;assert(u32(f.address,&word));
     uint32_t mask=f.maximum<<f.shift;word=(word&~mask)|((value<<f.shift)&mask);memcpy((void*)f.address,&word,4);++writes;
 }
-static void __attribute__((sysv_abi)) mock_dirty(uintptr_t s){assert(s==(uintptr_t)store[0]||s==(uintptr_t)store[1]);++dirty_calls;}
-static uint32_t value(int k){CareerField f;assert(describe((uintptr_t)store[k],k,&f));return f.value;}
+static void __attribute__((sysv_abi)) mock_dirty(uintptr_t s){assert(s==(uintptr_t)store[0]||s==(uintptr_t)store[1]||s==(uintptr_t)camp_store);++dirty_calls;}
+static uint32_t value(int k){CareerField f;assert(describe((uintptr_t)store[k==CAREER_FITNESS?0:k],k,&f));return f.value;}
 static void __attribute__((sysv_abi)) mock_set_packed(uintptr_t p,uint32_t row,uint32_t index,uint32_t amount){
+    if(p==(uintptr_t)camp_buffer){mock_set((uintptr_t)camp_store,row,index,amount);return;}
     assert(p==(uintptr_t)buffers[0]||p==(uintptr_t)buffers[1]);mock_set((uintptr_t)store[p==(uintptr_t)buffers[0]?0:1],row,index,amount);
 }
 static unsigned char *page(unsigned char *base,uintptr_t offset){unsigned char *p=base+(offset&~(uintptr_t)4095);assert(VirtualAlloc(p,4096,MEM_COMMIT,PAGE_EXECUTE_READWRITE)==p);return base+offset;}
@@ -46,6 +50,14 @@ int main(void){
     }
     label(descriptors[0],"IsUserControlled");label(descriptors[0]+38*80,"RatingCashAvailable");label(descriptors[0]+48*80,"Cash");label(descriptors[0]+61*80,"RatingProgress");
     label(descriptors[1]+2*80,"LastSkillPointsEarned");label(descriptors[1]+10*80,"SkillPoints");label(descriptors[1]+11*80,"TotalXp");
+    label(descriptors[0]+50*80,"Fitness");uint16_t fit_bits=15;memcpy(descriptors[0]+50*80+0x30,&fit_bits,2);put32(descriptors[0]+50*80+0x38,2);put32(buffers[0]+0x20+50*4,41);put32(buffers[0]+324,0xf0000001u|(7900<<9));
+    putptr(camp_store,(void*)(guest+0x9bf7be8));putptr(camp_store+8,camp_schema);putptr(camp_store+0x10,owner);putptr(camp_store+0x30,camp_buffer);put32(camp_store+0x2c,0x1016);stores[22]=(uintptr_t)camp_store;
+    putptr(camp_schema+0x30,camp_descriptors);putptr(camp_schema+0x38,camp_descriptors+sizeof(camp_descriptors));
+    label(camp_descriptors+2*80,"CampLength");label(camp_descriptors+10*80,"CurrentPoints");label(camp_descriptors+11*80,"CurrentWeek");label(camp_descriptors+25*80,"Sessions");
+    put32(camp_buffer+0xc,4);put32(camp_buffer+0x10,4);put32(camp_buffer+0x18,64);
+    for(int i=0;i<3;++i){unsigned index=i==0?2:i==1?10:11;uint16_t n=index==10?10:7;memcpy(camp_descriptors+index*80+0x30,&n,2);put32(camp_descriptors+index*80+0x38,2);put32(camp_buffer+0x20+index*4,index==2?32:index==10?0:16);}
+    for(int row=0;row<4;++row){put32(camp_buffer+(64+row*4)*4,0xa0000000u+(row==2?0:row+1));put32(camp_buffer+(65+row*4)*4,4);}
+    label(descriptors[0]+63*80,"TrainingCamp");uint16_t ref_bits=65535;memcpy(descriptors[0]+63*80+0x30,&ref_bits,2);put32(descriptors[0]+63*80+0x38,7);putptr(descriptors[0]+63*80+0x48,camp_schema);put32(buffers[0]+0x20+63*4,64);put32(buffers[0]+328,0x202c0002);
     assert(!career_cheats_add(0,1000));process();CareerSnapshot s;career_cheats_snapshot(&s);
     assert(s.ready&&s.balance[0]==12109126&&s.balance[1]==16&&s.maximum[1]==16383);
     assert(career_cheats_add(0,1000));assert(!career_cheats_add(0,1000)&&!career_cheats_add(1,5));
@@ -65,11 +77,26 @@ int main(void){
     put32(buffers[0]+0x10,2);process();assert(!snapshot.ready&&!career_cheats_add(0,1)&&writes==2);put32(buffers[0]+0x10,1);process();
     /* Slot layout changes are resolved by checked names, not fixed indices. */
     stores[5]=stores[525];stores[525]=0;stores[7]=stores[109];stores[109]=0;process();assert(snapshot.ready&&value(1)==26);
+    assert(snapshot.fitness_ready&&snapshot.fitness==7900);unsigned before_fitness_writes=writes;uint32_t adjacent=0;assert(u32((uintptr_t)buffers[0]+324,&adjacent));
+    assert(career_cheats_restore_fitness()&&writes==before_fitness_writes);process();assert(snapshot.status==CAREER_ADDED&&snapshot.fitness==10000&&value(CAREER_FITNESS)==10000&&writes==before_fitness_writes+1);
+    uint32_t fitness_word=0;assert(u32((uintptr_t)buffers[0]+324,&fitness_word));assert((fitness_word&~(32767u<<9))==(adjacent&~(32767u<<9)));
+    for(int i=0;i<10;++i)process();assert(writes==before_fitness_writes+1);
+    assert(career_cheats_restore_fitness());queued=GetTickCount64()-30001;process();assert(snapshot.status==CAREER_CHANGED&&writes==before_fitness_writes+1);
+    assert(career_cheats_restore_fitness());descriptors[0][50*80]='X';process();assert(snapshot.status==CAREER_CHANGED&&!snapshot.fitness_ready&&writes==before_fitness_writes+1&&snapshot.ready);
+    assert(!career_cheats_restore_fitness());label(descriptors[0]+50*80,"Fitness");process();
+    assert(snapshot.training_ready&&snapshot.training_days==0&&snapshot.training_week==1);unsigned before_days=writes;
+    assert(career_cheats_restore_days()&&writes==before_days);process();assert(snapshot.status==CAREER_ADDED&&snapshot.training_days==7&&writes==before_days+1);
+    uint32_t row0=0,row2=0;assert(u32((uintptr_t)camp_buffer+256,&row0)&&u32((uintptr_t)camp_buffer+288,&row2));assert((row0&1023)==1&&(row2&1023)==7&&(row2&~1023u)==0xa0000000u);
+    for(int i=0;i<10;++i)process();assert(writes==before_days+1);
+    assert(career_cheats_restore_days());put32(camp_buffer+288,row2|(1u<<16));process();assert(snapshot.status==CAREER_CHANGED&&writes==before_days+1);put32(camp_buffer+288,row2);process();
+    assert(career_cheats_restore_days());put32(buffers[0]+328,0x202c0001);process();assert(snapshot.status==CAREER_CHANGED&&writes==before_days+1);put32(buffers[0]+328,0x202c0002);process();
+    assert(career_cheats_restore_days());descriptors[0][63*80]='X';process();assert(snapshot.status==CAREER_CHANGED&&!snapshot.training_ready&&!career_cheats_restore_days());label(descriptors[0]+63*80,"TrainingCamp");process();
+    put32(camp_buffer+292,0);process();assert(!snapshot.training_ready&&!career_cheats_restore_days());put32(camp_buffer+292,4);process();assert(snapshot.training_ready);
     /* Exercise the actual checked hook and SysV trampoline with a synthetic
        guest image. This runs the real installer, entry and return conventions. */
     unsigned char *base=VirtualAlloc(NULL,0xc000000,MEM_RESERVE,PAGE_NOACCESS);assert(base);career_cheats_init((uintptr_t)base);
     putptr(root,(void*)(guest+0x9c38410));putptr(registry,(void*)(guest+0x9bf7be8));
-    for(int k=0;k<2;++k)putptr(store[k],(void*)(guest+0x9bf7be8));
+    for(int k=0;k<2;++k)putptr(store[k],(void*)(guest+0x9bf7be8));putptr(camp_store,(void*)(guest+0x9bf7be8));
     unsigned char *user_code=page(base,0x5c015d0);memcpy(user_code,user_signature,sizeof(user_signature));
     uintptr_t cookie=123,canary=(uintptr_t)&cookie;int32_t displacement;memcpy(&displacement,user_code+20,4);putptr(page(base,0x5c015d0+24+displacement),(void*)canary);
     const unsigned char end_code[]={0x48,0x89,0xf8,0x48,0x83,0xc4,0x28,0x5b,0x41,0x5c,0x41,0x5d,0x41,0x5e,0x41,0x5f,0x5d,0xc3};memcpy(user_code+24,end_code,sizeof(end_code));
@@ -85,6 +112,7 @@ int main(void){
     for(int i=0;i<100000;++i)run(&selected,(uintptr_t)root,-1);
     uint64_t elapsed=GetTickCount64()-started;assert(probe_count-probes_before<=elapsed/250+2);
     assert(value(1)==before+1&&cached_slot[0]==5&&cached_slot[1]==7);
+    assert(career_cheats_restore_days());run(&selected,(uintptr_t)root,-1);assert(snapshot.status==CAREER_ADDED&&snapshot.training_days==7);
     printf("PASS: 100,000 career lookups in %llu ms, %llu probes; relocated schemas cached and additions bypass the idle delay.\n",(unsigned long long)elapsed,(unsigned long long)(probe_count-probes_before));
-    puts("PASS: real checked SysV career hook, native setter/dirty calls, career identity/schema checks, exact money/skill fields, one-time additions, no auto-repeat, adjacent-bit preservation, amount limits, pending cancellation, changed career/buffers and schema relocation.");return 0;
+    puts("PASS: real checked SysV career hook, native setter/dirty calls, career identity/schema checks, exact money/skill/fitness fields, one-time fitness/day restoration, nonzero active camp rows, camp/week changes, schema rejection, one-time additions, no auto-repeat, adjacent-bit preservation, amount limits, pending cancellation, changed career/buffers and schema relocation.");return 0;
 }

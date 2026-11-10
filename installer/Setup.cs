@@ -190,6 +190,7 @@ namespace UFC6OverlaySetup {
         readonly Manager manager;
         readonly TextBox folder = new TextBox();
         readonly TextBox status = new TextBox();
+        readonly ModernButton support = new ModernButton();
         readonly ModernButton browse = new ModernButton(), check = new ModernButton(), install = new ModernButton(), remove = new ModernButton(), updates = new ModernButton();
         bool busy;
         public SetupForm(Manager manager) {
@@ -213,14 +214,16 @@ namespace UFC6OverlaySetup {
             infoCard.Controls.Add(ModernUi.Label("2   Check compatibility",20,16,650,27,12,true));
             status.SetBounds(20,52,656,104);ModernUi.Status(status);
             status.Text="Select your game folder, then click Check folder.\r\nNothing changes until you choose Install / Update or Remove.";infoCard.Controls.Add(status);
+            support.Text="Export support report...";support.SetBounds(32,574,238,44);support.Enabled=false;
+            support.Click+=delegate{try{using(var diagnostic=new DiagnosticsForm(manager.Version,Diagnostics.Folder(folder.Text))){diagnostic.ShowDialog(this);}}catch(Exception error){status.Text=error.Message;}};
             install.Text="Install / Update";install.SetBounds(288,574,214,44);install.Tone=ButtonTone.Primary;install.Enabled=false;
             remove.Text="Remove overlay";remove.SetBounds(518,574,210,44);remove.Tone=ButtonTone.Danger;remove.Enabled=false;
             var kept=ModernUi.Label("Settings, screenshots and save backups are kept.",32,631,696,22,9,false,true);
-            Controls.AddRange(new Control[]{ModernUi.Logo(32,70,66),title,hint,version,pathCard,infoCard,install,remove,kept});
+            Controls.AddRange(new Control[]{ModernUi.Logo(32,70,66),title,hint,version,pathCard,infoCard,support,install,remove,kept});
             updates.Click+=delegate{using(var update=new UpdateForm(manager.Version,folder.Text)){update.ShowDialog(this);if(update.InstallerOpened)Close();}};
             AcceptButton=check;
             browse.Click+=delegate{try{string selected=FolderPicker.Select(Handle,folder.Text);if(selected!=null){folder.Text=selected;Run(null);}}catch(Exception error){status.Text="Could not open the folder picker: "+error.Message;}};
-            folder.TextChanged += delegate { install.Enabled = remove.Enabled = false; };
+            folder.TextChanged += delegate { support.Enabled = install.Enabled = remove.Enabled = false; };
             check.Click += delegate { Run(null); };
             install.Click += delegate { Run(false); };
             remove.Click += delegate { if (MessageBox.Show(this,"Remove the overlay from this game folder? Settings and screenshots will be kept.","Remove overlay",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2) == DialogResult.Yes) Run(true); };
@@ -230,7 +233,7 @@ namespace UFC6OverlaySetup {
         void Run(bool? removal) {
             if (busy) return;
             busy = true; string path = folder.Text;
-            folder.Enabled = browse.Enabled = check.Enabled = updates.Enabled = install.Enabled = remove.Enabled = false;
+            folder.Enabled = browse.Enabled = check.Enabled = updates.Enabled = support.Enabled = install.Enabled = remove.Enabled = false;
             status.Text = removal.HasValue ? "Applying changes…" : "Checking engine and installed files…"; UseWaitCursor = true;
             var worker = new BackgroundWorker();
             worker.DoWork += delegate(object sender,DoWorkEventArgs e) {
@@ -244,6 +247,7 @@ namespace UFC6OverlaySetup {
                 else {
                     var values = (object[])e.Result; var state = (Inspection)values[0]; folder.Text = state.Folder;
                     status.Text = values[1] == null ? state.Summary(manager) : (string)values[1];
+                    support.Enabled=true;
                     install.Enabled = state.Supported && state.RuntimeAvailable && state.Conflicts.Count == 0; remove.Enabled = state.Installed > 0 && state.Conflicts.Count == 0;
                 }
                 worker.Dispose();
