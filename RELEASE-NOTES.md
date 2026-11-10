@@ -6,7 +6,7 @@ Adds Player 1 cheats, career additions, integrated controller-icon patching, and
 - **Career cheats** adds selectable amounts of money or skill points to the loaded offline career, once per confirmation. Current balances are shown. Keep a save backup before experimenting; changes use the game's normal saving.
 - **Settings > Patch in-game controller icons...** changes Xbox/PlayStation game artwork separately from **Overlay button icons**. It checks the supported game build and all edited ranges, keeps a verified local restore backup, then applies after normal game/launcher shutdown and relaunches with saved settings. No game artwork is bundled.
 - Fixes repeated icon switches after restart by isolating each packaged helper's Python runtime and clearing its temporary state before launching the game.
-- Refreshes the UI with pill switches, compact value selectors, rounded rows, subtle focus outlines, and distinct quit/power styling. Fixes clipped text at different UI scales.
+- Refreshes the UI with pill switches, compact value selectors, rounded rows, subtle focus outlines, and distinct quit/power styling. Fixes clipped text at different UI scales and uses the same two-pixel row gaps on Main, Settings, and Cheats.
 - Restart PC's auto-launch indication is now inline text and a status dot, keeping it clear of the row borders. The confirmation also states whether auto-launch is enabled and where to change it.
 - Adds updated screenshots, including Cheats and the controller-icon patch page.
 

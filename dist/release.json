@@ -3,8 +3,9 @@
   "parsec_engine_sha256": "ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d",
   "engine_revision": "3309ab23f",
   "engine_sha256": "f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2",
-  "dll_sha256": "5e02d201152bb4943aeb961352e2023ed4a1eb31ce8ad0b34eb1b54b285e9a3e",
+  "dll_sha256": "59ec6578fddf0fef57a16f5b3381b13ed6ea724dafc88923ee0c098b8fca6622",
   "previous_dll_sha256": [
+    "5e02d201152bb4943aeb961352e2023ed4a1eb31ce8ad0b34eb1b54b285e9a3e",
     "d37aa589dbbe4bebba91c20f65fa0599fb9bebdbd8eda8ad9affdf1978e2e34e",
     "5f1c88a6c0fce0a298c1d28eee5388766e708d54f65b75458ef1d98c531cb6de",
     "615bbe844166ee81a7e731ebd2d26c3b2c383800d59fa201f99135296296b43a",
@@ -44,9 +45,9 @@
     "f482758e1e9b4edc2b7865aa9cbe5a570a077841ef1b7abebfcf3b642f7836c9"
   ],
   "runtime_bridge": {
-    "original_name": "ufc6_pthread_original.dll",
+    "original_sha256": "78ebbc1480d62098aa66307db2ff139abc07c137bc188f5b73bf7b131492932c",
     "target": "libwinpthread-1.dll",
-    "original_sha256": "78ebbc1480d62098aa66307db2ff139abc07c137bc188f5b73bf7b131492932c"
+    "original_name": "ufc6_pthread_original.dll"
   },
   "companion_files": {
     "ufc6_menu_icons.exe": "c15a1fe33f684fbc73be0bad5da032c4a8cb17ad14301134176bf923584d1d42",
@@ -70,10 +71,6 @@
       "da7b6ca8e9ef149b37ed8986781db071899a843d4e12ab326ba65e7d196a72de",
       "56a5a3dac1d174dc0825d95b0729969967b66ebd538e1263aa06b122d5ce0527"
     ],
-    "ufc6_menu_icons.exe": [
-      "c15a1fe33f684fbc73be0bad5da032c4a8cb17ad14301134176bf923584d1d42",
-      "e14e61e0576ed9dec6265edb74a94d93c3b89f54c5f244a253e2af5c2fe46c4b"
-    ],
     "ufc6_menu_restart.exe": [
       "d1c9984d275b12348638d5b3a31c85e75fbf7d742b47680a05137f1f387ad2a7",
       "ab28c2edbc12db244e13c2b2cddc82cbbf827dbf246b216deb87a78982d01b1a",
@@ -82,6 +79,10 @@
       "cc25fdf1e57cb63aa0a0dcb493a77cc5575abf692447713de75e84024bfa0618",
       "92b747b7c5cacd7dfe9c97c085ba436bcd4b53a3272093aa781f991a3a272556",
       "3ab575a182f6f8d899b9a7276c003941d7bd575d2f60738b3931e6db5cae65fd"
+    ],
+    "ufc6_menu_icons.exe": [
+      "c15a1fe33f684fbc73be0bad5da032c4a8cb17ad14301134176bf923584d1d42",
+      "e14e61e0576ed9dec6265edb74a94d93c3b89f54c5f244a253e2af5c2fe46c4b"
     ]
   },
   "shortcut": "Hold LB + RB + Menu for 800 ms"

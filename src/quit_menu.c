@@ -416,8 +416,8 @@ static void value_chip(HDC dc,RECT row,const wchar_t *label,int selected,int adj
     if(adjustable){arrow_mark(dc,box.left+10,y,-1,RGB(144,170,154));arrow_mark(dc,box.right-10,y,1,RGB(144,170,154));}
 }
 static void row_geometry(int page,int index,int *top,int *height) {
-    *top=page==PAGE_CHEATS?84+32*index+(index>=2?24:0):page==PAGE_MAIN?84+26*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?86+31*index:(page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_GAME_ICONS_CONFIRM)?182+48*index:100+56*index;
-    *height=page==PAGE_CHEATS?30:page==PAGE_MAIN?26:page==PAGE_SETTINGS?30:(page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_GAME_ICONS_CONFIRM)?42:50;
+    *top=page==PAGE_CHEATS?84+32*index+(index>=2?24:0):page==PAGE_MAIN?84+27*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?86+32*index:(page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_GAME_ICONS_CONFIRM)?182+48*index:100+56*index;
+    *height=page==PAGE_CHEATS?30:page==PAGE_MAIN?25:page==PAGE_SETTINGS?30:(page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_GAME_ICONS_CONFIRM)?42:50;
 }
 static void draw_menu(HDC dc, RECT r) {
     HBRUSH bg = CreateSolidBrush(RGB(17, 22, 30));
@@ -462,7 +462,7 @@ static void draw_menu(HDC dc, RECT r) {
         RECT row={36,top,r.right-36,top+height};
         int focused=i==selection;
         int danger=(state.page==PAGE_MAIN&&(i==MAIN_QUIT||i==MAIN_REBOOT||i==MAIN_SHUTDOWN))||(menu_power_page(&state)&&i==1);
-        RECT surface=row;if(state.page==PAGE_MAIN)--surface.bottom;
+        RECT surface=row;
         rounded_box(dc,surface,10,focused?(danger?RGB(54,35,41):RGB(31,54,43)):RGB(29,37,49),focused?(danger?RGB(173,98,106):RGB(89,169,114)):RGB(42,53,68));
         if(focused){RECT accent={37,top+6,40,top+height-6};HBRUSH mark=CreateSolidBrush(danger?RGB(245,143,150):RGB(118,224,148));FillRect(dc,&accent,mark);DeleteObject(mark);}
         COLORREF color=focused?RGB(244,250,246):danger?RGB(227,159,165):RGB(218,228,240);
@@ -539,7 +539,7 @@ static void draw_menu(HDC dc, RECT r) {
         wchar_t countdown[40];swprintf(countdown,40,L"%d seconds",state.shutdown_seconds);
         RECT number={36,187,r.right-36,239};text(dc,font_title,countdown,number,RGB(246,247,250),DT_CENTER|DT_SINGLELINE);
     }
-    int y=state.page==PAGE_MAIN?310:279;
+    int y=state.page==PAGE_MAIN?314:279;
     if(conflict){
         wchar_t chord[100],fallback[150];shortcut_label(menu_shortcut(&state),ps,chord,100);
         swprintf(fallback,150,L"Fallback: %ls  |  F10",chord);
