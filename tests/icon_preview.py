@@ -134,6 +134,8 @@ try:
         press(0x4000);assert cheat(0)==2 and cheat(1)==1
         press(0x40);press(0x20);assert cheat(0)==2 and cheat(1)==2
         render("cheats-on.png")
+        if not args.no_render:
+            assert (folder/"cheats-wait-off.png").read_bytes() != (folder/"cheats-wait-on.png").read_bytes(), "Switch change did not redraw the cached image"
         press(0x80);assert cheat(1)==1
         press(0x10);press(0x4000);assert cheat(0)==1
         cheat(0,7);press(0x4000);assert cheat(0)==1
@@ -151,7 +153,13 @@ try:
         press(0x4000);assert page()==8
         render("career-add-points-confirm.png")
         press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==3
-        press(0x2000);assert page()==0 and dll.MenuTestSnapshot()&15==3
+        press(0x40);press(0x4000);assert page()==11
+        render("savegame-backups.png")
+        press(0x4000);assert page()==11
+        render("savegame-backup-request.png")
+        press(0x40);press(0x4000);assert page()==11
+        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==4
+        press(0x40);press(0x4000);assert page()==0 and dll.MenuTestSnapshot()&15==3
         press(0x40);press(0x4000)
         for _ in range(9):press(0x40)
         press(0x4000);press(0x40);press(0x4000)
@@ -426,6 +434,9 @@ try:
         press(0x40);assert dll.MenuTestSnapshot()&0xf==7
         press(0x40);assert dll.MenuTestSnapshot()&0xf==8
         press(0x40);press(0x40);press(0x40);assert dll.MenuTestSnapshot()&0xf==11
+        render("settings-updates.png")
+        press(0x4000);assert (dll.MenuTestSnapshot()>>12)&15==1 and dll.MenuTestSnapshot()&0x100
+        press(0x40);assert dll.MenuTestSnapshot()&0xf==12
         render("settings-back.png")
         press(0x4000);assert (dll.MenuTestSnapshot()>>12)&7==0
         assert windows_preference()==original_windows,"UI test must never change the actual Windows Game Bar preference"

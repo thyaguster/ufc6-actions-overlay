@@ -1,3 +1,15 @@
+# UFC 6 Actions Overlay v0.9.5
+
+- Adds **Settings > Check for updates...** and an installer update button. The desktop checker finds the latest stable release on GitHub, offers newer versions, verifies the installer against release SHA-256 checksums (and the GitHub asset digest when provided), then opens setup with your game folder filled in. Downloads and installation require user actions; there are no silent startup updates.
+- Adds an original U6 icon to the installer and updater, with 16–256 px ICO sizes and editable SVG artwork.
+- Puts simple installation steps at the top of the README and clarifies that one install supports normal UFC 6 and the verified Parsec engine without extra overlay steps.
+- Smoother text, button symbols, switches and outlines with 2x supersampling at the selected UI scale. Unchanged frames reuse a cached image to keep the extra rendering work off normal frames. Settings scroll markers are drawn as shapes, and text bounds are checked from 50% to 300%.
+- **Cheats > Savegame backups...** creates separate, timestamped ZIPs in **Documents / UFC6 Actions Overlay / SaveBackups**, with an action to open the folder. Save in the game and wait for autosaving to finish first; unsaved progress is not included.
+- Backups include default-user and guest-user UFC 6 saves, preserve their relative `_SaveData` paths, and contain a SHA-256 manifest. Files and archive contents are verified; detected source changes or failures discard the incomplete ZIP while leaving saves and older backups untouched.
+- Backup work runs outside the game-rendering thread using the bundled helper. No separate Python installation is needed, and removing the overlay keeps backups.
+
+Validated with native controller/cheat/power-stub checks, renderer/text bounds at 50–300%, backup round trips and failure cases, two consecutive launches of the packaged helper, a verified backup of the user's 25 save files, installer upgrade/removal/rollback tests, normal/Parsec shared-install coverage, updater rejection fixtures, and an actual verified GitHub download without launching it.
+
 # UFC 6 Actions Overlay v0.9.3
 
 Adds Player 1 cheats, career additions, integrated controller-icon patching, and refreshed controls.

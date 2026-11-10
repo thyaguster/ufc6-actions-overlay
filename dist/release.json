@@ -1,10 +1,13 @@
 {
-  "version": "0.9.3",
+  "version": "0.9.5",
   "parsec_engine_sha256": "ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d",
   "engine_revision": "3309ab23f",
   "engine_sha256": "f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2",
-  "dll_sha256": "59ec6578fddf0fef57a16f5b3381b13ed6ea724dafc88923ee0c098b8fca6622",
+  "dll_sha256": "197afec65bb5842489802e6137df36b844029974d667f83f8703eb0b529335fb",
   "previous_dll_sha256": [
+    "dccc774294f60e3dbec5792dcb2f8e42de0cec7c4b8ec1e1b3fd1743541ee575",
+    "2c261b3743af1db6f605c95a8f1ccd03bd48cf34c8dcab378f5feb4751ddd0de",
+    "59ec6578fddf0fef57a16f5b3381b13ed6ea724dafc88923ee0c098b8fca6622",
     "5e02d201152bb4943aeb961352e2023ed4a1eb31ce8ad0b34eb1b54b285e9a3e",
     "d37aa589dbbe4bebba91c20f65fa0599fb9bebdbd8eda8ad9affdf1978e2e34e",
     "5f1c88a6c0fce0a298c1d28eee5388766e708d54f65b75458ef1d98c531cb6de",
@@ -45,21 +48,22 @@
     "f482758e1e9b4edc2b7865aa9cbe5a570a077841ef1b7abebfcf3b642f7836c9"
   ],
   "runtime_bridge": {
-    "original_sha256": "78ebbc1480d62098aa66307db2ff139abc07c137bc188f5b73bf7b131492932c",
     "target": "libwinpthread-1.dll",
-    "original_name": "ufc6_pthread_original.dll"
+    "original_name": "ufc6_pthread_original.dll",
+    "original_sha256": "78ebbc1480d62098aa66307db2ff139abc07c137bc188f5b73bf7b131492932c"
   },
   "companion_files": {
-    "ufc6_menu_icons.exe": "c15a1fe33f684fbc73be0bad5da032c4a8cb17ad14301134176bf923584d1d42",
+    "ufc6_menu_update.exe": "a4e9e73f5b0b2d1870ac4fe619c3975858727675fc228d7e37ae28f7b20d44fc",
+    "ufc6_menu_icons.exe": "1f898f213b7d080164835eb8a7bb01ecbe530b163b911f81dbfcc76c1bd0e7ba",
     "libwinpthread-1.dll": "68a8ba895e4253e42577b1634b4f3421ff6f492c8f4de48d7a212a159b266143",
     "ufc6_menu_layer.dll": "d03e2630ca3d5f2c901ef278969be8ed603d316511efb0e9d18cb390c4033308",
     "ufc6_menu_layer.json": "5057d77d0bef83dbc53e4a1bef5c9c80eded92b1265a088d30d4fd59c42a0c92",
     "ufc6_menu_restart.exe": "31e40051d3b827b162f3a7a85efac267955f1ed49d16d07dc5e9e99a78d608a2"
   },
   "previous_companion_sha256": {
-    "libwinpthread-1.dll": [
-      "68a8ba895e4253e42577b1634b4f3421ff6f492c8f4de48d7a212a159b266143",
-      "7834ba478b95cc2e680dd7b61cc92fc61f73cd9d3de373121c3448ec0a701ba4"
+    "ufc6_menu_update.exe": [
+      "0afa2e4485d6f2b5d85deefc10703de259c6628547b263e8a591d51ba8fb0310",
+      "bcb81667fd923ab30784bf6bea1513a18cd39e4f682103478afadf675a7ec626"
     ],
     "ufc6_menu_layer.dll": [
       "0936ce0405352b439f00dae84ba6dfb8bace20711177723700a1a34dff4dd255",
@@ -83,6 +87,10 @@
     "ufc6_menu_icons.exe": [
       "c15a1fe33f684fbc73be0bad5da032c4a8cb17ad14301134176bf923584d1d42",
       "e14e61e0576ed9dec6265edb74a94d93c3b89f54c5f244a253e2af5c2fe46c4b"
+    ],
+    "ufc6_menu_layer.json": [],
+    "libwinpthread-1.dll": [
+      "7834ba478b95cc2e680dd7b61cc92fc61f73cd9d3de373121c3448ec0a701ba4"
     ]
   },
   "shortcut": "Hold LB + RB + Menu for 800 ms"

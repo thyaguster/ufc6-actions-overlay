@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+﻿// SPDX-License-Identifier: GPL-2.0-only
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -187,22 +187,25 @@ namespace UFC6OverlaySetup {
         readonly Manager manager;
         readonly TextBox folder = new TextBox();
         readonly TextBox status = new TextBox();
-        readonly Button browse = new Button(), check = new Button(), install = new Button(), remove = new Button();
+        readonly Button browse = new Button(), check = new Button(), install = new Button(), remove = new Button(), updates = new Button();
         bool busy;
         public SetupForm(Manager manager) {
             this.manager = manager;
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             Text = "UFC 6 Actions Overlay Setup — v" + manager.Version;
             Font = new Font("Segoe UI",10); ClientSize = new Size(680,440); MinimumSize = Size; MaximumSize = Size;
             FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen; AutoScaleMode = AutoScaleMode.Dpi;
             var title = new Label { Text = "UFC 6 Actions Overlay", Font = new Font("Segoe UI",18,FontStyle.Bold), Bounds = new Rectangle(24,20,630,42) };
-            var hint = new Label { Text = "Choose the UFC 6 game folder or its bin folder.\r\nSupports the PORTHEON 3309ab23f Windows engine.", Bounds = new Rectangle(26,68,620,52) };
+            var hint = new Label { Text = "Choose the UFC 6 game folder or its bin folder.\r\nOne install supports normal UFC 6 and verified Parsec mode.", Bounds = new Rectangle(26,68,620,52) };
             folder.SetBounds(26,129,500,28); browse.Text = "Browse…"; browse.SetBounds(538,127,114,32);
+            updates.Text = "Check for updates"; updates.SetBounds(480,170,172,34);
+            updates.Click += delegate { using(var update = new UpdateForm(manager.Version,folder.Text)) { update.ShowDialog(this); if(update.InstallerOpened)Close(); } };
             check.Text = "Check folder"; check.SetBounds(26,170,140,34);
             status.SetBounds(26,215,626,142); status.Multiline = true; status.ReadOnly = true; status.BorderStyle = BorderStyle.FixedSingle; status.BackColor = SystemColors.Window; status.ScrollBars = ScrollBars.Vertical;
             status.Text = "Select your game folder, then click Check folder.\r\nNo files are changed until you choose Install / Update or Remove.";
             install.Text = "Install / Update"; install.SetBounds(306,378,170,38); install.Enabled = false;
             remove.Text = "Remove overlay"; remove.SetBounds(488,378,164,38); remove.Enabled = false;
-            Controls.AddRange(new Control[] {title,hint,folder,browse,check,status,install,remove});
+            Controls.AddRange(new Control[] {title,hint,folder,browse,check,updates,status,install,remove});
             AcceptButton = check;
             browse.Click += delegate { using (var dialog = new FolderBrowserDialog { Description = "Select the UFC 6 game folder or its bin folder", ShowNewFolderButton = false }) { if (Directory.Exists(folder.Text)) dialog.SelectedPath = folder.Text; if (dialog.ShowDialog(this) == DialogResult.OK) { folder.Text = dialog.SelectedPath; Run(null); } } };
             folder.TextChanged += delegate { install.Enabled = remove.Enabled = false; };
@@ -211,10 +214,11 @@ namespace UFC6OverlaySetup {
             remove.Click += delegate { if (MessageBox.Show(this,"Remove the overlay from this game folder? Settings and screenshots will be kept.","Remove overlay",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2) == DialogResult.Yes) Run(true); };
             FormClosing += delegate(object sender,FormClosingEventArgs e) { if (busy) e.Cancel = true; };
         }
+        public void SelectFolder(string path) { folder.Text=path;Run(null); }
         void Run(bool? removal) {
             if (busy) return;
             busy = true; string path = folder.Text;
-            folder.Enabled = browse.Enabled = check.Enabled = install.Enabled = remove.Enabled = false;
+            folder.Enabled = browse.Enabled = check.Enabled = updates.Enabled = install.Enabled = remove.Enabled = false;
             status.Text = removal.HasValue ? "Applying changes…" : "Checking engine and installed files…"; UseWaitCursor = true;
             var worker = new BackgroundWorker();
             worker.DoWork += delegate(object sender,DoWorkEventArgs e) {
@@ -223,7 +227,7 @@ namespace UFC6OverlaySetup {
                 e.Result = new object[] { state,message };
             };
             worker.RunWorkerCompleted += delegate(object sender,RunWorkerCompletedEventArgs e) {
-                busy = false; UseWaitCursor = false; folder.Enabled = browse.Enabled = check.Enabled = true;
+                busy = false; UseWaitCursor = false; folder.Enabled = browse.Enabled = check.Enabled = updates.Enabled = true;
                 if (e.Error != null) { status.Text = e.Error.Message + "\r\n\r\nIf Windows denies access, close the game first. For a protected game folder, right-click this setup and choose Run as administrator."; }
                 else {
                     var values = (object[])e.Result; var state = (Inspection)values[0]; folder.Text = state.Folder;
@@ -248,6 +252,9 @@ namespace UFC6OverlaySetup {
                 Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
                 var manager = Bundled();
                 using (var form = new SetupForm(manager)) {
+                    if(args.Length==2&&args[0]=="--folder")form.Shown+=delegate{form.SelectFolder(args[1]);};
+                    else if(args.Length!=0&&!(args.Length==2&&args[0]=="--preview"))throw new ArgumentException("Use --folder with the UFC 6 folder.");
+
                     if (args.Length == 2 && args[0] == "--preview") { form.Show(); Application.DoEvents(); using (var bitmap = new Bitmap(form.Width,form.Height)) { form.DrawToBitmap(bitmap,new Rectangle(Point.Empty,bitmap.Size)); bitmap.Save(args[1]); } return 0; }
                     Application.Run(form);
                 }

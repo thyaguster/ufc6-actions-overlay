@@ -14,9 +14,9 @@ sys.path.insert(0, str(ROOT))
 import patcher_core as core
 
 
-def report(path, state, message, success=True):
+def report(path, state, message, success=True, section="Icons"):
     p = configparser.ConfigParser(interpolation=None)
-    p['Icons'] = {'State': str(state), 'Success': str(int(success)),
+    p[section] = {'State': str(state), 'Success': str(int(success)),
                   'Message': str(message).replace('\r', ' ').replace('\n', ' ')[:1000]}
     temp = Path(str(path) + '.new')
     with temp.open('w', encoding='utf-16', newline='') as f:
@@ -173,12 +173,21 @@ def handoff(path, processes=None, patch=set_theme, launch=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--status', action='store_true')
+    parser.add_argument('--backup-saves', action='store_true')
+    parser.add_argument('--save-root', type=Path)
+    parser.add_argument('--backup-dir', type=Path)
     parser.add_argument('--game-dir', type=Path)
     parser.add_argument('--report', type=Path)
     parser.add_argument('--apply-job', type=Path)
     args = parser.parse_args()
     try:
-        if args.apply_job:
+        if args.backup_saves:
+            from save_backups import create_backup
+            if not args.save_root or not args.backup_dir or not args.report:
+                parser.error('--backup-saves needs --save-root, --backup-dir and --report.')
+            path, count = create_backup(args.save_root, args.backup_dir)
+            report(args.report, 2, f"Backup saved and verified ({count} files).", section="Backup")
+        elif args.apply_job:
             handoff(args.apply_job)
         elif args.status and args.game_dir and args.report:
             current = state(args.game_dir, core.load_profile(ROOT))
@@ -188,7 +197,7 @@ def main():
         return 0
     except Exception as exc:
         if args.report:
-            report(args.report, 4, exc, False)
+            report(args.report, 4, exc, False, section="Backup" if args.backup_saves else "Icons")
         return 1
 
 

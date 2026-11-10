@@ -1,3 +1,5 @@
+<p align="center"><img src="installer/assets/overlay.png" width="96" alt="UFC 6 Actions Overlay icon"></p>
+
 <h1 align="center">UFC 6 Actions Overlay</h1>
 
 <p align="center">
@@ -17,6 +19,15 @@
   <img alt="Windows x64" src="https://img.shields.io/badge/Windows-x64-0078D4?style=flat-square">
   <img alt="License" src="https://img.shields.io/github/license/thyaguster/ufc6-actions-overlay?style=flat-square">
 </p>
+
+## Quick installation
+
+1. [Download the latest installer](https://github.com/thyaguster/ufc6-actions-overlay/releases/latest) — choose **UFC6-Actions-Overlay-Setup-*.exe**.
+2. Close UFC 6 and PORTHEON, run the installer, and choose your **UFC6 game folder** (or its **bin** folder).
+3. Click **Check folder**, then **Install / Update**.
+4. Launch UFC 6 normally. Hold **LB + RB + Menu/Start** for about one second, then release; **F10** also opens the overlay.
+
+**Install once for both normal UFC 6 and PORTHEON's supported Parsec/two-player mode. No extra overlay steps are needed for Parsec.** The Xbox game button-icons mod is included; no separate Python or button-mod installation is required.
 
 ![Actions overlay over the actual UFC 6 menu](docs/screenshots/overlay-in-game.png)
 
@@ -49,6 +60,10 @@ Install into the same `bin` folder, then launch with PORTHEON's Parsec option en
     <td width="50%"><img src="docs/screenshots/live-cheats.png" alt="Cheats with Player 1 pill switches and career additions"><br><strong>Player 1 cheats and career additions</strong></td>
     <td width="50%"><img src="docs/screenshots/game-button-icons.png" alt="In-game controller icon patch"><br><strong>Xbox or PlayStation in-game controller icons</strong></td>
   </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/savegame-backups.png" alt="Savegame backups page"><br><strong>Verified savegame backups</strong></td>
+    <td width="50%"><img src="docs/screenshots/updater.png" alt="GitHub updater desktop window"><br><strong>Updates through GitHub</strong></td>
+  </tr>
 </table>
 
 [Cheats over the game](docs/screenshots/cheats-in-game.png) · [Screenshot result](docs/screenshots/screenshot-saved.png) · [Reset confirmation](docs/screenshots/reset-confirmation.png) · [Controller access](docs/screenshots/controller-access.png) · [Game Bar conflict warning](docs/screenshots/gamebar-conflict.png) · [Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
@@ -69,6 +84,14 @@ The game-icons patch supports extracted **PPSA23566 01.006.000** game files. It 
 
 [View the controller-icon patch page](docs/screenshots/game-button-icons.png) · [Standalone button-icons mod and documentation](https://github.com/thyaguster/ufc6-xbox-icons)
 
+## Updates through GitHub
+
+Open **Settings → Check for updates...** in the overlay, or click **Check for updates** in the installer. This opens a desktop window (mouse/keyboard required) that compares your installed version with the latest stable GitHub release.
+
+If an update is available, click **Download & open installer**. The updater checks the release checksum and SHA-256 of the downloaded EXE before opening it. Your game folder is filled in automatically. **Close UFC 6 and its launcher**, then click **Install / Update**. One update covers normal and Parsec mode; settings, screenshots, game-icon restore backups and savegame backups are kept.
+
+Updates are checked when you open the checker; nothing is downloaded or installed silently at game startup. The original setup remains available from [GitHub Releases](https://github.com/thyaguster/ufc6-actions-overlay/releases/latest). Users on v0.9.3 or earlier should run the latest setup once to add the updater.
+
 ## Controls and Settings
 
 - Default opening shortcut: hold **LB + RB + Menu/Start** for **0.8 seconds**, then release. On PlayStation this is **L1 + R1 + Options**.
@@ -82,7 +105,7 @@ Select **Settings** to open the second settings box:
 - **Overlay button icons:** left/right or confirm switches this overlay between Xbox A/B and PlayStation cross/circle prompts.
 - **Patch in-game controller icons...:** choose Xbox or the original PlayStation artwork independently. The Cancel-first confirmation applies the selected theme after the game and its launcher close, then relaunches through your saved launcher settings. It supports extracted PPSA23566 01.006.000 and creates/verifies `.ufc6-xbox-icons-backup.zip` in the game folder. No game assets are bundled. Existing development installs must first be migrated/restored with their original tool; unknown data is left untouched. Uninstalling the overlay keeps game artwork and the backup; restore PlayStation icons before uninstalling if desired. This is labeled **Controller icon patch** on its own page.
 - **Opening shortcut:** confirm starts recording. Release the confirmation button, hold a combination of **2–4 digital buttons** for about half a second, then release to save it. Supported buttons are shoulders, stick clicks, D-pad, face buttons, and Menu/Options. Analog triggers and Guide are not recorded. B/circle alone cancels recording; F10 closes the overlay without changing the shortcut.
-- **UI scale:** left/right changes the whole overlay from **50% to 300%**, in **25% steps**. Confirm resets it to **100%**. The overlay stays centred and automatically shrinks to fit smaller game windows with a margin.
+- **UI scale:** left/right changes the whole overlay from **50% to 300%**, in **25% steps**. Confirm resets it to **100%**. The overlay stays centred and automatically shrinks to fit smaller game windows with a margin. Text and shapes are rendered at twice the final pixel resolution and downsampled for smoother edges at every scale. Unchanged pages reuse their rendered image; selections, switches and other visible changes redraw it.
 - **Launch UFC 6 after PC restart:** On by default. Confirm or left/right toggles whether Restart PC reopens UFC 6 at your next Windows sign-in. The Restart PC row and its confirmation show the current On/Off status; the confirmation also points to Settings.
 - **Xbox / Guide button:** On by default. Confirm or left/right toggles opening/closing this overlay with Guide. The controller shortcut and F10 stay available when Off. The preference saves automatically; enabling it while Guide is already held requires releasing and pressing again.
 - **Windows Game Bar shortcut:** shows Windows' actual controller-shortcut preference. Confirm or left/right changes it for the current Windows user. Turn it **Off** if Guide opens this overlay but navigation stalls; Game Bar can redirect controller input even with no visible window. **Win+G** still opens Game Bar. This setting affects other games too and persists after uninstall. Startup and setup only read it; they never change it automatically. Use the fallback controller combination or F10 to reach Settings if Guide is intercepted.
@@ -91,6 +114,7 @@ Select **Settings** to open the second settings box:
 - **Controller access:** **Either** by default, or **Player 1 only**. The top-right indicator shows the player owning navigation, or waits for an eligible fresh press. Other controllers cannot navigate an owned menu. Switching access releases the old owner; held navigation controls must be released before claiming again. A newly eligible held Guide button also needs releasing and pressing again. Player 1-only applies to controller navigation, opening combinations and Guide; **F10 always remains available**. Native input follows the verified engine's active player IDs (including Parsec Player 2); direct XInput uses Windows slots 1-4, with slot 1 as Player 1. If native input has no known player assignment, the badge says Controller instead of inventing a player number. Settings scrolls to keep the selected row visible.
 - **Screenshots folder:** opens the Windows screenshots folder in Explorer and minimizes the game. Available even before taking a screenshot.
 - **Reset overlay settings...:** opens a confirmation with **Cancel** selected. Reset restores icons, shortcut, scale, post-restart game launch, Guide, controller access, and launcher defaults. Saved screenshots and the Windows Game Bar preference are kept. If saving fails, previous settings remain active.
+- **Check for updates...:** opens the GitHub update checker on the desktop. The game minimizes; mouse/keyboard is required.
 - **Back:** returns to the main menu.
 
 Preferences save automatically to `bin/ufc6-quit-menu.ini` and are preserved when upgrading. A custom shortcut uses the same 0.8-second hold time. The INI can also be edited while the game is closed:
@@ -112,6 +136,10 @@ The menu does **not pause emulation**. Its opening combination can trigger norma
 On/Off choices use labeled pill switches. Adjustable values use compact arrow controls, and the selected row has a green outline. Quit and PC power actions use a separate muted red accent.
 
 ## Cheats
+
+**Savegame backups...** opens a page with **Create savegame backup** and **Open backups folder**. Save your progress in UFC 6 and wait for autosaving to finish first. Backups contain the files already on disk, including UFC 6 saves for the default user and guest users; unsaved progress is not included.
+
+Each backup is a separate timestamped ZIP in your Windows **Documents / UFC6 Actions Overlay / SaveBackups** folder (including redirected Documents locations). The ZIP preserves the `_SaveData` paths and includes `backup-manifest.json` with file sizes and SHA-256 hashes. The helper verifies the source again and checks the ZIP contents before marking it complete. Detected save changes or copy failures discard the incomplete ZIP; original saves and older backups are kept. The copy runs in the background, and game cheats remain separate from backups. Uninstalling the overlay leaves these backups in place.
 
 The Cheats page also includes **Add money** and **Add skill points** for the loaded offline career. Select a row, use left/right to choose an amount, then confirm **Add now**. Opening the confirmation or changing amounts does not modify a balance. If pending, resume and reopen a career page within 30 seconds so the game's career lookup applies the addition. Balances are shown below the rows.
 
@@ -167,7 +195,7 @@ Verification uses the test helper with power APIs compiled out and a file in pla
 
 ## Install, upgrade, and remove
 
-Download **`UFC6-Actions-Overlay-Setup-0.9.3.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
+Download **`UFC6-Actions-Overlay-Setup-0.9.5.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
 
 1. Close UFC 6 and its launcher.
 2. Click **Browse** and select the UFC 6 game folder or its **bin** folder containing **`UFC 6.exe`**.
@@ -179,7 +207,7 @@ To uninstall, run the same setup EXE, choose the same folder, and click **Remove
 
 Version 0.8.2 fixes startup when Windows prefers system DLLs, which can bypass an app-local `version.dll`. The bridge uses the engine's existing non-system runtime import and enables the Vulkan layer only inside the game process. It preserves the Windows security policy, checks all required overlay files before enabling the layer, and does not register a system-wide Vulkan layer. Production rendering is in-frame only; a desktop popup cannot appear behind the game. The installer accepts only the verified original runtime SHA-256, and rejects unknown replacements.
 
-The full **`UFC6-Actions-Overlay-0.9.3.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
+The full **`UFC6-Actions-Overlay-0.9.5.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
 
 The Python command-line manager remains available for development and scripting:
 
@@ -190,7 +218,7 @@ python manage_menu.py install --bin-dir "D:\Games\UFC6\bin"
 
 Restart UFC 6 once after installing an update. Already loaded DLLs remain active until the game exits. Replace the example path with your own game's bin folder. If omitted, `--bin-dir` defaults to `bin` under the current working directory.
 
-The installer manages `version.dll`, `ufc6_menu_layer.dll`, `ufc6_menu_layer.json`, `ufc6_menu_restart.exe`, `ufc6_menu_icons.exe`, and the `libwinpthread-1.dll` startup bridge. It verifies the original threading runtime before preserving it as `ufc6_pthread_original.dll`; that original is never downloaded or bundled. Uninstall restores it byte-for-byte. Keep this original-runtime copy and use the current setup to remove the overlay. It verifies all hashes, backs up recognized older versions, installs the core last, and rolls back changes if a commit fails. The bundled game-icons helper includes Python, so users do not need to install Python. Its source, recipe and runtime notices are under `vendor/xbox-icons` and `src/game_icons_helper.py`. Unknown files, including unrelated mods using `version.dll`, are left untouched. Settings, screenshots, diagnostic logs, and backups are preserved.
+The installer manages `version.dll`, `ufc6_menu_layer.dll`, `ufc6_menu_layer.json`, `ufc6_menu_restart.exe`, `ufc6_menu_icons.exe`, `ufc6_menu_update.exe`, and the `libwinpthread-1.dll` startup bridge. It verifies the original threading runtime before preserving it as `ufc6_pthread_original.dll`; that original is never downloaded or bundled. Uninstall restores it byte-for-byte. Keep this original-runtime copy and use the current setup to remove the overlay. It verifies all hashes, backs up recognized older versions, installs the core last, and rolls back changes if a commit fails. The bundled game-icons helper includes Python, so users do not need to install Python. Its source, recipe and runtime notices are under `vendor/xbox-icons` and `src/game_icons_helper.py`. Unknown files, including unrelated mods using `version.dll`, are left untouched. Settings, screenshots, diagnostic logs, and backups are preserved.
 
 Close the game before uninstalling:
 

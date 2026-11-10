@@ -155,9 +155,11 @@ int main(void) {
     assert(menu_button(&s,PAD_A,1)==MENU_RESET_SETTINGS&&!s.armed);
     menu_tick(&s,0,9700,1);menu_button(&s,PAD_B,1);menu_tick(&s,0,9800,1);
     assert(menu_button(&s,PAD_DOWN,1)==MENU_CHANGED&&s.selection==SETTING_GAME_ICONS);
+    assert(menu_button(&s,PAD_DOWN,1)==MENU_CHANGED&&s.selection==SETTING_UPDATE);
+    assert(menu_button(&s,PAD_A,1)==MENU_CHECK_UPDATES&&!s.armed);menu_tick(&s,0,9850,1);
     assert(menu_button(&s,PAD_DOWN,1)==MENU_CHANGED&&s.selection==SETTING_BACK);
     s=(MenuState){.visible=1,.armed=1,.page=PAGE_MAIN,.selection=MAIN_CHEATS};
-    assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_CHEATS&&menu_rows(&s)==5);
+    assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_CHEATS&&menu_rows(&s)==6);
     assert(menu_button(&s,PAD_A,1)==MENU_NONE);menu_tick(&s,0,9900,1);
     assert(menu_button(&s,PAD_A,1)==MENU_CHEAT_STAMINA);menu_tick(&s,0,10000,1);
     menu_button(&s,PAD_DOWN,1);assert(menu_button(&s,PAD_RIGHT,1)==MENU_CHEAT_HEALTH);
@@ -195,6 +197,12 @@ int main(void) {
     menu_button(&s,PAD_RIGHT,1);assert(menu_career_amount(&s,1)==5&&menu_career_amount(&s,0)==10000);
     menu_button(&s,PAD_A,1);menu_tick(&s,0,11400,1);assert(menu_button(&s,PAD_B,1)==MENU_CHANGED&&s.selection==3&&s.page==PAGE_CHEATS);
     menu_tick(&s,0,11500,1);menu_button(&s,PAD_DOWN,1);assert(s.selection==4);
+    assert(menu_button(&s,PAD_A,1)==MENU_BACKUP_OPEN&&s.page==PAGE_BACKUPS&&menu_rows(&s)==3);
+    menu_tick(&s,0,11600,1);assert(menu_button(&s,PAD_A,1)==MENU_BACKUP_CREATE&&!s.armed);
+    assert(menu_button(&s,PAD_A,1)==MENU_NONE);
+    menu_tick(&s,0,11700,1);menu_button(&s,PAD_DOWN,1);assert(menu_button(&s,PAD_A,1)==MENU_BACKUP_FOLDER);
+    menu_tick(&s,0,11800,1);assert(menu_button(&s,PAD_B,1)==MENU_CHANGED&&s.page==PAGE_CHEATS&&s.selection==4);
+    menu_tick(&s,0,11900,1);menu_button(&s,PAD_DOWN,1);assert(s.selection==5);
     assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_MAIN&&s.selection==MAIN_CHEATS);
     puts("PASS: menu safeguards, UI scaling, Guide default/toggle/edge behavior and independent F10/chord access.");
     return 0;

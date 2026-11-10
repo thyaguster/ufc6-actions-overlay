@@ -23,6 +23,7 @@
 #include "live_cheats.h"
 #include "career_cheats.h"
 #include "game_icons.h"
+#include "save_backups.h"
 #ifndef QUIT_MENU_TEST
 #include "engine_fingerprint.h"
 #endif
@@ -416,8 +417,8 @@ static void value_chip(HDC dc,RECT row,const wchar_t *label,int selected,int adj
     if(adjustable){arrow_mark(dc,box.left+10,y,-1,RGB(144,170,154));arrow_mark(dc,box.right-10,y,1,RGB(144,170,154));}
 }
 static void row_geometry(int page,int index,int *top,int *height) {
-    *top=page==PAGE_CHEATS?84+32*index+(index>=2?24:0):page==PAGE_MAIN?84+27*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?86+32*index:(page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_GAME_ICONS_CONFIRM)?182+48*index:100+56*index;
-    *height=page==PAGE_CHEATS?30:page==PAGE_MAIN?25:page==PAGE_SETTINGS?30:(page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_GAME_ICONS_CONFIRM)?42:50;
+    *top=page==PAGE_CHEATS?84+32*index+(index>=2?24:0):page==PAGE_MAIN?84+27*index+(index>=MAIN_REBOOT?10:0):page==PAGE_SETTINGS?86+32*index:page==PAGE_BACKUPS?104+40*index:(page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_GAME_ICONS_CONFIRM)?182+48*index:100+56*index;
+    *height=page==PAGE_BACKUPS?34:page==PAGE_CHEATS?30:page==PAGE_MAIN?25:page==PAGE_SETTINGS?30:(page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_GAME_ICONS_CONFIRM)?42:50;
 }
 static void draw_menu(HDC dc, RECT r) {
     HBRUSH bg = CreateSolidBrush(RGB(17, 22, 30));
@@ -438,17 +439,23 @@ static void draw_menu(HDC dc, RECT r) {
 #endif
     icon_state=game_icons_status(icon_reason,512);
     RECT title = {36, 10, r.right - 36, 57};
-    text(dc,font_title,state.page==PAGE_GAME_ICONS?L"Controller icon patch":state.page==PAGE_GAME_ICONS_CONFIRM?(state.game_icons_xbox?L"Apply Xbox icons?":L"Restore PS icons?"):state.page==PAGE_CAREER_ADD?(state.career_kind==0?L"Add money?":L"Add skill points?"):state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_SCREENSHOT?L"Screenshot saved":state.page==PAGE_RESET?L"Reset settings?":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
+    text(dc,font_title,state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_GAME_ICONS?L"Controller icon patch":state.page==PAGE_GAME_ICONS_CONFIRM?(state.game_icons_xbox?L"Apply Xbox icons?":L"Restore PS icons?"):state.page==PAGE_CAREER_ADD?(state.career_kind==0?L"Add money?":L"Add skill points?"):state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_SCREENSHOT?L"Screenshot saved":state.page==PAGE_RESET?L"Reset settings?":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
     wchar_t owner_label[64];
     if(owner_player>0)swprintf(owner_label,64,L"Player %d",owner_player);
     else wcscpy(owner_label,has_owner?L"Controller":state.first_player_only?L"Waiting for Player 1":L"Waiting for controller");
     RECT owner_rect={330,25,r.right-36,48};text(dc,font_small,owner_label,owner_rect,RGB(176,184,197),DT_RIGHT|DT_SINGLELINE);
     RECT sub = {38, 57, r.right - 36, 84};
-    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_GAME_ICONS?L"Replace in-game button icons with Xbox or PlayStation.":state.page==PAGE_GAME_ICONS_CONFIRM?L"Your game will close and restart through your launcher.":state.page==PAGE_CAREER_ADD?L"Career changes are included in normal game saves.":state.page==PAGE_CHEATS?L"Stamina and health apply to Player 1.":state.page==PAGE_SCREENSHOT?L"Clean game frame saved. The overlay is excluded.":state.page==PAGE_RESET?L"Restore overlay and launcher defaults?":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):RGB(176,184,197),DT_LEFT);
+    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_BACKUPS?L"Save in UFC 6 first; wait for autosave to finish.":state.page==PAGE_GAME_ICONS?L"Replace in-game button icons with Xbox or PlayStation.":state.page==PAGE_GAME_ICONS_CONFIRM?L"Your game will close and restart through your launcher.":state.page==PAGE_CAREER_ADD?L"Career changes are included in normal game saves.":state.page==PAGE_CHEATS?L"Stamina and health apply to Player 1.":state.page==PAGE_SCREENSHOT?L"Clean game frame saved. The overlay is excluded.":state.page==PAGE_RESET?L"Restore overlay and launcher defaults?":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):RGB(176,184,197),DT_LEFT);
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Cheats",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
-    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Back"};
+    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Back"};
     const wchar_t *screenshot_labels[]={L"Open screenshots folder",L"Back"};
-    const wchar_t *cheat_labels[]={L"Infinite stamina",L"No damage",L"Add money",L"Add skill points",L"Back"};
+    const wchar_t *cheat_labels[]={L"Infinite stamina",L"No damage",L"Add money",L"Add skill points",L"Savegame backups...",L"Back"};
+    wchar_t backup_message[512];int backup_state=BACKUP_READY;
+#ifdef QUIT_MENU_TEST
+    if(test_mode)wcscpy(backup_message,L"Test backup page; save files are never touched.");else
+#endif
+    backup_state=save_backups_state(backup_message,512);
+    const wchar_t *backup_labels[]={backup_state==BACKUP_BUSY?L"Creating backup...":L"Create savegame backup",L"Open backups folder",L"Back"};
     const wchar_t *game_icons_labels[]={L"Xbox game icons",L"PlayStation game icons",L"Back"};
     const wchar_t *game_icons_confirm_labels[]={L"Cancel",L"Apply and restart game"};
     const wchar_t *career_labels[]={L"Cancel",L"Add now"};
@@ -474,7 +481,7 @@ static void draw_menu(HDC dc, RECT r) {
         else if(state.page==PAGE_SETTINGS&&(i==SETTING_ICONS||i==SETTING_SCALE||i==SETTING_ACCESS))label_row.right=345;
         else if((state.page==PAGE_SETTINGS&&(i==SETTING_AUTO_LAUNCH||i==SETTING_GUIDE||i==SETTING_GAMEBAR))||(state.page==PAGE_CHEATS&&i<2))label_row.right=410;
         else if(state.page==PAGE_CHEATS&&(i==2||i==3))label_row.right=300;
-        text(dc,state.page==PAGE_MAIN?font_main:state.page==PAGE_SETTINGS?font_settings:font_body,state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_GAME_ICONS_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_MAIN?main_labels[i]:state.page==PAGE_SETTINGS?setting_labels[i]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:state.page==PAGE_CAREER_ADD?career_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],label_row,color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+        text(dc,state.page==PAGE_MAIN?font_main:state.page==PAGE_SETTINGS?font_settings:font_body,state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_GAME_ICONS_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_MAIN?main_labels[i]:state.page==PAGE_SETTINGS?setting_labels[i]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:state.page==PAGE_CAREER_ADD?career_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],label_row,color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         if(state.page==PAGE_CHEATS&&i<2)toggle_switch(dc,control,cheat_enabled[i],focused);
         if(state.page==PAGE_CHEATS&&(i==2||i==3)){
             wchar_t amount[32],value_text[64];format_number(menu_career_amount(&state,i-2),amount);
@@ -505,7 +512,7 @@ static void draw_menu(HDC dc, RECT r) {
         if(state.page==PAGE_SETTINGS&&i==SETTING_SHORTCUT){wchar_t chord[100];shortcut_label(menu_shortcut(&state),ps,chord,100);value_chip(dc,control,state.capturing?L"Recording...":chord,focused,0);}
         if(state.page==PAGE_SETTINGS&&i==SETTING_SCALE){wchar_t scale[40];swprintf(scale,40,L"%d%%",menu_scale(&state));value_chip(dc,control,scale,focused,1);}
         if(state.page==PAGE_GAME_ICONS&&((i==0&&icon_state==GAME_ICONS_XBOX)||(i==1&&icon_state==GAME_ICONS_PS)))value_chip(dc,control,L"Active",focused,0);
-        int simple=(state.page==PAGE_MAIN&&i!=MAIN_REBOOT)||(state.page==PAGE_SETTINGS&&(i==SETTING_LAUNCHER||i==SETTING_SCREENSHOTS||i==SETTING_RESET||i==SETTING_GAME_ICONS||i==SETTING_BACK))||(state.page==PAGE_CHEATS&&i==4);
+        int simple=(state.page==PAGE_MAIN&&i!=MAIN_REBOOT)||(state.page==PAGE_SETTINGS&&(i==SETTING_LAUNCHER||i==SETTING_SCREENSHOTS||i==SETTING_RESET||i==SETTING_GAME_ICONS||i==SETTING_UPDATE||i==SETTING_BACK))||(state.page==PAGE_CHEATS&&i>=4)||state.page==PAGE_BACKUPS;
         if(simple)arrow_mark(dc,control.right-21,(control.top+control.bottom)/2,1,focused?RGB(178,223,191):RGB(112,132,155));
     }
     if(state.page==PAGE_CHEATS){RECT heading={38,148,r.right-36,172};text(dc,font_small,L"Career cheats",heading,RGB(176,184,197),DT_LEFT|DT_SINGLELINE);}
@@ -531,15 +538,18 @@ static void draw_menu(HDC dc, RECT r) {
         text(dc,font_small,L"Windows Game Bar preference and screenshots are kept.",keep,RGB(176,184,197),DT_CENTER|DT_SINGLELINE);
     }
     if(state.page==PAGE_SETTINGS){
-        RECT above={538,87,560,109},below={538,246,560,269};
-        if(first>0)text(dc,font_small,L"\x25b2",above,RGB(176,184,197),DT_CENTER|DT_SINGLELINE);
-        if(first+6<SETTING_COUNT)text(dc,font_small,L"\x25bc",below,RGB(176,184,197),DT_CENTER|DT_SINGLELINE);
+        COLORREF color=RGB(176,184,197);HBRUSH fill=CreateSolidBrush(color);HPEN pen=CreatePen(PS_SOLID,1,color);
+        HGDIOBJ old_brush=SelectObject(dc,fill),old_pen=SelectObject(dc,pen);
+        POINT above[]={{543,103},{555,103},{549,94}},below[]={{543,252},{555,252},{549,261}};
+        if(first>0)Polygon(dc,above,3);
+        if(first+6<SETTING_COUNT)Polygon(dc,below,3);
+        SelectObject(dc,old_brush);SelectObject(dc,old_pen);DeleteObject(fill);DeleteObject(pen);
     }
     if(menu_power_page(&state)&&state.shutdown_countdown){
         wchar_t countdown[40];swprintf(countdown,40,L"%d seconds",state.shutdown_seconds);
         RECT number={36,187,r.right-36,239};text(dc,font_title,countdown,number,RGB(246,247,250),DT_CENTER|DT_SINGLELINE);
     }
-    int y=state.page==PAGE_MAIN?314:279;
+    int y=state.page==PAGE_MAIN?314:state.page==PAGE_CHEATS?310:279;
     if(conflict){
         wchar_t chord[100],fallback[150];shortcut_label(menu_shortcut(&state),ps,chord,100);
         swprintf(fallback,150,L"Fallback: %ls  |  F10",chord);
@@ -568,6 +578,7 @@ static void draw_menu(HDC dc, RECT r) {
             if(selection==SETTING_AUTO_LAUNCH)wcscpy(line,L"Reopen UFC 6 after PC restart and Windows sign-in.");
             if(selection==SETTING_GUIDE)wcscpy(line,L"Turn Game Bar shortcut Off if Guide navigation stalls.");
             if(selection==SETTING_GAMEBAR)wcscpy(line,L"Windows setting for this user. Win+G still opens Game Bar.");
+            if(selection==SETTING_UPDATE)wcscpy(line,L"Opens the desktop updater. Mouse/keyboard required.");
             if(selection==SETTING_LAUNCHER)wcscpy(line,L"Opens desktop launcher settings. Mouse/keyboard required.");
             if(selection==SETTING_ACCESS)wcscpy(line,L"Player 1 only, or either controller. F10 always works.");
             if(selection==SETTING_SCREENSHOTS)wcscpy(line,L"Open the Windows screenshots folder on the desktop.");
@@ -579,7 +590,13 @@ static void draw_menu(HDC dc, RECT r) {
         wchar_t balances[120],money[32],points[32];format_number(career_state.balance[0],money);format_number(career_state.balance[1],points);
         swprintf(balances,120,career_state.ready?L"Money: $%ls  |  Skill points: %ls":L"Open a career screen to load money and skill points.",money,points);
         const wchar_t *help=selection>=2&&selection<4?balances:selection<2&&cheat_states[selection]==LIVE_LAUNCHER?L"Disable in PORTHEON, then restart once to use live control.":selection<2&&(cheat_states[selection]==LIVE_UNSUPPORTED||cheat_states[selection]==LIVE_ERROR)?L"This game version could not be verified for live cheats.":L"Player 1 follows the controller, even when fighters move.";
-        RECT hint={20,314,r.right-20,338};text(dc,font_small,help,hint,RGB(158,170,188),DT_CENTER|DT_SINGLELINE);
+        if(!message[0])lstrcpynW(message,selection==4?L"Back up your saved progress before using career cheats.":help,120);
+    }
+    if(state.page==PAGE_BACKUPS&&!conflict){
+        RECT info={38,226,r.right-38,274};
+        text(dc,font_small,backup_message,info,backup_state==BACKUP_ERROR?RGB(244,157,160):RGB(176,184,197),DT_CENTER|DT_WORDBREAK);
+        RECT hint={20,314,r.right-20,338};text(dc,font_small,L"Unsaved progress is not included.",hint,RGB(158,170,188),DT_CENTER|DT_SINGLELINE);
+        if(!message[0])wcscpy(message,L"Documents / UFC6 Actions Overlay / SaveBackups");
     }
     if(state.page==PAGE_GAME_ICONS&&!conflict){
         const wchar_t *label=icon_state==GAME_ICONS_PS?L"Currently installed: PlayStation":icon_state==GAME_ICONS_XBOX?L"Currently installed: Xbox":icon_state==GAME_ICONS_MIXED?L"Mixed icons: choose a theme to repair":icon_state==GAME_ICONS_CHECKING?L"Checking installed game icons...":L"Game icons unavailable; see the message below.";
@@ -676,6 +693,29 @@ __declspec(dllexport) void Ufc6MenuExtent(uint32_t viewport_width,uint32_t viewp
     render_width=*width;render_height=*height;
     LeaveCriticalSection(&lock);
 }
+static uint64_t raster_hash(uint64_t hash,const void *data,size_t length){
+    const unsigned char *bytes=data;for(size_t i=0;i<length;++i){hash^=bytes[i];hash*=1099511628211ULL;}return hash;
+}
+static uint64_t menu_raster_signature(void){
+    uint64_t hash=14695981039346656037ULL;
+    EnterCriticalSection(&lock);
+    hash=raster_hash(hash,&menu,sizeof(menu));hash=raster_hash(hash,&career,sizeof(career));
+    hash=raster_hash(hash,live_status,sizeof(live_status));hash=raster_hash(hash,live_enabled,sizeof(live_enabled));
+    int owner[]={raw_navigation,raw_owner,menu_device,gamebar_conflict,settings_save_failed,GetTickCount64()<status_until,
+        menu_device>=0&&devices[menu_device].used?native_player(&devices[menu_device]):0};
+    hash=raster_hash(hash,owner,sizeof(owner));hash=raster_hash(hash,status_text,(wcslen(status_text)+1)*sizeof(wchar_t));
+    hash=raster_hash(hash,last_screenshot_name,(wcslen(last_screenshot_name)+1)*sizeof(wchar_t));
+    LeaveCriticalSection(&lock);
+    wchar_t message[512];int state;
+#ifdef QUIT_MENU_TEST
+    if(test_mode){state=test_game_icons;message[0]=0;}else
+#endif
+    state=game_icons_status(message,512);
+    hash=raster_hash(hash,&state,sizeof(state));hash=raster_hash(hash,message,(wcslen(message)+1)*sizeof(wchar_t));
+    state=save_backups_state(message,512);
+    hash=raster_hash(hash,&state,sizeof(state));hash=raster_hash(hash,message,(wcslen(message)+1)*sizeof(wchar_t));
+    return hash;
+}
 __declspec(dllexport) BOOL Ufc6RenderMenu(void *destination,uint32_t size) {
     EnterCriticalSection(&lock);
     int visible=menu.visible&&(test_mode||foreground())&&font_body!=NULL;
@@ -685,28 +725,46 @@ __declspec(dllexport) BOOL Ufc6RenderMenu(void *destination,uint32_t size) {
     if(!destination)return TRUE;
     size_t bytes=(size_t)width*height*4;
     if(size<bytes)return FALSE;
-    /* This callback runs only under the presentation layer's render lock. */
-    static HDC dc;
-    static HBITMAP bitmap;
-    static void *pixels;
+    /* Render vector geometry and TrueType glyphs at 2x the FINAL pixel size.
+       Downsampling smooths outlines without magnifying a fixed bitmap. */
+    static HDC dc,target;
+    static HBITMAP bitmap,output;
+    static HGDIOBJ original_bitmap,original_output;
+    static void *pixels,*output_pixels;
     static uint32_t bitmap_width,bitmap_height;
-    static HGDIOBJ original_bitmap;
-    if(!dc||bitmap_width!=width||bitmap_height!=height){
+    static uint64_t cached_signature;static int have_frame;
+    uint64_t signature=menu_raster_signature();
+    if(!dc||!target||bitmap_width!=width||bitmap_height!=height){
+        have_frame=0;
         if(bitmap){SelectObject(dc,original_bitmap);DeleteObject(bitmap);bitmap=NULL;}
+        if(output){SelectObject(target,original_output);DeleteObject(output);output=NULL;}
         if(!dc)dc=CreateCompatibleDC(NULL);
+        if(!target)target=CreateCompatibleDC(NULL);
         BITMAPINFO info={0};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
-        info.bmiHeader.biWidth=(LONG)width;info.bmiHeader.biHeight=-(LONG)height;
+        info.bmiHeader.biWidth=(LONG)(width*2);info.bmiHeader.biHeight=-(LONG)(height*2);
         info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
-        bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&pixels,NULL,0);
-        if(!dc||!bitmap){if(dc)DeleteDC(dc);dc=NULL;return FALSE;}
-        original_bitmap=SelectObject(dc,bitmap);bitmap_width=width;bitmap_height=height;
+        if(dc)bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&pixels,NULL,0);
+        info.bmiHeader.biWidth=(LONG)width;info.bmiHeader.biHeight=-(LONG)height;
+        if(target)output=CreateDIBSection(target,&info,DIB_RGB_COLORS,&output_pixels,NULL,0);
+        if(!dc||!target||!bitmap||!output){
+            if(bitmap)DeleteObject(bitmap);if(output)DeleteObject(output);
+            if(dc)DeleteDC(dc);if(target)DeleteDC(target);
+            dc=NULL;target=NULL;bitmap=NULL;output=NULL;return FALSE;
+        }
+        original_bitmap=SelectObject(dc,bitmap);original_output=SelectObject(target,output);
+        bitmap_width=width;bitmap_height=height;
     }
+    if(have_frame&&cached_signature==signature){memcpy(destination,output_pixels,bytes);return TRUE;}
     SetMapMode(dc,MM_ANISOTROPIC);SetWindowExtEx(dc,MENU_BASE_WIDTH,MENU_BASE_HEIGHT,NULL);
-    SetViewportExtEx(dc,(int)width,(int)height,NULL);
+    SetViewportExtEx(dc,(int)width*2,(int)height*2,NULL);
     RECT r={0,0,MENU_BASE_WIDTH,MENU_BASE_HEIGHT};draw_menu(dc,r);GdiFlush();
-    unsigned char *p=pixels;
+    SetMapMode(dc,MM_TEXT);SetMapMode(target,MM_TEXT);
+    SetStretchBltMode(target,HALFTONE);SetBrushOrgEx(target,0,0,NULL);
+    if(!StretchBlt(target,0,0,(int)width,(int)height,dc,0,0,(int)width*2,(int)height*2,SRCCOPY))return FALSE;
+    GdiFlush();
+    unsigned char *p=output_pixels;
     for(size_t i=3;i<bytes;i+=4)p[i]=255;
-    memcpy(destination,pixels,bytes);
+    memcpy(destination,output_pixels,bytes);cached_signature=signature;have_frame=1;
     return TRUE;
 }
 static LRESULT CALLBACK overlay_proc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
@@ -938,15 +996,15 @@ static DWORD WINAPI worker(void *unused) {
     if (!SetLayeredWindowAttributes(overlay, 0, 255, LWA_ALPHA)) {
         log_line("Layered overlay initialization failed."); DestroyWindow(overlay); return 0;
     }
-    font_title = CreateFontW(-32,0,0,0,FW_BOLD,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
-    font_body = CreateFontW(-22,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
-    font_main = CreateFontW(-19,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
-    font_settings = CreateFontW(-20,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
-    font_small = CreateFontW(-16,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI");
+    font_title = CreateFontW(-32,0,0,0,FW_BOLD,0,0,0,DEFAULT_CHARSET,0,0,ANTIALIASED_QUALITY,0,L"Segoe UI");
+    font_body = CreateFontW(-22,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,ANTIALIASED_QUALITY,0,L"Segoe UI");
+    font_main = CreateFontW(-18,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,ANTIALIASED_QUALITY,0,L"Segoe UI");
+    font_settings = CreateFontW(-20,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,ANTIALIASED_QUALITY,0,L"Segoe UI");
+    font_small = CreateFontW(-16,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,ANTIALIASED_QUALITY,0,L"Segoe UI");
     HMODULE xi = LoadLibraryExW(L"xinput1_4.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (xi) xstate = (XStateFn)GetProcAddress(xi, (LPCSTR)100);
     log_line(xstate ? "Ready. LB+RB+Menu (800ms), Guide (if available), or F10." : "Ready. LB+RB+Menu (800ms) or F10. Guide unavailable.");
-    if(!test_mode)game_icons_init(instance);
+    if(!test_mode){game_icons_init(instance);save_backups_init(instance);}
     refresh_gamebar();
     live_cheats_init(&live_cheats,0x900000000ULL);career_cheats_init(0x900000000ULL);
 #ifdef QUIT_MENU_TEST
@@ -987,6 +1045,33 @@ static DWORD WINAPI worker(void *unused) {
                 if(game_icons_status(NULL,0)==(xbox?GAME_ICONS_XBOX:GAME_ICONS_PS))status(L"These game button icons are already selected.");
                 else if(game_icons_apply(game_window,xbox)){EnterCriticalSection(&lock);menu_close(&menu,MENU_RESUME);LeaveCriticalSection(&lock);ShowWindow(overlay,SW_HIDE);}
                 else status(L"Icons could not start. Check the game folder, backup and launcher.");
+            }
+            else if(msg.wParam==MENU_CHECK_UPDATES){
+#ifdef QUIT_MENU_TEST
+                status(L"Test update check; no network or desktop app opened.");
+#else
+                wchar_t path[1200],bin[1024],arguments[1200];DWORD n=GetModuleFileNameW(instance,bin,1024);wchar_t *slash=n&&n<1024?wcsrchr(bin,L'\\'):NULL;
+                BOOL opened=FALSE;
+                if(slash){*slash=0;swprintf(path,1200,L"%ls\\ufc6_menu_update.exe",bin);swprintf(arguments,1200,L"--folder \"%ls\"",bin);
+                    SHELLEXECUTEINFOW launch={.cbSize=sizeof(launch),.lpVerb=L"open",.lpFile=path,.lpParameters=arguments,.lpDirectory=bin,.nShow=SW_SHOWNORMAL};opened=ShellExecuteExW(&launch);}
+                if(opened){EnterCriticalSection(&lock);menu_close(&menu,MENU_RESUME);LeaveCriticalSection(&lock);ShowWindow(overlay,SW_HIDE);ShowWindow(game_window,SW_MINIMIZE);}
+                else status(L"Update helper could not start. Run the latest overlay setup.");
+#endif
+            }
+            else if(msg.wParam==MENU_BACKUP_OPEN)status(L"");
+            else if(msg.wParam==MENU_BACKUP_CREATE){
+#ifdef QUIT_MENU_TEST
+                status(L"Test backup requested; save files were not accessed.");
+#else
+                save_backups_create();
+#endif
+            }
+            else if(msg.wParam==MENU_BACKUP_FOLDER){
+#ifdef QUIT_MENU_TEST
+                status(L"Test backups folder action; Explorer was not opened.");
+#else
+                if(save_backups_open()){ShowWindow(game_window,SW_MINIMIZE);}else status(L"Create a backup first to open its folder.");
+#endif
             }
             else if(msg.wParam==MENU_OPEN_SCREENSHOTS)open_screenshots_folder();
             else if(msg.wParam==MENU_RESET_SETTINGS)reset_overlay_settings();

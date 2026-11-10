@@ -17,17 +17,22 @@ namespace UFC6OverlaySetup {
             try {
                 string folder = Path.Combine(root,"game with spaces","bin"); Directory.CreateDirectory(folder);
                 string engine = Path.Combine(folder,"UFC 6.exe"); File.WriteAllBytes(engine,Bytes("fixture engine"));
-                var payload = new Dictionary<string,byte[]> { {"ufc6_menu_layer.dll",Bytes("new layer")}, {"ufc6_menu_layer.json",Bytes("new manifest")}, {"ufc6_menu_restart.exe",Bytes("new helper")}, {"version.dll",Bytes("new core")} };
+                var payload = new Dictionary<string,byte[]> { {"ufc6_menu_layer.dll",Bytes("new layer")}, {"ufc6_menu_layer.json",Bytes("new manifest")}, {"ufc6_menu_restart.exe",Bytes("new helper")}, {"ufc6_menu_update.exe",Bytes("update helper fixture")}, {"version.dll",Bytes("new core")} };
                 var release = new Release { version = "fixture", engine_sha256 = Manager.HashFile(engine), dll_sha256 = Manager.Hash(payload["version.dll"]), previous_dll_sha256 = new [] {Manager.Hash(Bytes("old core"))}, companion_files = payload.Where(p => p.Key != "version.dll").ToDictionary(p => p.Key,p => Manager.Hash(p.Value)), previous_companion_sha256 = new Dictionary<string,string[]> { {"ufc6_menu_layer.dll",new [] {Manager.Hash(Bytes("old layer"))}} } };
                 var manager = new Manager(release,payload);
                 Assert(Manager.Normalize(Directory.GetParent(folder).FullName) == folder,"Game root must resolve to bin.");
                 Assert(manager.Inspect(folder).Supported,"Fixture engine must be supported.");
+                string parsec=Path.Combine(folder,"UFC 6 Parsec.exe");File.WriteAllBytes(parsec,Bytes("verified parsec fixture"));
+                release.parsec_engine_sha256=Manager.HashFile(parsec);manager=new Manager(release,payload);
+                Assert(manager.Inspect(folder).ParsecStatus.StartsWith("Verified"),"Parsec engine must be recognized in the same folder.");
+                passed.Add("PASS: one shared install recognizes both normal and verified Parsec engines; no separate payload or steps.");
+
                 string ini = Path.Combine(folder,"ufc6-quit-menu.ini"), screenshot = Path.Combine(folder,"existing-screenshot.png");
                 File.WriteAllText(ini,"[Menu]\nUIScale=175\nAutoLaunchAfterRestart=0\nGuideButtonOpensMenu=0\n"); File.WriteAllBytes(screenshot,Bytes("existing image"));
                 string settings = File.ReadAllText(ini);
-                manager.Apply(folder,false); Assert(manager.Inspect(folder).Current == 4,"Installation must match every release hash.");
+                manager.Apply(folder,false); Assert(manager.Inspect(folder).Current == manager.Order.Count,"Installation must match every release hash.");
                 manager.Apply(folder,false); Assert(!Directory.GetFiles(folder,"*.bak").Any(),"Idempotent install must not create backups.");
-                manager.Apply(folder,true); Assert(manager.Inspect(folder).Installed == 0,"Remove must uninstall all four files.");
+                manager.Apply(folder,true); Assert(manager.Inspect(folder).Installed == 0,"Remove must uninstall all managed files.");
                 Assert(File.ReadAllText(ini) == settings && File.ReadAllText(screenshot) == "existing image","User data must survive install and removal.");
                 passed.Add("PASS: root/bin selection, spaced paths, install/remove, idempotence, settings and screenshot preservation.");
                 File.WriteAllBytes(engine,Bytes("unsupported engine"));
@@ -52,13 +57,13 @@ namespace UFC6OverlaySetup {
                 }
                 manager.BeforeCommit = null; manager.Apply(folder,false);
                 Assert(Directory.GetFiles(folder,"*.bak").Length == 2,"Upgrade must keep original core and layer backups.");
-                Assert(manager.Inspect(folder).Current == 4,"Upgrade must finish with all current binaries.");
+                Assert(manager.Inspect(folder).Current == manager.Order.Count,"Upgrade must finish with all current binaries.");
                 passed.Add("PASS: every install commit failure rolls back; recognized upgrades keep backups; core commits last.");
                 for (int fail = 0; fail < manager.Order.Count; ++fail) {
                     int point = fail;
                     manager.BeforeCommit = count => { if (count == point) throw new IOException("Injected removal failure"); };
                     Reject(() => manager.Apply(folder,true),"Removal failure must propagate.");
-                    Assert(manager.Inspect(folder).Current == 4,"Removal rollback must restore all installed files.");
+                    Assert(manager.Inspect(folder).Current == manager.Order.Count,"Removal rollback must restore all installed files.");
                 }
                 manager.BeforeCommit = null; manager.Apply(folder,true);
                 passed.Add("PASS: every removal commit failure restores all installed files.");

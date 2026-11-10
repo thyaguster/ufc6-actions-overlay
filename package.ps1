@@ -4,7 +4,7 @@ $version = (Get-Content -LiteralPath 'dist\release.json' -Raw | ConvertFrom-Json
 & (Join-Path $PSScriptRoot 'build-setup.ps1')
 $package = Join-Path $PSScriptRoot "release\UFC6-Actions-Overlay-$version"
 New-Item -ItemType Directory -Force -Path $package, "$package\dist" | Out-Null
-foreach ($file in @('README.md','LICENSE','THIRD_PARTY_NOTICES.md','RELEASE-NOTES.md','build.ps1','build-setup.ps1','build-icons.ps1','manage_menu.py','attach_menu.py')) {
+foreach ($file in @('README.md','LICENSE','THIRD_PARTY_NOTICES.md','RELEASE-NOTES.md','build.ps1','build-setup.ps1','build-icons.ps1','build-updater.ps1','package.ps1','manage_menu.py','attach_menu.py')) {
     Copy-Item -LiteralPath $file -Destination $package
 }
 Copy-Item -LiteralPath 'src' -Destination $package -Recurse -Force
@@ -16,7 +16,7 @@ New-Item -ItemType Directory -Force -Path "$package\tests" | Out-Null
 Get-ChildItem -LiteralPath 'tests' -File | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination "$package\tests"
 }
-Copy-Item -LiteralPath 'dist\libwinpthread-1.dll','dist\version.dll','dist\release.json','dist\ufc6_menu_layer.dll','dist\ufc6_menu_layer.json','dist\ufc6_menu_restart.exe','dist\ufc6_menu_icons.exe' -Destination "$package\dist"
+Copy-Item -LiteralPath 'dist\libwinpthread-1.dll','dist\version.dll','dist\release.json','dist\ufc6_menu_layer.dll','dist\ufc6_menu_layer.json','dist\ufc6_menu_restart.exe','dist\ufc6_menu_icons.exe','dist\ufc6_menu_update.exe' -Destination "$package\dist"
 New-Item -ItemType Directory -Force -Path "$package\vendor\vulkan-headers" | Out-Null
 Copy-Item -LiteralPath 'vendor\vulkan-headers\include','vendor\vulkan-headers\LICENSES' -Destination "$package\vendor\vulkan-headers" -Recurse -Force
 Copy-Item -LiteralPath 'vendor\vulkan-headers\LICENSE.md' -Destination "$package\vendor\vulkan-headers"
