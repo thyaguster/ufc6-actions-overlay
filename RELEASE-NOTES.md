@@ -1,3 +1,12 @@
+# UFC 6 Actions Overlay v0.9.10
+
+- Add session-only Protect career longevity to Cheats, using a checked immediate setter guard for the selected career.
+- Preserve the current amount, allow increases, and restore normal loss immediately when switched Off.
+- Keep adjacent packed fitness bits and unrelated fighters/fields unchanged; disable on reset or invalid/changed career bindings.
+- Log intercepted decreases to help verify natural career loss during the live test.
+
+Validated in a live Parsec career fight: longevity stayed at 9,895 and the guard intercepted one natural decrease. Isolated native tests cover immediate Off, allowed increases, neighboring fitness bits, unrelated fighters, career binding changes and reset. Installer, controller/rendering and safe handoff checks passed.
+
 # UFC 6 Actions Overlay v0.9.9
 
 - Add local support-report export from Settings and setup, including component hashes/build comparisons, runtime/module information and bounded, path-redacted overlay logs. No uploads or save collection.

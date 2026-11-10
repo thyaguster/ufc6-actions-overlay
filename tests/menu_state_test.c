@@ -161,7 +161,7 @@ int main(void) {
     assert(menu_button(&s,PAD_A,1)==MENU_EXPORT_DIAGNOSTICS&&!s.armed);menu_tick(&s,0,9870,1);
     assert(menu_button(&s,PAD_DOWN,1)==MENU_CHANGED&&s.selection==SETTING_BACK);
     s=(MenuState){.visible=1,.armed=1,.page=PAGE_MAIN,.selection=MAIN_CHEATS};
-    assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_CHEATS&&menu_rows(&s)==8);
+    assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_CHEATS&&menu_rows(&s)==9);
     assert(menu_first_row(&s)==0);s.selection=6;assert(menu_first_row(&s)==1);s.selection=0;
     assert(menu_button(&s,PAD_A,1)==MENU_NONE);menu_tick(&s,0,9900,1);
     assert(menu_button(&s,PAD_A,1)==MENU_CHEAT_STAMINA);menu_tick(&s,0,10000,1);
@@ -206,12 +206,15 @@ int main(void) {
     assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_CAREER_ADD&&s.career_kind==3&&s.selection==0);
     menu_tick(&s,0,11530,1);assert(menu_button(&s,PAD_B,1)==MENU_CHANGED&&s.page==PAGE_CHEATS&&s.selection==5);
     menu_tick(&s,0,11540,1);menu_button(&s,PAD_DOWN,1);assert(s.selection==6);
+    assert(menu_button(&s,PAD_A,1)==MENU_CAREER_LONGEVITY&&!s.armed&&s.page==PAGE_CHEATS);
+    menu_tick(&s,0,11550,1);assert(menu_button(&s,PAD_LEFT,1)==MENU_CAREER_LONGEVITY);
+    menu_tick(&s,0,11560,1);menu_button(&s,PAD_DOWN,1);assert(s.selection==7);
     assert(menu_button(&s,PAD_A,1)==MENU_BACKUP_OPEN&&s.page==PAGE_BACKUPS&&menu_rows(&s)==3);
     menu_tick(&s,0,11600,1);assert(menu_button(&s,PAD_A,1)==MENU_BACKUP_CREATE&&!s.armed);
     assert(menu_button(&s,PAD_A,1)==MENU_NONE);
     menu_tick(&s,0,11700,1);menu_button(&s,PAD_DOWN,1);assert(menu_button(&s,PAD_A,1)==MENU_BACKUP_FOLDER);
-    menu_tick(&s,0,11800,1);assert(menu_button(&s,PAD_B,1)==MENU_CHANGED&&s.page==PAGE_CHEATS&&s.selection==6);
-    menu_tick(&s,0,11900,1);menu_button(&s,PAD_DOWN,1);assert(s.selection==7);
+    menu_tick(&s,0,11800,1);assert(menu_button(&s,PAD_B,1)==MENU_CHANGED&&s.page==PAGE_CHEATS&&s.selection==7);
+    menu_tick(&s,0,11900,1);menu_button(&s,PAD_DOWN,1);assert(s.selection==8);
     assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_MAIN&&s.selection==MAIN_CHEATS);
     puts("PASS: menu safeguards, UI scaling, Guide default/toggle/edge behavior and independent F10/chord access.");
     return 0;

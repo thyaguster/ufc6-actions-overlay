@@ -101,6 +101,7 @@ static void refresh_live_cheats(void){
     if(career.ready&&(!before.ready||before.balance[0]!=career.balance[0]||before.balance[1]!=career.balance[1])){
         char line[120];snprintf(line,sizeof(line),"Career balances verified: money=%u skill_points=%u.",career.balance[0],career.balance[1]);log_line(line);
     }
+    if(career.longevity_blocked>before.longevity_blocked)log_line("Career longevity protection blocked a decrease.");
     if(before.status==CAREER_PENDING&&career.status!=CAREER_PENDING){
         status(career.status==CAREER_ADDED?L"Career change applied once. The game saves normally.":career.status==CAREER_LIMIT?L"Addition cancelled: the game's balance limit was reached.":L"Addition cancelled: career changed or refresh timed out.");
         log_line(career.status==CAREER_ADDED?"Career change applied once.":"Pending career addition cancelled or rejected.");
@@ -141,7 +142,7 @@ static void format_number(uint32_t value,wchar_t *out){
 static void stop_live_cheats(void){
     EnterCriticalSection(&lock);
 #ifdef QUIT_MENU_TEST
-    if(test_mode){for(int i=0;i<LIVE_COUNT;++i){test_live_requested[i]=0;if(test_live_status[i]==LIVE_ON)test_live_status[i]=LIVE_OFF;}}
+    if(test_mode){career.longevity_enabled=0;for(int i=0;i<LIVE_COUNT;++i){test_live_requested[i]=0;if(test_live_status[i]==LIVE_ON)test_live_status[i]=LIVE_OFF;}}
     else
 #endif
     {live_cheats_stop(&live_cheats);career_cheats_cancel();}
@@ -451,7 +452,7 @@ static void draw_menu(HDC dc, RECT r) {
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Cheats",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
     const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Back"};
     const wchar_t *screenshot_labels[]={L"Open screenshots folder",L"Back"};
-    const wchar_t *cheat_labels[]={L"Infinite stamina",L"No damage",L"Add money",L"Add skill points",L"Restore fitness to 100%",L"Refill training days",L"Savegame backups...",L"Back"};
+    const wchar_t *cheat_labels[]={L"Infinite stamina",L"No damage",L"Add money",L"Add skill points",L"Restore fitness to 100%",L"Refill training days",L"Protect career longevity",L"Savegame backups...",L"Back"};
     wchar_t backup_message[512];int backup_state=BACKUP_READY;
 #ifdef QUIT_MENU_TEST
     if(test_mode)wcscpy(backup_message,L"Test backup page; save files are never touched.");else
@@ -481,9 +482,10 @@ static void draw_menu(HDC dc, RECT r) {
         if(state.page==PAGE_MAIN&&i==MAIN_REBOOT)label_row.right=330;
         if(state.page==PAGE_SETTINGS&&i==SETTING_SHORTCUT)label_row.right=290;
         else if(state.page==PAGE_SETTINGS&&(i==SETTING_ICONS||i==SETTING_SCALE||i==SETTING_ACCESS))label_row.right=345;
-        else if((state.page==PAGE_SETTINGS&&(i==SETTING_AUTO_LAUNCH||i==SETTING_GUIDE||i==SETTING_GAMEBAR))||(state.page==PAGE_CHEATS&&i<2))label_row.right=410;
+        else if((state.page==PAGE_SETTINGS&&(i==SETTING_AUTO_LAUNCH||i==SETTING_GUIDE||i==SETTING_GAMEBAR))||(state.page==PAGE_CHEATS&&(i<2||i==6)))label_row.right=410;
         else if(state.page==PAGE_CHEATS&&(i==2||i==3))label_row.right=300;
         text(dc,state.page==PAGE_MAIN?font_main:state.page==PAGE_SETTINGS?font_settings:font_body,state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_GAME_ICONS_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_MAIN?main_labels[i]:state.page==PAGE_SETTINGS?setting_labels[i]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:state.page==PAGE_CAREER_ADD?career_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],label_row,color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+        if(state.page==PAGE_CHEATS&&i==6)toggle_switch(dc,control,career_state.longevity_enabled,focused);
         if(state.page==PAGE_CHEATS&&i<2)toggle_switch(dc,control,cheat_enabled[i],focused);
         if(state.page==PAGE_CHEATS&&(i==2||i==3)){
             wchar_t amount[32],value_text[64];format_number(menu_career_amount(&state,i-2),amount);
@@ -514,7 +516,7 @@ static void draw_menu(HDC dc, RECT r) {
         if(state.page==PAGE_SETTINGS&&i==SETTING_SHORTCUT){wchar_t chord[100];shortcut_label(menu_shortcut(&state),ps,chord,100);value_chip(dc,control,state.capturing?L"Recording...":chord,focused,0);}
         if(state.page==PAGE_SETTINGS&&i==SETTING_SCALE){wchar_t scale[40];swprintf(scale,40,L"%d%%",menu_scale(&state));value_chip(dc,control,scale,focused,1);}
         if(state.page==PAGE_GAME_ICONS&&((i==0&&icon_state==GAME_ICONS_XBOX)||(i==1&&icon_state==GAME_ICONS_PS)))value_chip(dc,control,L"Active",focused,0);
-        int simple=(state.page==PAGE_MAIN&&i!=MAIN_REBOOT)||(state.page==PAGE_SETTINGS&&(i==SETTING_LAUNCHER||i==SETTING_SCREENSHOTS||i==SETTING_RESET||i==SETTING_GAME_ICONS||i==SETTING_UPDATE||i==SETTING_DIAGNOSTICS||i==SETTING_BACK))||(state.page==PAGE_CHEATS&&i>=4)||state.page==PAGE_BACKUPS;
+        int simple=(state.page==PAGE_MAIN&&i!=MAIN_REBOOT)||(state.page==PAGE_SETTINGS&&(i==SETTING_LAUNCHER||i==SETTING_SCREENSHOTS||i==SETTING_RESET||i==SETTING_GAME_ICONS||i==SETTING_UPDATE||i==SETTING_DIAGNOSTICS||i==SETTING_BACK))||(state.page==PAGE_CHEATS&&i>=4&&i!=6)||state.page==PAGE_BACKUPS;
         if(simple)arrow_mark(dc,control.right-21,(control.top+control.bottom)/2,1,focused?RGB(178,223,191):RGB(112,132,155));
     }
     if(state.page==PAGE_CHEATS&&first<=2){RECT heading={38,148-32*first,r.right-36,172-32*first};text(dc,font_small,L"Career cheats",heading,RGB(176,184,197),DT_LEFT|DT_SINGLELINE);}
@@ -568,7 +570,7 @@ static void draw_menu(HDC dc, RECT r) {
         dpad_icon(dc,44,y);
         RECT select={84,y+5,190,y+28};text(dc,font_small,L"Select",select,RGB(187,196,209),DT_LEFT);
         button_icon(dc,210,y,0,ps);
-        const wchar_t *confirm=state.page==PAGE_CHEATS?(selection<2?L"Change":selection<4?L"Add...":L"Confirm"):state.page==PAGE_SETTINGS?(selection==SETTING_SHORTCUT?L"Record":(selection==SETTING_ICONS||selection==SETTING_AUTO_LAUNCH||selection==SETTING_GUIDE||selection==SETTING_GAMEBAR||selection==SETTING_ACCESS)?L"Change":selection==SETTING_SCALE?L"Reset":L"Confirm"):menu_power_page(&state)?(state.shutdown_countdown?L"Cancel":selection==1?L"Hold 3s":L"Confirm"):L"Confirm";
+        const wchar_t *confirm=state.page==PAGE_CHEATS?((selection<2||selection==6)?L"Change":selection<4?L"Add...":L"Confirm"):state.page==PAGE_SETTINGS?(selection==SETTING_SHORTCUT?L"Record":(selection==SETTING_ICONS||selection==SETTING_AUTO_LAUNCH||selection==SETTING_GUIDE||selection==SETTING_GAMEBAR||selection==SETTING_ACCESS)?L"Change":selection==SETTING_SCALE?L"Reset":L"Confirm"):menu_power_page(&state)?(state.shutdown_countdown?L"Cancel":selection==1?L"Hold 3s":L"Confirm"):L"Confirm";
         RECT yes={250,y+5,367,y+28};text(dc,font_small,confirm,yes,RGB(187,196,209),DT_LEFT);
         button_icon(dc,386,y,1,ps);
         RECT back={426,y+5,530,y+28};text(dc,font_small,state.page==PAGE_MAIN?L"Resume":L"Back",back,RGB(187,196,209),DT_LEFT);
@@ -594,7 +596,7 @@ static void draw_menu(HDC dc, RECT r) {
         wchar_t balances[120],money[32],points[32];format_number(career_state.balance[0],money);format_number(career_state.balance[1],points);
         swprintf(balances,120,career_state.ready?L"Money: $%ls  |  Skill points: %ls":L"Open a career screen to load money and skill points.",money,points);
         const wchar_t *help=selection>=2&&selection<4?balances:selection<2&&cheat_states[selection]==LIVE_LAUNCHER?L"Disable in PORTHEON, then restart once to use live control.":selection<2&&(cheat_states[selection]==LIVE_UNSUPPORTED||cheat_states[selection]==LIVE_ERROR)?L"This game version could not be verified for live cheats.":L"Player 1 follows the controller, even when fighters move.";
-        if(!message[0])lstrcpynW(message,selection==4?L"Set career fitness to 100% once. Save normally afterward.":selection==5?L"Restore 7 training days once, without advancing the week.":selection==6?L"Back up your saved progress before using career cheats.":help,120);
+        if(!message[0])lstrcpynW(message,selection==4?L"Set career fitness to 100% once. Save normally afterward.":selection==5?L"Restore 7 training days once, without advancing the week.":selection==6?L"Protects current longevity. Off allows normal loss again.":selection==7?L"Back up your saved progress before using career cheats.":help,120);
     }
     if(state.page==PAGE_BACKUPS&&!conflict){
         RECT info={38,226,r.right-38,274};
@@ -1013,7 +1015,7 @@ static DWORD WINAPI worker(void *unused) {
     refresh_gamebar();
     live_cheats_init(&live_cheats,0x900000000ULL);career_cheats_init(0x900000000ULL);
 #ifdef QUIT_MENU_TEST
-    if(test_mode)career=(CareerSnapshot){.ready=1,.status=CAREER_READY,.balance={12109126,16},.maximum={2147483647,16383},.fitness_ready=1,.fitness=7900,.training_ready=1,.training_days=0,.training_week=1};
+    if(test_mode)career=(CareerSnapshot){.ready=1,.status=CAREER_READY,.balance={12109126,16},.maximum={2147483647,16383},.fitness_ready=1,.fitness=7900,.training_ready=1,.training_days=0,.training_week=1,.longevity_ready=1,.longevity=9895};
 #endif
     refresh_live_cheats();
     if(!test_mode)gamebar_monitor_start();
@@ -1081,6 +1083,15 @@ static DWORD WINAPI worker(void *unused) {
             else if(msg.wParam==MENU_OPEN_SCREENSHOTS)open_screenshots_folder();
             else if(msg.wParam==MENU_RESET_SETTINGS)reset_overlay_settings();
             else if(msg.wParam==MENU_CHEAT_STAMINA||msg.wParam==MENU_CHEAT_HEALTH)change_live_cheat(msg.wParam==MENU_CHEAT_STAMINA?LIVE_STAMINA:LIVE_HEALTH);
+            else if(msg.wParam==MENU_CAREER_LONGEVITY){
+                EnterCriticalSection(&lock);int enabled=!career.longevity_enabled,ok=0;
+#ifdef QUIT_MENU_TEST
+                if(test_mode){career.longevity_enabled=enabled;ok=1;}else
+#endif
+                {ok=career_cheats_protect_longevity(enabled);career_cheats_snapshot(&career);}
+                LeaveCriticalSection(&lock);
+                status(ok?(enabled?L"Career longevity protected for this session.":L"Longevity protection Off. Normal loss resumes."):L"Open a verified career hub to enable protection.");
+            }
             else if(msg.wParam==MENU_CAREER_ADD)add_career_value();
             else if(msg.wParam==MENU_GAMEBAR_CHANGED)change_gamebar();
             else if(msg.wParam==MENU_SCREENSHOT)request_screenshot();
@@ -1140,6 +1151,7 @@ __declspec(dllexport) void MenuTestButtonDevice(int id,uint32_t button,int down)
 __declspec(dllexport) void MenuTestPlayers(int primary,int secondary){EnterCriticalSection(&lock);test_primary_id=primary;test_secondary_id=secondary;refresh_native_players();LeaveCriticalSection(&lock);}
 __declspec(dllexport) int MenuTestTextClips(int reset){int value=test_text_clips;if(reset)test_text_clips=0;return value;}
 __declspec(dllexport) int MenuTestGameIcons(void){return test_game_icons|(test_game_icon_applies<<8);}
+__declspec(dllexport) int MenuTestLongevity(void){return career.longevity_enabled;}
 __declspec(dllexport) int MenuTestCheatEnabled(int which){return which>=0&&which<LIVE_COUNT?live_enabled[which]:-1;}
 __declspec(dllexport) int MenuTestCheatStatus(int which,int value){if(which<0||which>=LIVE_COUNT)return -1;EnterCriticalSection(&lock);if(value>=0&&value<=LIVE_GAME){test_live_status[which]=value;if(value==LIVE_OFF)test_live_requested[which]=0;else if(value==LIVE_ON)test_live_requested[which]=1;}LeaveCriticalSection(&lock);refresh_live_cheats();return live_status[which];}
 __declspec(dllexport) int MenuTestFolderRequests(void){return test_folder_requests;}

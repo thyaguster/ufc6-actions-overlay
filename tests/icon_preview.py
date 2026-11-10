@@ -161,17 +161,24 @@ try:
         render("career-training-days-confirm.png")
         press(0x40);press(0x4000);assert page()==7
         render("cheats-training-days.png")
+        press(0x40);assert dll.MenuTestSnapshot()&15==6
+        assert dll.MenuTestLongevity()==0
+        press(0x4000);assert dll.MenuTestLongevity()==1 and page()==7
+        render("cheats-longevity-on.png")
+        press(0x80);assert dll.MenuTestLongevity()==0
+        render("cheats-longevity-off.png")
+        press(0x20);assert dll.MenuTestLongevity()==1
         press(0x40);press(0x4000);assert page()==11
         render("savegame-backups.png")
         press(0x4000);assert page()==11
         render("savegame-backup-request.png")
         press(0x40);press(0x4000);assert page()==11
-        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==6
+        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==7
         press(0x40);render("cheats-back-scrolled.png");press(0x4000);assert page()==0 and dll.MenuTestSnapshot()&15==3
         press(0x40);press(0x4000)
         for _ in range(9):press(0x40)
         press(0x4000);press(0x40);press(0x4000)
-        assert page()==1 and cheat(0)==1
+        assert page()==1 and cheat(0)==1 and dll.MenuTestLongevity()==0
         press(0x2000);press(0x2000);assert not dll.MenuTestSnapshot()&0x100
         print("PASS: main Cheats page, Player 1-only controls without a selector, confirm/left/right, Game On clears, launcher/unsupported gating, Back and reset; controller assignment tested by native fixture.")
         raise SystemExit(0)

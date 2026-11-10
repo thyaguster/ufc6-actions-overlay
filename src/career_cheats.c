@@ -1,5 +1,5 @@
-/* One-time career additions on the game's own selected-user lookup thread.
-   No save-file edits, balance freezes, remote services or heap-value scans. */
+/* Checked career changes and session-only longevity protection on the game's own selected-user lookup thread.
+   No save-file edits, remote services or heap-value scans. */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <string.h>
@@ -15,7 +15,9 @@ static CareerField fields[2],expected[2],fitness,expected_fitness,training,expec
 static uint32_t training_reference,training_week,expected_training_reference,expected_training_week;
 static UserFn original_user;
 static GetFn game_get;
-static SetFn game_set;
+static SetFn game_set,original_set;
+static CareerField longevity;static uint32_t longevity_identity;
+static volatile LONG longevity_on,longevity_blocked;static volatile LONG64 longevity_store;
 static DirtyFn game_dirty;
 static SRWLOCK guard=SRWLOCK_INIT;
 static CareerSnapshot snapshot;
@@ -43,13 +45,14 @@ static int schema(uintptr_t store,uintptr_t *begin,size_t count){
     if(!b||e<b||e-b!=count*80)return 0;*begin=b;return 1;
 }
 static int describe(uintptr_t store,int kind,CareerField *out){
-    int fighter=kind==CAREER_MONEY||kind==CAREER_FITNESS;
-    uintptr_t b=0;uint32_t index=kind==CAREER_MONEY?48:kind==CAREER_FITNESS?50:10;
+    int fighter=kind==CAREER_MONEY||kind==CAREER_FITNESS||kind==CAREER_LONGEVITY;
+    uintptr_t b=0;uint32_t index=kind==CAREER_MONEY?48:kind==CAREER_FITNESS?50:kind==CAREER_LONGEVITY?24:10;
     if(!schema(store,&b,fighter?64:16))return 0;
     if(fighter){
         if(!name_is(b,"IsUserControlled")||!name_is(b+38*80,"RatingCashAvailable")||!name_is(b+48*80,"Cash")||!name_is(b+61*80,"RatingProgress"))return 0;
     }else if(!name_is(b+2*80,"LastSkillPointsEarned")||!name_is(b+10*80,"SkillPoints")||!name_is(b+11*80,"TotalXp"))return 0;
     if(kind==CAREER_FITNESS&&!name_is(b+50*80,"Fitness"))return 0;
+    if(kind==CAREER_LONGEVITY&&!name_is(b+24*80,"Longevity"))return 0;
     uintptr_t f=b+index*80,p=pointer(store+0x30);uint16_t bits=0;uint32_t type=0,bias=1,rows=0,stride=0,start=0,bit=0,word=0;
     if(!rd(f+0x30,&bits,2)||!u32(f+0x34,&bias)||!u32(f+0x38,&type)||type!=2||bias||!bits||bits>31||
        !u32(p+0x10,&rows)||rows!=1||!u32(p+0xc,&stride)||!stride||stride>4096||
@@ -59,6 +62,27 @@ static int describe(uintptr_t store,int kind,CareerField *out){
     *out=(CareerField){store,p,a,index,bits,bit%32,(word>>(bit%32))&((1u<<bits)-1),(1u<<bits)-1,0};return 1;
 }
 static int same(const CareerField *a,const CareerField *b){return a->store==b->store&&a->packed==b->packed&&a->address==b->address&&a->index==b->index&&a->bits==b->bits&&a->shift==b->shift&&a->row==b->row;}
+static void longevity_disable(void){InterlockedExchange(&longevity_on,0);InterlockedExchange64(&longevity_store,0);snapshot.longevity_enabled=0;}
+static int fighter_identity(uintptr_t store,uint32_t *identity){
+    uintptr_t b=0;if(!schema(store,&b,64)||!name_is(b+22*80,"ID")||!name_is(b+4*80,"AppearanceId"))return 0;
+    uintptr_t p=pointer(store+0x30);uint32_t start=0,stride=0,bit=0,type=0,bias=0;uint16_t bits=0;
+    if(!rd(b+22*80+0x30,&bits,2)||bits!=16||!u32(b+22*80+0x34,&bias)||bias!=(uint32_t)-3||!u32(b+22*80+0x38,&type)||type!=2||
+       !u32(p+0x18,&start)||start<8||start>16384||!u32(p+0xc,&stride)||!stride||stride>4096||!u32(p+0x20+22*4,&bit)||bit%32||bit/32>=stride)return 0;
+    return u32(p+((uintptr_t)start+bit/32)*4,identity);
+}
+static void __attribute__((sysv_abi)) hooked_set(uintptr_t store,uint32_t row,uint32_t index,uint32_t value){
+    /* Most career/game writes take only this constant-time forwarding path. */
+    if(index==24&&row==0&&InterlockedCompareExchange(&longevity_on,0,0)&&store==(uintptr_t)InterlockedCompareExchange64(&longevity_store,0,0)){
+        AcquireSRWLockShared(&guard);CareerField current;uint32_t identity=0;
+        int valid=InterlockedCompareExchange(&longevity_on,0,0)&&snapshot.ready&&store==longevity.store&&
+            pointer(active_root)==guest+0x9c38410&&pointer(pointer(active_root+0x10)+0x10)==collection&&pointer(store+0x10)==collection&&
+            describe(store,CAREER_LONGEVITY,&current)&&current.bits==17&&current.value<=10000&&same(&longevity,&current)&&fighter_identity(store,&identity)&&identity==longevity_identity;
+        if(valid&&value<current.value){value=current.value;InterlockedIncrement(&longevity_blocked);}
+        if(!valid){InterlockedExchange(&longevity_on,0);InterlockedExchange64(&longevity_store,0);}
+        original_set(store,row,index,value);ReleaseSRWLockShared(&guard);return;
+    }
+    original_set(store,row,index,value);
+}
 /* Decode only the active fighter's checked record reference. A reference stores
    the table ID in its upper 15 bits and row in its lower 17 bits; never assume row 0. */
 static int training_field(uintptr_t store,uint32_t row,uint32_t index,uint16_t wanted,CareerField *out){
@@ -112,8 +136,11 @@ static void process_user(uintptr_t root,int64_t user,int has_user){
     if(user!=-1||!TryAcquireSRWLockExclusive(&guard))return;
     CareerField fresh[2];uintptr_t c=0;
     if(!has_user||!resolve(root,fresh,&c)){
-        snapshot.ready=0;snapshot.fitness_ready=0;snapshot.training_ready=0;if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;active_root=collection=0;ReleaseSRWLockExclusive(&guard);return;
+        snapshot.ready=0;snapshot.fitness_ready=0;snapshot.training_ready=0;snapshot.longevity_ready=0;longevity_disable();if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;active_root=collection=0;ReleaseSRWLockExclusive(&guard);return;
     }
+    CareerField long_field={0};uint32_t identity=0;int long_ready=describe(fresh[0].store,CAREER_LONGEVITY,&long_field)&&long_field.bits==17&&long_field.value<=10000&&fighter_identity(fresh[0].store,&identity);
+    if(InterlockedCompareExchange(&longevity_on,0,0)&&(!long_ready||root!=active_root||c!=collection||!same(&longevity,&long_field)||identity!=longevity_identity))longevity_disable();
+    longevity=long_field;longevity_identity=identity;snapshot.longevity_ready=long_ready;snapshot.longevity=long_ready?long_field.value:0;snapshot.longevity_enabled=InterlockedCompareExchange(&longevity_on,0,0)!=0;
     CareerField fit={0};int fit_ready=describe(fresh[0].store,CAREER_FITNESS,&fit)&&fit.bits==15&&fit.value<=20000;
     CareerField camp={0};uint32_t ref=0,week=0;int camp_ready=describe_training(fresh[0].store,c,&camp,&ref,&week);
     if(snapshot.status==CAREER_PENDING){
@@ -152,32 +179,35 @@ static void *__attribute__((sysv_abi)) hooked_user(uintptr_t *out,uintptr_t root
 #endif
     uintptr_t selected=0;rd((uintptr_t)out,&selected,8);process_user(root,user,selected!=0);return value;
 }
-void career_cheats_init(uintptr_t base){guest=base;memset(&snapshot,0,sizeof(snapshot));InterlockedExchange64(&next_probe,0);cache_collection=cache_begin=0;cached_slot[0]=cached_slot[1]=SIZE_MAX;}
+void career_cheats_init(uintptr_t base){guest=base;memset(&snapshot,0,sizeof(snapshot));InterlockedExchange64(&next_probe,0);longevity_disable();cache_collection=cache_begin=0;cached_slot[0]=cached_slot[1]=SIZE_MAX;}
 void career_cheats_tick(void){
     if(!original_user){
         unsigned char bytes[sizeof(user_signature)];
         uintptr_t flag=pointer(guest+0xb452958);char flag_name[28];
         if(!rd(pointer(flag+8),flag_name,28)||memcmp(flag_name,"Fighter_Disable_StaminaLoss",26))return;
         static const unsigned char get_sig[]={0x48,0x8b,0x47,0x08,0x89,0xd1,0x4c,0x8d,0x04,0x89,0x49,0xc1,0xe0,0x04};
-        static const unsigned char set_sig[]={0x48,0x8b,0x47,0x08,0x41,0x89,0xd0,0x48,0x8b,0x7f,0x30};
+        static const unsigned char set_sig[]={0x48,0x8b,0x47,0x08,0x41,0x89,0xd0,0x48,0x8b,0x7f,0x30,0x4f,0x8d,0x04,0x80};
         static const unsigned char dirty_sig[]={0x48,0x8b,0x47,0x10,0xff,0x80,0xe8,0x00,0x00,0x00,0xc3};
         if(!rd(guest+0x5c015d0,bytes,sizeof(bytes)))return;
         if(memcmp(bytes,user_signature,sizeof(bytes))||!rd(guest+0x56dcf80,bytes,sizeof(get_sig))||memcmp(bytes,get_sig,sizeof(get_sig))||
            !rd(guest+0x56dd300,bytes,sizeof(set_sig))||memcmp(bytes,set_sig,sizeof(set_sig))||!rd(guest+0x56ccef0,bytes,sizeof(dirty_sig))||memcmp(bytes,dirty_sig,sizeof(dirty_sig))){snapshot.status=CAREER_UNSUPPORTED;return;}
         game_get=(GetFn)(guest+0x56dcf80);game_set=(SetFn)(guest+0x56dd300);game_dirty=(DirtyFn)(guest+0x56ccef0);
-        ExactHook hook={(unsigned char*)(guest+0x5c015d0),(void*)hooked_user,(void**)&original_user,user_signature,17};const char *error=NULL;
-        if(!install_exact_hooks(&hook,1,&error))return;
+        ExactHook hooks[]={
+            {(unsigned char*)(guest+0x5c015d0),(void*)hooked_user,(void**)&original_user,user_signature,17},
+            {(unsigned char*)(guest+0x56dd300),(void*)hooked_set,(void**)&original_set,set_sig,sizeof(set_sig)}
+        };const char *error=NULL;
+        if(!install_exact_hooks(hooks,2,&error))return;
     }
     AcquireSRWLockExclusive(&guard);
     if(snapshot.ready){CareerField fresh[2];
-        if(!describe(fields[0].store,0,&fresh[0])||!describe(fields[1].store,1,&fresh[1])||!same(&fields[0],&fresh[0])||!same(&fields[1],&fresh[1])){snapshot.ready=0;snapshot.fitness_ready=0;snapshot.training_ready=0;if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;}
+        if(!describe(fields[0].store,0,&fresh[0])||!describe(fields[1].store,1,&fresh[1])||!same(&fields[0],&fresh[0])||!same(&fields[1],&fresh[1])){snapshot.ready=0;snapshot.fitness_ready=0;snapshot.training_ready=0;snapshot.longevity_ready=0;longevity_disable();if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;}
         else for(int k=0;k<2;++k)snapshot.balance[k]=fresh[k].value;
     }
     if(snapshot.status==CAREER_PENDING&&GetTickCount64()-queued>30000)snapshot.status=CAREER_CHANGED;
     ReleaseSRWLockExclusive(&guard);
 }
-void career_cheats_cancel(void){AcquireSRWLockExclusive(&guard);if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;ReleaseSRWLockExclusive(&guard);}
-void career_cheats_snapshot(CareerSnapshot *out){AcquireSRWLockShared(&guard);*out=snapshot;ReleaseSRWLockShared(&guard);}
+void career_cheats_cancel(void){AcquireSRWLockExclusive(&guard);longevity_disable();if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;ReleaseSRWLockExclusive(&guard);}
+void career_cheats_snapshot(CareerSnapshot *out){AcquireSRWLockShared(&guard);*out=snapshot;out->longevity_blocked=(uint32_t)InterlockedCompareExchange(&longevity_blocked,0,0);ReleaseSRWLockShared(&guard);}
 int career_cheats_add(int kind,uint32_t amount){
     if(kind<0||kind>=2||!amount)return 0;
     AcquireSRWLockExclusive(&guard);int ok=0;
@@ -208,6 +238,15 @@ int career_cheats_restore_days(void){
        describe_training(fields[0].store,collection,&fresh,&ref,&week)&&same(&training,&fresh)&&ref==training_reference&&week==training_week){
         memcpy(expected,fields,sizeof(expected));expected_training=fresh;expected_training_reference=ref;expected_training_week=week;
         snapshot.kind=CAREER_DAYS;snapshot.amount=7;queued=GetTickCount64();snapshot.status=CAREER_PENDING;InterlockedExchange64(&next_probe,0);ok=1;
+    }
+    ReleaseSRWLockExclusive(&guard);return ok;
+}
+
+int career_cheats_protect_longevity(int enabled){
+    AcquireSRWLockExclusive(&guard);int ok=0;CareerField current;uint32_t identity=0;
+    if(!enabled){longevity_disable();ok=1;}
+    else if(original_set&&snapshot.ready&&snapshot.longevity_ready&&describe(longevity.store,CAREER_LONGEVITY,&current)&&current.bits==17&&current.value<=10000&&same(&longevity,&current)&&fighter_identity(current.store,&identity)&&identity==longevity_identity){
+        InterlockedExchange64(&longevity_store,(LONG64)current.store);InterlockedExchange(&longevity_blocked,0);InterlockedExchange(&longevity_on,1);snapshot.longevity_enabled=1;ok=1;
     }
     ReleaseSRWLockExclusive(&guard);return ok;
 }
