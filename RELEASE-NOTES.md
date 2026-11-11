@@ -1,3 +1,13 @@
+# UFC 6 Actions Overlay v0.9.15
+
+- Add Skip intros under Game & launcher. Apply the verified short-boot route and its supporting movie/legal callbacks early at launch, removing both Zuffa and EA SPORTS splashes. Turning it Off restores all owned callback defaults. Ignore the obsolete standalone shortening preference.
+- Add Auto-continue startup for the English Press any button title screen and known PSN/EA and roster-download warnings. Confirm each once during the first five minutes, checking every 100 ms while the game is focused and the overlay is closed. Stop after both warnings.
+- Switching Skip intros On also enables Auto-continue startup. Allow auto-continue to be turned Off independently afterward and remember that override across launches. Switching Skip intros Off also disables auto-continue. Both options default Off.
+- Recognize the 16:9 startup layouts at 720p or higher. Require a valid primary controller for network warnings; the title screen may use a targeted game-window Enter key when a controller is not assigned. Keep normal offline failure results; do not report fake login/download success.
+- Process recognition frames in memory, without saved probe images or uploads. Keep clean screenshot requests independent.
+
+Both splashes were confirmed completely absent in a live Parsec launch, with hands-free progression through the title and both warnings to the main menu. Native callback/input guards, rendering/persistence, normal/Parsec installer checks, GPU readback/screenshot checks and 29 Python tests passed during development. The final two-switch UI and saved independent override passed targeted state and renderer/reload checks.
+
 # UFC 6 Actions Overlay v0.9.14
 
 - Add configurable keyboard shortcuts and controller combinations for screenshots, menus, save backups and game/PC actions. Assigned shortcuts appear beside actions; F10 remains available. Exit and power actions retain their confirmations.

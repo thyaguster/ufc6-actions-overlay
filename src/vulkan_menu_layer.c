@@ -29,6 +29,9 @@ static RenderFn render_menu;
 static ExtentFn menu_extent,overlay_position;
 static ActiveFn mark_active;
 static ScreenshotRequestFn screenshot_request;
+typedef void (*StartupFrameFn)(const void*,uint32_t,uint32_t);
+static ScreenshotRequestFn startup_probe_request;
+static StartupFrameFn startup_probe_frame;
 static ScreenshotResultFn screenshot_result;
 static ScreenshotResultPathFn screenshot_result_path;
 static ScreenshotCapabilityFn screenshot_capability;
@@ -113,6 +116,8 @@ static void bind_menu(void) {
     overlay_position=(ExtentFn)GetProcAddress(core,"Ufc6OverlayPosition");
     mark_active=(ActiveFn)GetProcAddress(core,"Ufc6VulkanActive");
     screenshot_request=(ScreenshotRequestFn)GetProcAddress(core,"Ufc6ScreenshotRequest");
+    startup_probe_request=(ScreenshotRequestFn)GetProcAddress(core,"Ufc6StartupProbeRequest");
+    startup_probe_frame=(StartupFrameFn)GetProcAddress(core,"Ufc6StartupProbeFrame");
     screenshot_result=(ScreenshotResultFn)GetProcAddress(core,"Ufc6ScreenshotResult");
     screenshot_result_path=(ScreenshotResultPathFn)GetProcAddress(core,"Ufc6ScreenshotResultPath");
     screenshot_capability=(ScreenshotCapabilityFn)GetProcAddress(core,"Ufc6ScreenshotCapability");
@@ -215,6 +220,8 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     uint32_t index=info->pImageIndices[0],family=UINT32_MAX;
     for(uint32_t i=0;i<d->queue_count;++i)if(d->queues[i].queue==queue)family=d->queues[i].family;
     int capture=screenshot_request&&screenshot_request();
+    int probe=startup_probe_request&&startup_probe_frame&&startup_probe_request();
+    int readback=capture||probe;
     uint32_t menu_width=MENU_W,menu_height=MENU_H;
     if(s&&menu_extent)menu_extent(s->extent.width,s->extent.height,&menu_width,&menu_height);
     uint32_t overlay_x=s?(s->extent.width-menu_width)/2:0,overlay_y=s?(s->extent.height-menu_height)/2:0;
@@ -222,7 +229,7 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     if(s&&(overlay_x>s->extent.width-menu_width||overlay_y>s->extent.height-menu_height)){overlay_x=(s->extent.width-menu_width)/2;overlay_y=(s->extent.height-menu_height)/2;}
     uint32_t menu_bytes=menu_width*menu_height*4;
     int draw=s&&menu_width&&menu_height&&menu_width<=s->extent.width&&menu_height<=s->extent.height&&render_menu(NULL,0);
-    if(!s||!s->supported||s->failed||index>=s->count||family==UINT32_MAX||(!draw&&!capture)){
+    if(!s||!s->supported||s->failed||index>=s->count||family==UINT32_MAX||(!draw&&!readback)){
         if(capture&&screenshot_result)screenshot_result(FALSE);
         ReleaseSRWLockExclusive(&guard);return d->QueuePresentKHR(queue,info);
     }
@@ -237,10 +244,10 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     }
     draw=draw&&ensure_upload(d,f,menu_bytes)&&render_menu(f->mapped,menu_bytes);
     Capture shot={0};
-    if(capture&&(!s->capture_supported||!allocate_capture(d,s,&shot))){
-        free_capture(d,&shot);capture=0;if(screenshot_result)screenshot_result(FALSE);
+    if(readback&&(!s->capture_supported||!allocate_capture(d,s,&shot))){
+        free_capture(d,&shot);if(capture&&screenshot_result)screenshot_result(FALSE);capture=probe=readback=0;
     }
-    if(!draw&&!capture){ReleaseSRWLockExclusive(&guard);return d->QueuePresentKHR(queue,info);}
+    if(!draw&&!readback){ReleaseSRWLockExclusive(&guard);return d->QueuePresentKHR(queue,info);}
     if(draw&&(s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB)){
         unsigned char *p=f->mapped;for(size_t i=0;i<menu_bytes;i+=4){unsigned char b=p[i];p[i]=p[i+2];p[i+2]=b;}
     }
@@ -251,12 +258,12 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     VkResult result=d->BeginCommandBuffer(f->command,&begin);
     if(result!=VK_SUCCESS){s->failed=1;free_capture(d,&shot);if(capture&&screenshot_result)screenshot_result(FALSE);ReleaseSRWLockExclusive(&guard);return d->QueuePresentKHR(queue,info);}
     VkImageMemoryBarrier barrier={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .dstAccessMask=capture?VK_ACCESS_TRANSFER_READ_BIT:VK_ACCESS_TRANSFER_WRITE_BIT,.oldLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .newLayout=capture?VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,.srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+        .dstAccessMask=readback?VK_ACCESS_TRANSFER_READ_BIT:VK_ACCESS_TRANSFER_WRITE_BIT,.oldLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .newLayout=readback?VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,.srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.image=s->images[index],
         .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
     d->CmdPipelineBarrier(f->command,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&barrier);
-    if(capture){
+    if(readback){
         VkBufferImageCopy game={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},.imageExtent={s->extent.width,s->extent.height,1}};
         d->CmdCopyImageToBuffer(f->command,s->images[index],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,shot.buffer,1,&game);
         VkBufferMemoryBarrier host={.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -290,16 +297,17 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     d->ResetFences(d->device,1,&f->fence);
     result=d->QueueSubmit(queue,1,&submit,f->fence);HeapFree(GetProcessHeap(),0,stages);
     if(result!=VK_SUCCESS){s->failed=1;free_capture(d,&shot);if(capture&&screenshot_result)screenshot_result(FALSE);ReleaseSRWLockExclusive(&guard);return result;}
-    if(capture){
+    if(readback){
         BOOL saved=FALSE;PWSTR path=NULL;
         if(d->WaitForFences(d->device,1,&f->fence,VK_TRUE,UINT64_MAX)==VK_SUCCESS){
             if(!shot.coherent){VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=shot.memory,.size=VK_WHOLE_SIZE};
                 d->InvalidateMappedMemoryRanges(d->device,1,&range);}
             int rgba=s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB;
-            saved=menu_save_png_path(self,s->extent.width,s->extent.height,shot.mapped,rgba,&path);
+            if(probe)startup_probe_frame(shot.mapped,s->extent.width,s->extent.height);
+            if(capture)saved=menu_save_png_path(self,s->extent.width,s->extent.height,shot.mapped,rgba,&path);
         }
-        log_line(saved?"Clean pre-overlay game frame saved as PNG.":"PNG screenshot failed.");
-        free_capture(d,&shot);if(screenshot_result_path)screenshot_result_path(saved,path);else if(screenshot_result)screenshot_result(saved);
+        if(capture)log_line(saved?"Clean pre-overlay game frame saved as PNG.":"PNG screenshot failed.");
+        free_capture(d,&shot);if(capture&&screenshot_result_path)screenshot_result_path(saved,path);else if(capture&&screenshot_result)screenshot_result(saved);
         if(path)CoTaskMemFree(path);
     }
     VkPresentInfoKHR present=*info;present.waitSemaphoreCount=1;present.pWaitSemaphores=&f->semaphore;

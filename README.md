@@ -61,6 +61,10 @@ Windows and network paths are redacted. Saves, screenshots, launcher arguments, 
 
 <table>
   <tr>
+    <td width="50%"><img src="docs/screenshots/game-launcher.png" alt="Skip intros and hands-free startup enabled"><br><strong>New: skip intros and hands-free startup</strong></td>
+    <td width="50%"><img src="docs/screenshots/startup-override.png" alt="Skip intros with auto-continue independently disabled"><br><strong>Keep intros skipped with auto-continue Off</strong></td>
+  </tr>
+  <tr>
     <td width="50%"><img src="docs/screenshots/main-menu.png" alt="Game actions with controller shortcut icons"><br><strong>Game actions with controller shortcut icons</strong></td>
     <td width="50%"><img src="docs/screenshots/settings.png" alt="Settings organized by category"><br><strong>Settings organized by category</strong></td>
   </tr>
@@ -154,6 +158,14 @@ ControllerAccess=Either
 The menu does **not pause emulation**. Its opening combination can trigger normal game bindings during the hold. While open, controller buttons and sticks are neutralized and withheld from the game until the menu closes and buttons are released. Native touchpad/motion paths are not intercepted.
 
 On/Off choices use labeled pill switches. Adjustable values use compact arrow controls, and the selected row has a green outline. Quit and PC power actions use a separate muted red accent.
+
+## Startup controls
+
+Under **Settings → Game & launcher**, **Skip intros** skips the Zuffa and EA SPORTS splashes using the checked short-boot route and its supporting timer settings. Both splashes are confirmed completely absent in a live Parsec launch. Turning it Off restores the normal intro callbacks. The older separate shortening preference is ignored.
+
+Switching **Skip intros** On also enables **Auto-continue startup**. You can then turn auto-continue Off independently, and that choice survives a restart. Switching Skip intros Off also disables auto-continue. Both options default Off.
+
+**Auto-continue startup** confirms the English **Press any button** title screen and the two known PSN/EA and roster-download warnings once each. It checks every 100 ms during startup, requires the game to be focused and the overlay closed, and stops after both warnings. It recognizes the 16:9 layout at 720p or higher; other layouts remain manual. The title screen can use a targeted Enter key if a primary controller is not assigned yet. Recognition stays in memory and creates no screenshot files. Hands-free arrival at the main menu is confirmed in a live Parsec launch.
 
 ## Keybinds and themes
 

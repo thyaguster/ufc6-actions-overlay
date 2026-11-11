@@ -106,6 +106,7 @@ int main(void){
     VkSemaphoreCreateInfo sem_info={.sType=VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     VkSemaphore acquire,ready;CHECK(CreateSemaphore(device,&sem_info,NULL,&acquire));CHECK(CreateSemaphore(device,&sem_info,NULL,&ready));
     Sleep(400);typedef void (*SettingsModeFn)(int);SettingsModeFn settings_mode=(SettingsModeFn)GetProcAddress(core,"MenuTestSettingsMode");if(settings_mode)settings_mode(1);
+    ToggleFn enable_probe=(ToggleFn)GetProcAddress(core,"MenuTestStartupProbeEnable");if(!enable_probe)return 1;enable_probe();
     toggle();Sleep(100);if(screenshot)screenshot();
     for(int frame=0;frame<11;++frame){
         if(button&&scale){
@@ -134,6 +135,10 @@ int main(void){
         VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.waitSemaphoreCount=1,.pWaitSemaphores=&acquire,.pWaitDstStageMask=&stage,.commandBufferCount=1,.pCommandBuffers=&cmd,.signalSemaphoreCount=1,.pSignalSemaphores=&ready};CHECK(QueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
         VkPresentInfoKHR present={.sType=VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,.waitSemaphoreCount=1,.pWaitSemaphores=&ready,.swapchainCount=1,.pSwapchains=&swap,.pImageIndices=&index};CHECK(QueuePresentKHR(queue,&present));CHECK(DeviceWaitIdle(device));
     }
+    typedef int (*ProbeFramesFn)(void);
+    ProbeFramesFn probe_frames=(ProbeFramesFn)GetProcAddress(core,"MenuTestStartupProbeFrames");
+    if(!probe_frames||probe_frames()<1){puts("FAIL: startup probe did not receive GPU readback");return 1;}
+    puts("PASS: startup probe receives pre-overlay GPU frames without saving screenshots or injecting test input.");
     typedef void (*ScreenshotNameFn)(wchar_t*,int);
     ScreenshotNameFn screenshot_name=(ScreenshotNameFn)GetProcAddress(core,"MenuTestScreenshotName");
     wchar_t saved_name[128]=L"";if(screenshot_name)screenshot_name(saved_name,128);

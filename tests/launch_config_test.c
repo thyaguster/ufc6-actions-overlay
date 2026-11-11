@@ -31,7 +31,12 @@ int wmain(int argc,wchar_t **argv){
     assert(WritePrivateProfileStringW(L"Menu",L"TrainingRewardMultiplier",L"5",ini));
     assert(WritePrivateProfileStringW(L"Keybinds",L"ScreenshotKey",L"0x0000017b",ini));
     assert(WritePrivateProfileStringW(L"Menu",L"ThemeChoice",L"2",ini));
+    assert(WritePrivateProfileStringW(L"Menu",L"StartupShortMovie",L"1",ini));
+    assert(WritePrivateProfileStringW(L"Menu",L"StartupSkipPopups",L"1",ini));
+    assert(WritePrivateProfileStringW(L"Menu",L"SkipStartupSplashes",L"1",ini));
     assert(overlay_settings_reset(ini)&&launch_config_load(bin,&c)&&!c.custom&&c.wait_parent);
+    assert(GetPrivateProfileIntW(L"Menu",L"SkipStartupSplashes",1,ini)==0);
+    assert(GetPrivateProfileIntW(L"Menu",L"StartupShortMovie",1,ini)==0&&GetPrivateProfileIntW(L"Menu",L"StartupSkipPopups",1,ini)==0);
     assert(GetPrivateProfileIntW(L"Menu",L"LongevityProtection",1,ini)==0);
     assert(GetPrivateProfileIntW(L"Menu",L"TrainingRewardMultiplier",0,ini)==1);
     assert(GetPrivateProfileIntW(L"Menu",L"ThemeChoice",1,ini)==0);

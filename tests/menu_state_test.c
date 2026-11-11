@@ -225,6 +225,14 @@ int main(void) {
     s=(MenuState){.page=PAGE_CHEATS,.selection=10,.window_size=2};assert(menu_visible_rows(&s)==11&&menu_first_row(&s)==0&&menu_canvas_height(&s)==532);
     s.window_size=1;assert(menu_visible_rows(&s)==9&&menu_first_row(&s)==2&&menu_canvas_height(&s)==468);
     s.window_size=0;assert(menu_visible_rows(&s)==6&&menu_first_row(&s)==5&&menu_canvas_height(&s)==372);
+    s=(MenuState){.visible=1,.armed=1,.page=PAGE_GAME_SETTINGS,.selection=3};
+    assert(menu_rows(&s)==6&&menu_button(&s,PAD_A,1)==MENU_STARTUP_CHANGED&&s.skip_splashes&&s.startup_popups);
+    menu_tick(&s,0,13000,1);menu_button(&s,PAD_DOWN,1);
+    assert(menu_button(&s,PAD_LEFT,1)==MENU_STARTUP_CHANGED&&s.skip_splashes&&!s.startup_popups);
+    menu_tick(&s,0,13100,1);menu_button(&s,PAD_UP,1);
+    assert(menu_button(&s,PAD_A,1)==MENU_STARTUP_CHANGED&&!s.skip_splashes&&!s.startup_popups);
+    menu_tick(&s,0,13200,1);assert(menu_button(&s,PAD_RIGHT,1)==MENU_STARTUP_CHANGED&&s.skip_splashes&&s.startup_popups);
+    menu_tick(&s,0,13300,1);assert(menu_button(&s,PAD_A,1)==MENU_STARTUP_CHANGED&&!s.skip_splashes&&!s.startup_popups);
     puts("PASS: menu safeguards, UI scaling, Guide default/toggle/edge behavior and independent F10/chord access.");
     return 0;
 }

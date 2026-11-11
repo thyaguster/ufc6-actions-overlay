@@ -11,13 +11,14 @@ enum {
 };
 enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT, PAGE_SCREENSHOT, PAGE_RESET, PAGE_CHEATS, PAGE_CAREER_ADD, PAGE_GAME_ICONS, PAGE_GAME_ICONS_CONFIRM, PAGE_BACKUPS, PAGE_KEYBINDS, PAGE_BINDING, PAGE_THEME, PAGE_QUIT, PAGE_SETTINGS_HOME, PAGE_APPEARANCE, PAGE_CONTROLS, PAGE_GAME_SETTINGS, PAGE_TOOLS };
 enum { MAIN_RESUME, MAIN_SCREENSHOT, MAIN_RESTART, MAIN_CHEATS, MAIN_SETTINGS, MAIN_QUIT, MAIN_REBOOT, MAIN_SHUTDOWN, MAIN_COUNT };
-enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_LAUNCHER, SETTING_ACCESS, SETTING_SCREENSHOTS, SETTING_RESET, SETTING_GAME_ICONS, SETTING_UPDATE, SETTING_DIAGNOSTICS, SETTING_KEYBINDS, SETTING_THEME, SETTING_BACK, SETTING_FONT, SETTING_BOX_STYLE, SETTING_WINDOW_SIZE, SETTING_COUNT };
+enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_LAUNCHER, SETTING_ACCESS, SETTING_SCREENSHOTS, SETTING_RESET, SETTING_GAME_ICONS, SETTING_UPDATE, SETTING_DIAGNOSTICS, SETTING_KEYBINDS, SETTING_THEME, SETTING_BACK, SETTING_FONT, SETTING_BOX_STYLE, SETTING_WINDOW_SIZE, SETTING_STARTUP_POPUPS, SETTING_SKIP_SPLASHES, SETTING_COUNT };
 enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
-       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED, MENU_LAUNCHER_SETTINGS, MENU_ACCESS_CHANGED, MENU_OPEN_SCREENSHOTS, MENU_RESET_SETTINGS, MENU_CHEAT_STAMINA, MENU_CHEAT_HEALTH, MENU_CAREER_ADD, MENU_GAME_ICONS_OPEN, MENU_GAME_ICONS_APPLY, MENU_BACKUP_CREATE, MENU_BACKUP_FOLDER, MENU_BACKUP_OPEN, MENU_CHECK_UPDATES, MENU_EXPORT_DIAGNOSTICS, MENU_CAREER_LONGEVITY, MENU_TRAINING_MULTIPLIER, MENU_BIND_KEY_CAPTURE, MENU_BIND_CLEAR_KEY, MENU_BIND_CLEAR_PAD, MENU_BIND_PAD_CHANGED, MENU_THEME_CHANGED, MENU_FONT_CHANGED, MENU_BOX_STYLE_CHANGED, MENU_WINDOW_SIZE_CHANGED };
+       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED, MENU_LAUNCHER_SETTINGS, MENU_ACCESS_CHANGED, MENU_OPEN_SCREENSHOTS, MENU_RESET_SETTINGS, MENU_CHEAT_STAMINA, MENU_CHEAT_HEALTH, MENU_CAREER_ADD, MENU_GAME_ICONS_OPEN, MENU_GAME_ICONS_APPLY, MENU_BACKUP_CREATE, MENU_BACKUP_FOLDER, MENU_BACKUP_OPEN, MENU_CHECK_UPDATES, MENU_EXPORT_DIAGNOSTICS, MENU_CAREER_LONGEVITY, MENU_TRAINING_MULTIPLIER, MENU_BIND_KEY_CAPTURE, MENU_BIND_CLEAR_KEY, MENU_BIND_CLEAR_PAD, MENU_BIND_PAD_CHANGED, MENU_THEME_CHANGED, MENU_FONT_CHANGED, MENU_BOX_STYLE_CHANGED, MENU_WINDOW_SIZE_CHANGED, MENU_STARTUP_CHANGED };
 
 typedef struct {
     int visible,selection,armed,chord_latched,draining;
     int playstation_icons,page;
+    int startup_popups,skip_splashes;
     uint32_t open_chord,capture_mask;
     int capturing,capture_ready,capture_error;
     uint64_t chord_since,capture_since;
@@ -61,18 +62,18 @@ static int menu_setting_page(int page){return page==PAGE_SETTINGS||page==PAGE_AP
 static int menu_setting_id(int page,int row){
     static const int appearance[]={SETTING_THEME,SETTING_SCALE,SETTING_FONT,SETTING_BOX_STYLE,SETTING_WINDOW_SIZE,SETTING_ICONS,SETTING_BACK};
     static const int controls[]={SETTING_KEYBINDS,SETTING_GUIDE,SETTING_GAMEBAR,SETTING_ACCESS,SETTING_BACK};
-    static const int game[]={SETTING_LAUNCHER,SETTING_AUTO_LAUNCH,SETTING_GAME_ICONS,SETTING_BACK};
+    static const int game[]={SETTING_LAUNCHER,SETTING_AUTO_LAUNCH,SETTING_GAME_ICONS,SETTING_SKIP_SPLASHES,SETTING_STARTUP_POPUPS,SETTING_BACK};
     static const int tools[]={SETTING_SCREENSHOTS,SETTING_UPDATE,SETTING_DIAGNOSTICS,SETTING_RESET,SETTING_BACK};
     return page==PAGE_APPEARANCE?appearance[row]:page==PAGE_CONTROLS?controls[row]:page==PAGE_GAME_SETTINGS?game[row]:page==PAGE_TOOLS?tools[row]:row;
 }
 static void menu_return_setting(MenuState *s,int id){
     s->page=PAGE_SETTINGS;s->selection=id;s->armed=0;if(s->settings_legacy)return;
-    const int pages[]={PAGE_APPEARANCE,PAGE_CONTROLS,PAGE_GAME_SETTINGS,PAGE_TOOLS},counts[]={6,4,3,4};
+    const int pages[]={PAGE_APPEARANCE,PAGE_CONTROLS,PAGE_GAME_SETTINGS,PAGE_TOOLS},counts[]={6,4,5,4};
     for(int p=0;p<4;++p)for(int i=0;i<counts[p];++i)if(menu_setting_id(pages[p],i)==id){s->page=pages[p];s->selection=i;return;}
     s->page=PAGE_SETTINGS_HOME;s->selection=0;
 }
 static int menu_scroll_page(int page){return menu_setting_page(page)||page==PAGE_CHEATS||page==PAGE_KEYBINDS||page==PAGE_THEME;}
-static int menu_rows(const MenuState *s) {return s->page==PAGE_SETTINGS_HOME?5:s->page==PAGE_APPEARANCE?7:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?4:s->page==PAGE_TOOLS?5:s->page==PAGE_KEYBINDS?10:s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?11:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?3:s->shutdown_countdown?1:2;}
+static int menu_rows(const MenuState *s) {return s->page==PAGE_SETTINGS_HOME?5:s->page==PAGE_APPEARANCE?7:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?6:s->page==PAGE_TOOLS?5:s->page==PAGE_KEYBINDS?10:s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?11:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?3:s->shutdown_countdown?1:2;}
 static int menu_visible_rows(const MenuState *s){int capacity=s->window_size==2?12:s->window_size==1?9:6,count=menu_rows(s);return count<capacity?count:capacity;}
 static uint32_t menu_canvas_height(const MenuState *s){int rows=menu_visible_rows(s);return MENU_BASE_HEIGHT+(menu_scroll_page(s->page)&&rows>6?(uint32_t)(rows-6)*32:0);}
 static int menu_first_row(const MenuState *s){int visible=menu_visible_rows(s);return menu_scroll_page(s->page)&&s->selection>=visible?s->selection-visible+1:0;}
@@ -243,6 +244,10 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         return MENU_NONE;
     }
     if(s->page==PAGE_SETTINGS) {
+        if((s->selection==SETTING_STARTUP_POPUPS||s->selection==SETTING_SKIP_SPLASHES)&&(button==PAD_LEFT||button==PAD_RIGHT||button==PAD_A)){
+            if(s->selection==SETTING_STARTUP_POPUPS)s->startup_popups=!s->startup_popups;else {s->skip_splashes=!s->skip_splashes;s->startup_popups=s->skip_splashes;}
+            return MENU_STARTUP_CHANGED;
+        }
         if(s->selection==SETTING_WINDOW_SIZE&&(button==PAD_LEFT||button==PAD_RIGHT||button==PAD_A)){s->window_size=(s->window_size+(button==PAD_LEFT?2:1))%3;return MENU_WINDOW_SIZE_CHANGED;}
         if(s->selection==SETTING_FONT&&(button==PAD_LEFT||button==PAD_RIGHT||button==PAD_A)){s->font_index=(s->font_index+(button==PAD_LEFT?2:1))%3;return MENU_FONT_CHANGED;}
         if(s->selection==SETTING_BOX_STYLE&&(button==PAD_LEFT||button==PAD_RIGHT||button==PAD_A)){s->box_style=(s->box_style+(button==PAD_LEFT?4:1))%5;return MENU_BOX_STYLE_CHANGED;}

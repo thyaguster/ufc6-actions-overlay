@@ -27,6 +27,9 @@
 #include "overlay_version.h"
 #include "overlay_preferences.h"
 #include "controller_artwork.h"
+#include "startup_options.h"
+#include "startup_prompts.h"
+static StartupOptions startup_options;
 #ifndef QUIT_MENU_TEST
 #include "engine_fingerprint.h"
 #endif
@@ -362,13 +365,15 @@ static void text(HDC dc, HFONT f, const wchar_t *str, RECT r, COLORREF color, UI
 static void button_icon(HDC dc,int x,int y,int back,int playstation){controller_artwork_draw(dc,x,y,30,30,back?PAD_B:PAD_A,playstation);}
 static void dpad_icon(HDC dc,int x,int y,int ps){controller_artwork_draw(dc,x,y,30,30,0,ps);}
 static void save_settings(void) {
-    EnterCriticalSection(&lock); int training_setting=menu_training_multiplier(&menu),longevity_setting=career.longevity_requested,ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu),guide_enabled=menu_guide_enabled(&menu),first_only=menu.first_player_only;uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
+    EnterCriticalSection(&lock); int training_setting=menu_training_multiplier(&menu),longevity_setting=career.longevity_requested,ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu),guide_enabled=menu_guide_enabled(&menu),startup_popups=menu.startup_popups,skip_splashes=menu.skip_splashes,first_only=menu.first_player_only;uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
     wchar_t value[24];swprintf(value,24,L"0x%08lx",(unsigned long)chord);
     BOOL saved=WritePrivateProfileStringW(L"Menu",L"ButtonIcons",ps?L"PlayStation":L"Xbox",settings_path);
     saved=WritePrivateProfileStringW(L"Menu",L"OpeningShortcut",value,settings_path)&&saved;
     swprintf(value,24,L"%d",scale);
     saved=WritePrivateProfileStringW(L"Menu",L"UIScale",value,settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"AutoLaunchAfterRestart",auto_launch?L"1":L"0",settings_path)&&saved;
+    saved=WritePrivateProfileStringW(L"Menu",L"SkipStartupSplashes",skip_splashes?L"1":L"0",settings_path)&&saved;
+    saved=WritePrivateProfileStringW(L"Menu",L"StartupSkipPopups",startup_popups?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"GuideButtonOpensMenu",guide_enabled?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"ControllerAccess",first_only?L"Player1":L"Either",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"LongevityProtection",longevity_setting?L"1":L"0",settings_path)&&saved;
@@ -465,7 +470,7 @@ static void draw_menu(HDC dc, RECT r) {
     RECT sub = {38, 57, r.right - 36, 84};
     text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations.":state.page==PAGE_BINDING?L"Choose an input to record or clear.":state.page==PAGE_THEME?L"From config follows the launcher theme file.":state.page==PAGE_QUIT?L"Close UFC 6 normally through your launcher.":state.page==PAGE_BACKUPS?L"Save in UFC 6 first; wait for autosave to finish.":state.page==PAGE_GAME_ICONS?L"Replace in-game button icons with Xbox or PlayStation.":state.page==PAGE_GAME_ICONS_CONFIRM?L"Your game will close and restart through your launcher.":state.page==PAGE_CAREER_ADD?L"Career changes are included in normal game saves.":state.page==PAGE_CHEATS?L"Stamina and health apply to Player 1.":state.page==PAGE_SCREENSHOT?L"Clean game frame saved. The overlay is excluded.":state.page==PAGE_RESET?L"Restore overlay and launcher defaults?":state.page==PAGE_SETTINGS_HOME?L"Choose a category.":state.page==PAGE_APPEARANCE?L"Theme, size and menu style.":state.page==PAGE_CONTROLS?L"Shortcuts and controller access.":state.page==PAGE_GAME_SETTINGS?L"Launcher, restart and game controller icons.":state.page==PAGE_TOOLS?L"Screenshots, updates, support and reset.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):paint_theme.muted,DT_LEFT);
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Cheats",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
-    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size"};
+    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size",L"Auto-continue startup",L"Skip intros"};
     const wchar_t *category_labels[]={L"Appearance...",L"Controls...",L"Game & launcher...",L"Files & support...",L"Back"};
     const wchar_t *screenshot_labels[]={L"Open screenshots folder",L"Back"};
     const wchar_t *cheat_labels[]={L"Infinite stamina",L"No damage",L"Add money",L"Add skill points",L"Restore fitness to 100%",L"Refill training days",L"Never get old",L"Training point rewards",L"All sparring grades: A...",L"Savegame backups...",L"Back"};
@@ -501,7 +506,7 @@ static void draw_menu(HDC dc, RECT r) {
         if(state.page==PAGE_MAIN&&i==MAIN_REBOOT)label_row.right=330;
         if(menu_setting_page(state.page)&&gi==SETTING_SHORTCUT)label_row.right=280;
         else if(menu_setting_page(state.page)&&(gi==SETTING_ICONS||gi==SETTING_SCALE||gi==SETTING_ACCESS||gi==SETTING_FONT||gi==SETTING_BOX_STYLE||gi==SETTING_WINDOW_SIZE))label_row.right=345;
-        else if((menu_setting_page(state.page)&&(gi==SETTING_AUTO_LAUNCH||gi==SETTING_GUIDE||gi==SETTING_GAMEBAR))||(state.page==PAGE_CHEATS&&(i<2||i==6)))label_row.right=410;
+        else if((menu_setting_page(state.page)&&(gi==SETTING_STARTUP_POPUPS||gi==SETTING_SKIP_SPLASHES||gi==SETTING_AUTO_LAUNCH||gi==SETTING_GUIDE||gi==SETTING_GAMEBAR))||(state.page==PAGE_CHEATS&&(i<2||i==6)))label_row.right=410;
         else if(state.page==PAGE_CHEATS&&(i==2||i==3||i==7))label_row.right=300;
         if(state.page==PAGE_KEYBINDS&&i<BIND_COUNT)label_row.right=285;
         if(state.page==PAGE_BINDING&&i<2)label_row.right=280;
@@ -541,6 +546,7 @@ static void draw_menu(HDC dc, RECT r) {
             RECT value={control.right-134,control.top,control.right-14,control.bottom};
             text(dc,font_small,on?L"Auto-launch: On":L"Auto-launch: Off",value,focused?RGB(229,234,242):RGB(168,184,202),DT_RIGHT|DT_VCENTER|DT_SINGLELINE);
         }
+        if(menu_setting_page(state.page)&&(gi==SETTING_STARTUP_POPUPS||gi==SETTING_SKIP_SPLASHES))toggle_switch(dc,control,gi==SETTING_STARTUP_POPUPS?state.startup_popups:state.skip_splashes,focused);
         if(menu_setting_page(state.page)&&gi==SETTING_AUTO_LAUNCH)toggle_switch(dc,control,menu_auto_launch(&state),focused);
         if(menu_setting_page(state.page)&&(gi==SETTING_GUIDE||gi==SETTING_GAMEBAR)){
             if(gi==SETTING_GAMEBAR&&state.gamebar_shortcut<0)value_chip(dc,control,L"Unavailable",focused,0);
@@ -1039,6 +1045,54 @@ static void tick(void) {
         else ShowWindow(overlay, SW_HIDE);
     }
 }
+static uint64_t startup_probe_deadline,startup_probe_next,startup_probe_press_until;
+static unsigned startup_probe_seen;
+static void *startup_probe_controller;
+static int startup_probe_controller_id,startup_probe_keyboard;
+#ifdef QUIT_MENU_TEST
+static int test_startup_probe,test_startup_frames;
+__declspec(dllexport) void MenuTestStartupProbeEnable(void){test_startup_probe=1;startup_probe_deadline=GetTickCount64()+300000;startup_probe_next=0;menu.startup_popups=1;}
+__declspec(dllexport) int MenuTestStartupProbeFrames(void){return test_startup_frames;}
+#endif
+static void startup_release_confirm(void){
+    if(!startup_probe_press_until)return;
+    refresh_native_players();
+    if(startup_probe_keyboard){PostMessageW(game_window,WM_KEYUP,VK_RETURN,0xc01c0001);startup_probe_keyboard=0;}
+    else if(startup_probe_controller==native_manager&&startup_probe_controller_id==native_primary_id)
+        original_button(startup_probe_controller,startup_probe_controller_id,PAD_A,false);
+    startup_probe_press_until=0;startup_probe_controller=NULL;
+}
+__declspec(dllexport) BOOL Ufc6StartupProbeRequest(void){
+    BOOL ready=FALSE;uint64_t now=GetTickCount64();EnterCriticalSection(&lock);
+#ifdef QUIT_MENU_TEST
+    if(test_mode){ready=test_startup_probe&&now>=startup_probe_next;if(ready)startup_probe_next=now+100;LeaveCriticalSection(&lock);return ready;}
+#endif
+    if(menu.startup_popups&&!menu.visible&&!menu.draining&&!startup_probe_press_until&&(startup_probe_seen&3)!=3&&now<startup_probe_deadline&&now>=startup_probe_next&&foreground()&&!IsIconic(game_window)){
+        ready=TRUE;startup_probe_next=now+100;
+    }
+    LeaveCriticalSection(&lock);return ready;
+}
+__declspec(dllexport) void Ufc6StartupProbeFrame(const void *pixels,uint32_t width,uint32_t height){
+#ifdef QUIT_MENU_TEST
+    if(test_mode){++test_startup_frames;return;}
+#endif
+    int id=startup_prompt_identify(pixels,width,height);if(!id)return;
+    EnterCriticalSection(&lock);uint64_t now=GetTickCount64();int held=0;
+    for(int i=0;i<16;++i)held|=devices[i].used&&devices[i].buttons;
+    for(int i=0;i<4;++i)held|=raw_connected[i]&&raw_states[i].Gamepad.wButtons;
+    refresh_native_players();
+    StartupPromptContext context={menu.startup_popups,foreground()&&!IsIconic(game_window),menu.visible||menu.draining,held,startup_probe_press_until!=0,native_manager&&native_primary_id>=0,startup_probe_seen,now,startup_probe_deadline};
+    if(startup_prompt_can_confirm(id,&context)){
+        startup_probe_controller=native_manager;startup_probe_controller_id=native_primary_id;startup_probe_press_until=now+100;
+        if(id==3&&(!native_manager||native_primary_id<0)){
+            startup_probe_keyboard=PostMessageW(game_window,WM_KEYDOWN,VK_RETURN,0x001c0001)!=0;
+            if(!startup_probe_keyboard){startup_probe_press_until=0;LeaveCriticalSection(&lock);return;}
+        }else original_button(startup_probe_controller,startup_probe_controller_id,PAD_A,true);
+        startup_probe_seen|=1u<<(id-1);
+        log_line(id==3?"Auto-confirmed recognized Press any button title screen.":id==1?"Auto-confirmed recognized PSN/EA startup warning.":"Auto-confirmed recognized roster-download startup warning.");
+    }
+    LeaveCriticalSection(&lock);
+}
 static int install_hooks(void) {
     unsigned char *base = (unsigned char *)GetModuleHandleW(NULL);
     IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)base;
@@ -1099,6 +1153,8 @@ static DWORD WINAPI worker(void *unused) {
     EnterCriticalSection(&lock);if(shortcut[0]&&!*end&&menu_valid_shortcut((uint32_t)chord))menu.open_chord=(uint32_t)chord;LeaveCriticalSection(&lock);
     int scale=(int)GetPrivateProfileIntW(L"Menu",L"UIScale",MENU_SCALE_DEFAULT,settings_path);
     EnterCriticalSection(&lock);menu.ui_scale_percent=overlay_valid_scale(scale)?scale:MENU_SCALE_DEFAULT;LeaveCriticalSection(&lock);
+    menu.skip_splashes=GetPrivateProfileIntW(L"Menu",L"SkipStartupSplashes",0,settings_path)!=0;
+    menu.startup_popups=GetPrivateProfileIntW(L"Menu",L"StartupSkipPopups",0,settings_path)!=0;
     int auto_launch=(int)GetPrivateProfileIntW(L"Menu",L"AutoLaunchAfterRestart",1,settings_path);
     EnterCriticalSection(&lock);menu.disable_auto_launch=auto_launch==0;LeaveCriticalSection(&lock);
     wchar_t access[32];GetPrivateProfileStringW(L"Menu",L"ControllerAccess",L"Either",access,32,settings_path);
@@ -1108,6 +1164,14 @@ static DWORD WINAPI worker(void *unused) {
     log_line("UFC6 quit menu loaded inside engine process.");
     log_line("Overlay build " UFC6_OVERLAY_VERSION ".");
     if (!test_mode && !install_hooks()) return 0;
+    /* The route selector can be read only once during boot. Apply it as soon as
+       guest code is mapped, before constructing the overlay or starting its timer. */
+    if(!test_mode&&menu.skip_splashes){
+        uint64_t until=GetTickCount64()+10000;int applied=0;
+        do{if(startup_options_tick(&startup_options,0x900000000ULL,1,1)>0&&startup_options.owned[2]){applied=1;break;}Sleep(1);}while(GetTickCount64()<until);
+        log_line(applied?"Early experimental splash-bypass callback applied.":"Early splash-bypass callback unavailable; retaining normal game flow.");
+    }
+
     int longevity_setting=GetPrivateProfileIntW(L"Menu",L"LongevityProtection",0,settings_path)!=0;
     preferences_load(&preferences,settings_path,menu_shortcut(&menu));menu.theme_selection=preferences.theme_choice;menu.font_index=(preferences.font_size-16)/2;menu.box_style=preferences.box_style;menu.window_size=preferences.window_size;
     lstrcpynW(theme_path,settings_path,MAX_PATH);wchar_t *theme_slash=wcsrchr(theme_path,L'\\');if(theme_slash)lstrcpyW(theme_slash+1,L"ufc6-overlay-theme.cfg");
@@ -1143,11 +1207,14 @@ static DWORD WINAPI worker(void *unused) {
 #endif
     refresh_live_cheats();
     if(!test_mode)gamebar_monitor_start();
+    startup_probe_deadline=GetTickCount64()+300000;
     SetTimer(NULL, 1, 16, NULL);
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {
         if (msg.message == WM_TIMER) {
             if (!IsWindow(game_window)) break;
             if(GetTickCount64()>=next_live_check){next_live_check=GetTickCount64()+250;refresh_live_cheats();}
+            if(!test_mode){EnterCriticalSection(&lock);int skip=menu.skip_splashes;LeaveCriticalSection(&lock);int before=startup_options.state;int result=startup_options_tick(&startup_options,0x900000000ULL,skip,skip);if(result!=before)log_line(result<0?"Startup options waiting for verified game callbacks (or conflict).":result?"Experimental startup options applied in memory.":"Startup options restored to game defaults.");}
+            EnterCriticalSection(&lock);if(startup_probe_press_until&&GetTickCount64()>=startup_probe_press_until)startup_release_confirm();LeaveCriticalSection(&lock);
             tick();
         } else if (msg.message == WM_MENU_ACTION) {
             if (msg.wParam == MENU_OPEN) { position_overlay(); log_line("Menu opened."); }
@@ -1205,6 +1272,7 @@ static DWORD WINAPI worker(void *unused) {
                 if(save_backups_open()){ShowWindow(game_window,SW_MINIMIZE);}else status(L"Create a backup first to open its folder.");
 #endif
             }
+            else if(msg.wParam==MENU_STARTUP_CHANGED){save_settings();EnterCriticalSection(&lock);if(menu.startup_popups){startup_probe_deadline=GetTickCount64()+300000;startup_probe_seen=0;}else startup_release_confirm();LeaveCriticalSection(&lock);status(L"Startup option saved. Restart game to test splashes.");}
             else if(msg.wParam==MENU_OPEN_SCREENSHOTS)open_screenshots_folder();
             else if(msg.wParam==MENU_RESET_SETTINGS)reset_overlay_settings();
             else if(msg.wParam==MENU_CHEAT_STAMINA||msg.wParam==MENU_CHEAT_HEALTH)change_live_cheat(msg.wParam==MENU_CHEAT_STAMINA?LIVE_STAMINA:LIVE_HEALTH);

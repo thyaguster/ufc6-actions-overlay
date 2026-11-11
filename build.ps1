@@ -15,7 +15,7 @@ if (-not $Test -and (Test-Path -LiteralPath 'dist/release.json')) {
 }
 python src/generate_controller_artwork.py --check
 if ($LASTEXITCODE) { throw 'Controller artwork data verification failed' }
-$sources = @('src/quit_menu.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/save_backups.c','src/overlay_preferences.c')
+$sources = @('src/quit_menu.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/save_backups.c','src/overlay_preferences.c','src/startup_options.c','src/startup_prompts.c')
 $flags = @('cc','-target','x86_64-windows-gnu','-O2','-Wall','-Wextra','-Werror','-shared','-Isrc','-luser32','-lgdi32','-lkernel32','-ladvapi32','-lcomdlg32','-lshell32','-lole32','-luuid')
 if ($Test) { $flags += '-DQUIT_MENU_TEST'; $output = 'dist/quit_menu_test.dll' }
 else { $output = 'dist/version.dll' }
@@ -32,7 +32,7 @@ if (-not $Test) {
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     $manifest = [ordered]@{
-        version = '0.9.14'
+        version = '0.9.15'
         parsec_engine_sha256 = 'ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d'
         engine_revision = '3309ab23f'
         engine_sha256 = 'f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2'
@@ -85,6 +85,14 @@ if ($Test) {
     if ($LASTEXITCODE) { throw 'Icons environment fixture compilation failed' }
     & ./.build/icons_process_env_test.exe
     if ($LASTEXITCODE) { throw 'Icons environment fixture failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror tests/startup_prompts_test.c src/startup_prompts.c -o .build/startup_prompts_test.exe
+    if ($LASTEXITCODE) { throw 'Startup prompt fixture compilation failed' }
+    & ./.build/startup_prompts_test.exe
+    if ($LASTEXITCODE) { throw 'Startup prompt fixture failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror tests/startup_options_test.c -o .build/startup_options_test.exe
+    if ($LASTEXITCODE) { throw 'Startup option fixture compilation failed' }
+    & ./.build/startup_options_test.exe
+    if ($LASTEXITCODE) { throw 'Startup option tests failed' }
     & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror tests/career_cheats_test.c src/exact_hooks.c -o .build/career_cheats_test.exe
     if ($LASTEXITCODE) { throw 'Career cheat fixture compilation failed' }
     & ./.build/career_cheats_test.exe
@@ -199,3 +207,13 @@ if ($Test) {
 }
 Get-FileHash -LiteralPath $output -Algorithm SHA256 | Format-List
 
+
+if ($Test) {
+    $startupFixture = Join-Path $root ('.build/startup-ui-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $startupFixture | Out-Null
+    Copy-Item -LiteralPath 'dist/quit_menu_test.dll' -Destination $startupFixture
+    python tests/icon_preview.py $startupFixture --startup --reset
+    if ($LASTEXITCODE) { throw 'Startup settings UI failed' }
+    python tests/icon_preview.py $startupFixture --startup-reload
+    if ($LASTEXITCODE) { throw 'Startup settings persistence failed' }
+}

@@ -19,3 +19,6 @@ EXPORTS
     GetFileVersionInfoSizeExW=ProxyGetFileVersionInfoSizeExW
     VerLanguageNameA=ProxyVerLanguageNameA
     VerLanguageNameW=ProxyVerLanguageNameW
+
+    Ufc6StartupProbeRequest
+    Ufc6StartupProbeFrame
