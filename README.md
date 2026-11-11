@@ -70,7 +70,11 @@ Windows and network paths are redacted. Saves, screenshots, launcher arguments, 
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/live-cheats.png" alt="Cheats with Player 1 pill switches and career additions"><br><strong>Player 1 cheats and career additions</strong></td>
+    <td width="50%"><img src="docs/screenshots/training-cheats.png" alt="Lower Cheats rows showing Never get old, training point rewards, All sparring grades A and savegame backups"><br><strong>More cheats: longevity, training rewards and A grades</strong></td>
+  </tr>
+  <tr>
     <td width="50%"><img src="docs/screenshots/game-button-icons.png" alt="In-game controller icon patch"><br><strong>Xbox or PlayStation in-game controller icons</strong></td>
+    <td width="50%"><img src="docs/screenshots/sparring-grades-confirm.png" alt="All sparring grades A confirmation"><br><strong>Confirm A grades for all sparring packs</strong></td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/savegame-backups.png" alt="Savegame backups page"><br><strong>Verified savegame backups</strong></td>
