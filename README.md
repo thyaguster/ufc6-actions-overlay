@@ -39,7 +39,7 @@ The engine executable is not patched. The optional controller-icon patch changes
 
 This download contains the overlay, asset-free controller-icon patcher, and installer. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. It supports the **PORTHEON `3309ab23f` Windows engine**, including its verified Parsec/two-player derivative, rather than every KytyPS5 build. The installer checks the executable hash before installing.
 
-**The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
+**The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Game & launcher → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
 
 ## Parsec / two controllers
 
@@ -49,7 +49,7 @@ Install into the same `bin` folder, then launch with PORTHEON's Parsec option en
 
 ## Diagnostics and support reports
 
-Use **Settings → Export support report...**, then **Export support report** in the desktop window. If the overlay is invisible, run the installer, select your game folder, click **Check folder**, and use **Export support report...** there. Export does not require installing or closing the game.
+Use **Settings → Files & support → Export support report...**, then **Export support report** in the desktop window. If the overlay is invisible, run the installer, select your game folder, click **Check folder**, and use **Export support report...** there. Export does not require installing or closing the game.
 
 ![Local support-report export](docs/screenshots/diagnostics.png)
 
@@ -61,36 +61,40 @@ Windows and network paths are redacted. Saves, screenshots, launcher arguments, 
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/main-menu.png" alt="Main actions menu"><br><strong>Game actions and separate PC power options</strong></td>
-    <td width="50%"><img src="docs/screenshots/settings.png" alt="Overlay settings"><br><strong>Controller shortcuts, Windows Game Bar, UI scale, and auto-launch</strong></td>
+    <td width="50%"><img src="docs/screenshots/main-menu.png" alt="Game actions with controller shortcut icons"><br><strong>Game actions with controller shortcut icons</strong></td>
+    <td width="50%"><img src="docs/screenshots/settings.png" alt="Settings organized by category"><br><strong>Settings organized by category</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/settings-playstation.png" alt="PlayStation button prompts"><br><strong>Xbox or PlayStation overlay prompts</strong></td>
-    <td width="50%"><img src="docs/screenshots/restart-pc.png" alt="Restart PC confirmation"><br><strong>Confirmed restart with optional game auto-launch</strong></td>
+    <td width="50%"><img src="docs/screenshots/appearance.png" alt="Appearance: theme, font, Octagon boxes and window size"><br><strong>Appearance: theme, font, Octagon boxes and window size</strong></td>
+    <td width="50%"><img src="docs/screenshots/keybinds.png" alt="Keyboard keys and controller combinations"><br><strong>Keyboard keys and controller combinations</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/live-cheats.png" alt="Cheats with Player 1 pill switches and career additions"><br><strong>Player 1 cheats and career additions</strong></td>
-    <td width="50%"><img src="docs/screenshots/training-cheats.png" alt="Lower Cheats rows showing Never get old, training point rewards, All sparring grades A and savegame backups"><br><strong>More cheats: longevity, training rewards and A grades</strong></td>
+    <td width="50%"><img src="docs/screenshots/settings-playstation.png" alt="PlayStation artwork and assigned shortcuts"><br><strong>PlayStation artwork and assigned shortcuts</strong></td>
+    <td width="50%"><img src="docs/screenshots/restart-pc.png" alt="Confirmed restart with optional game auto-launch"><br><strong>Confirmed restart with optional game auto-launch</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/game-button-icons.png" alt="In-game controller icon patch"><br><strong>Xbox or PlayStation in-game controller icons</strong></td>
-    <td width="50%"><img src="docs/screenshots/sparring-grades-confirm.png" alt="All sparring grades A confirmation"><br><strong>Confirm A grades for all sparring packs</strong></td>
+    <td width="50%"><img src="docs/screenshots/live-cheats.png" alt="Player 1 cheats and career additions"><br><strong>Player 1 cheats and career additions</strong></td>
+    <td width="50%"><img src="docs/screenshots/training-cheats.png" alt="More cheats: longevity, training rewards and A grades"><br><strong>More cheats: longevity, training rewards and A grades</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/savegame-backups.png" alt="Savegame backups page"><br><strong>Verified savegame backups</strong></td>
-    <td width="50%"><img src="docs/screenshots/updater.png" alt="GitHub updater desktop window"><br><strong>Updates through GitHub</strong></td>
+    <td width="50%"><img src="docs/screenshots/cheats-tall.png" alt="Tall window: all eleven Cheats rows together"><br><strong>Tall window: all eleven Cheats rows together</strong></td>
+    <td width="50%"><img src="docs/screenshots/shortcut-editor.png" alt="Record keyboard and controller shortcuts"><br><strong>Record keyboard and controller shortcuts</strong></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/game-button-icons.png" alt="Included Xbox / PlayStation game icon patch"><br><strong>Included Xbox / PlayStation game icon patch</strong></td>
+    <td width="50%"><img src="docs/screenshots/savegame-backups.png" alt="Verified savegame backups"><br><strong>Verified savegame backups</strong></td>
   </tr>
 </table>
 
-[Career training controls](docs/screenshots/training-cheats.png) · [Screenshot result](docs/screenshots/screenshot-saved.png) · [Reset confirmation](docs/screenshots/reset-confirmation.png) · [Controller access](docs/screenshots/controller-access.png) · [Game Bar conflict warning](docs/screenshots/gamebar-conflict.png) · [Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
+[Controls](docs/screenshots/controls.png) · [Game & launcher](docs/screenshots/game-launcher.png) · [Files & support](docs/screenshots/files-support.png) · [Screenshot notification](docs/screenshots/notification.png) · [Windows setup](docs/screenshots/setup.png) · [GitHub updater](docs/screenshots/updater.png)
 
-The game-background images are real game-window captures. The isolated page images come from the same overlay renderer in a test host with power actions disabled.
+The isolated page images use the current overlay renderer in a test host with power actions disabled. The game-background captures show an earlier overlay release running over the actual game.
 
 ## Change in-game controller icons (included)
 
 The overlay includes the patcher from [UFC 6 Xbox Icons](https://github.com/thyaguster/ufc6-xbox-icons), so one overlay installation provides both the actions menu and the game button-icons mod.
 
-1. Open the overlay and go to **Settings → Patch in-game controller icons...**. Scroll down in Settings to find it.
+1. Open the overlay and go to **Settings → Game & launcher → Patch in-game controller icons...**. It is in the Game & launcher category.
 2. Choose **Xbox game icons** or **PlayStation game icons** on the **Controller icon patch** page. It also shows which icons are currently installed.
 3. Confirm **Apply and restart game**. The game and its launcher close normally, the patch is applied, and UFC 6 relaunches through your saved launcher settings.
 
@@ -102,7 +106,7 @@ The game-icons patch supports extracted **PPSA23566 01.006.000** game files. It 
 
 ## Updates through GitHub
 
-Open **Settings → Check for updates...** in the overlay, or click **Check for updates** in the installer. This opens a desktop window (mouse/keyboard required) that compares your installed version with the latest stable GitHub release.
+Open **Settings → Files & support → Check for updates...** in the overlay, or click **Check for updates** in the installer. This opens a desktop window (mouse/keyboard required) that compares your installed version with the latest stable GitHub release.
 
 If an update is available, click **Download & open installer**. The updater checks the release checksum and SHA-256 of the downloaded EXE before opening it. Your game folder is filled in automatically. **Close UFC 6 and its launcher**, then click **Install / Update**. One update covers normal and Parsec mode; settings, screenshots, game-icon restore backups and savegame backups are kept.
 
@@ -114,9 +118,9 @@ Updates are checked when you open the checker; nothing is downloaded or installe
 - **D-pad or left stick up/down** selects; **A / cross** confirms; **B / circle** goes back. Back resumes the game from the main menu.
 - **F10** always opens or closes the overlay, including while recording a new shortcut.
 - After opening with Guide or F10, release the opening button, then use the D-pad. Guide accepts navigation from either XInput or the game's controller input, with ownership assigned to the first fresh navigation press. Xbox combinations use the matching XInput pad when available. Buttons held or released on another pad do not take ownership or block arming. Disconnecting the controlling pad closes the menu safely.
-- The Xbox/Guide button opens or closes the overlay by default. Disable it under **Settings → Xbox / Guide button** if you use that button for something else. This controls only this overlay. Windows Game Bar and other apps may also use Guide; use the separate Windows Game Bar setting below to resolve that conflict.
+- The Xbox/Guide button opens or closes the overlay by default. Disable it under **Settings → Controls → Xbox / Guide button** if you use that button for something else. This controls only this overlay. Windows Game Bar and other apps may also use Guide; use the separate Windows Game Bar setting below to resolve that conflict.
 
-Select **Settings** to open the second settings box:
+Select **Settings** and choose a category. The available controls include:
 
 - **Overlay button icons:** left/right or confirm switches this overlay between Xbox A/B and PlayStation cross/circle prompts.
 - **Patch in-game controller icons...:** choose Xbox or the original PlayStation artwork independently. The Cancel-first confirmation applies the selected theme after the game and its launcher close, then relaunches through your saved launcher settings. It supports extracted PPSA23566 01.006.000 and creates/verifies `.ufc6-xbox-icons-backup.zip` in the game folder. No game assets are bundled. Existing development installs must first be migrated/restored with their original tool; unknown data is left untouched. Uninstalling the overlay keeps game artwork and the backup; restore PlayStation icons before uninstalling if desired. This is labeled **Controller icon patch** on its own page.
@@ -150,6 +154,39 @@ ControllerAccess=Either
 The menu does **not pause emulation**. Its opening combination can trigger normal game bindings during the hold. While open, controller buttons and sticks are neutralized and withheld from the game until the menu closes and buttons are released. Native touchpad/motion paths are not intercepted.
 
 On/Off choices use labeled pill switches. Adjustable values use compact arrow controls, and the selected row has a green outline. Quit and PC power actions use a separate muted red accent.
+
+## Keybinds and themes
+
+Settings is grouped into **Appearance**, **Controls**, **Game & launcher**, and **Files & support**. Appearance contains theme, UI scale, a consistent font-size control (16/18/20), a separate window-size control, five row styles (Rounded/Square/Outline/Pill/Octagon), and overlay button icons. Assigned shortcuts and footer controls use the selected Xbox or PlayStation vector artwork, including platform-specific shoulder, stick-press, D-pad and Options/Menu prompts. Brief corner notifications report actions and screenshot results without opening the menu or taking input; screenshots exclude those notifications.
+
+**Window size** is separate from UI scale: Compact allows six rows before scrolling, Expanded allows nine, and Tall allows up to twelve. Long pages grow vertically while keeping the font size unchanged; short pages use only the height they need. Tall shows all eleven Cheats rows together. The overlay still fits inside the game viewport.
+
+**Settings > Controls > Keybinds** assigns a keyboard key (optionally with Ctrl, Alt or Shift) and a controller combo to each action: open overlay, screenshot, Cheats, Settings, savegame backup, restart game, quit game, restart PC and shut down PC. Select an action, record the input, then release it to save. Controller combos use two to four buttons held for 0.8 seconds. Reserved or overlapping bindings are rejected. F10 remains available to recover access, and Guide keeps its existing setting. Assigned shortcuts appear beside menu actions. Restart, quit and power shortcuts open confirmation pages; PC power actions retain their hold/countdown. Screenshot shortcuts capture the game without the overlay.
+
+**Settings > Appearance > Theme** offers Green, Blue, Red, Purple and Amber presets. **From config** is the default: it follows `bin/ufc6-overlay-theme.cfg`, allowing PORTHEON to supply colors that match its launcher. The overlay creates an example file only when none exists, preserves it during updates/reset, and reloads it while the game is running. A user-selected preset is stored separately in the overlay INI; selecting From config resumes following the launcher's colors.
+
+Example config (also available as [a downloadable example](docs/theme-config.example.cfg)):
+
+```ini
+[Theme]
+Preset=Blue
+Accent=#66B1FF
+Background=#11161E
+Surface=#1D2531
+Border=#2A3544
+Text=#DAE4F0
+Muted=#B0B8C5
+
+[Appearance]
+UIScale=100
+FontSize=18
+BoxStyle=Rounded
+WindowSize=Compact
+```
+
+On first launch, `[Appearance]` seeds any missing `UIScale`, `FontSize`, `BoxStyle` and `WindowSize` preferences, then saves them to the client INI. Existing values and later user edits are preserved, even if the launcher changes these defaults afterward. Scale accepts 50–300 in steps of 25; font size accepts 16, 18 or 20; box style accepts Rounded, Square, Outline, Pill or Octagon; window size accepts Compact, Expanded or Tall. Color config still reloads live while From config is selected.
+
+All color overrides are optional and use `#RRGGBB`. Invalid colors fall back to the preset. PORTHEON can distribute just this config; no overlay rebuild is required. User bindings live in the INI's `[Keybinds]` section, and Reset clears those bindings and the theme override while keeping the launcher's theme config.
 
 ## Cheats
 

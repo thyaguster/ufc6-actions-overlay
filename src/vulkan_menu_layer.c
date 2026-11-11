@@ -26,7 +26,7 @@ typedef void (*ScreenshotCapabilityFn)(BOOL);
 static HINSTANCE self;
 static SRWLOCK guard=SRWLOCK_INIT;
 static RenderFn render_menu;
-static ExtentFn menu_extent;
+static ExtentFn menu_extent,overlay_position;
 static ActiveFn mark_active;
 static ScreenshotRequestFn screenshot_request;
 static ScreenshotResultFn screenshot_result;
@@ -110,6 +110,7 @@ static void bind_menu(void) {
     if(!core)return;
     render_menu=(RenderFn)GetProcAddress(core,"Ufc6RenderMenu");
     menu_extent=(ExtentFn)GetProcAddress(core,"Ufc6MenuExtent");
+    overlay_position=(ExtentFn)GetProcAddress(core,"Ufc6OverlayPosition");
     mark_active=(ActiveFn)GetProcAddress(core,"Ufc6VulkanActive");
     screenshot_request=(ScreenshotRequestFn)GetProcAddress(core,"Ufc6ScreenshotRequest");
     screenshot_result=(ScreenshotResultFn)GetProcAddress(core,"Ufc6ScreenshotResult");
@@ -216,6 +217,9 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     int capture=screenshot_request&&screenshot_request();
     uint32_t menu_width=MENU_W,menu_height=MENU_H;
     if(s&&menu_extent)menu_extent(s->extent.width,s->extent.height,&menu_width,&menu_height);
+    uint32_t overlay_x=s?(s->extent.width-menu_width)/2:0,overlay_y=s?(s->extent.height-menu_height)/2:0;
+    if(s&&overlay_position)overlay_position(s->extent.width,s->extent.height,&overlay_x,&overlay_y);
+    if(s&&(overlay_x>s->extent.width-menu_width||overlay_y>s->extent.height-menu_height)){overlay_x=(s->extent.width-menu_width)/2;overlay_y=(s->extent.height-menu_height)/2;}
     uint32_t menu_bytes=menu_width*menu_height*4;
     int draw=s&&menu_width&&menu_height&&menu_width<=s->extent.width&&menu_height<=s->extent.height&&render_menu(NULL,0);
     if(!s||!s->supported||s->failed||index>=s->count||family==UINT32_MAX||(!draw&&!capture)){
@@ -266,7 +270,7 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
         }
     }
     VkBufferImageCopy copy={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
-        .imageOffset={(int32_t)(s->extent.width-menu_width)/2,(int32_t)(s->extent.height-menu_height)/2,0},
+        .imageOffset={(int32_t)overlay_x,(int32_t)overlay_y,0},
         .imageExtent={menu_width,menu_height,1}};
     if(draw)d->CmdCopyBufferToImage(f->command,f->buffer,s->images[index],VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);
     barrier.srcAccessMask=draw?VK_ACCESS_TRANSFER_WRITE_BIT:VK_ACCESS_TRANSFER_READ_BIT;barrier.dstAccessMask=0;

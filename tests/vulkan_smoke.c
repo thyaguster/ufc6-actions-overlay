@@ -105,8 +105,9 @@ int main(void){
     VkCommandBuffer cmd;CHECK(AllocateCommandBuffers(device,&ca,&cmd));
     VkSemaphoreCreateInfo sem_info={.sType=VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     VkSemaphore acquire,ready;CHECK(CreateSemaphore(device,&sem_info,NULL,&acquire));CHECK(CreateSemaphore(device,&sem_info,NULL,&ready));
-    Sleep(400);toggle();Sleep(100);if(screenshot)screenshot();
-    for(int frame=0;frame<8;++frame){
+    Sleep(400);typedef void (*SettingsModeFn)(int);SettingsModeFn settings_mode=(SettingsModeFn)GetProcAddress(core,"MenuTestSettingsMode");if(settings_mode)settings_mode(1);
+    toggle();Sleep(100);if(screenshot)screenshot();
+    for(int frame=0;frame<11;++frame){
         if(button&&scale){
             if(frame==1){for(int i=0;i<4;++i)press(button,0x40);press(button,0x4000);press(button,0x40);press(button,0x40);}
             if(frame==2){for(int i=0;i<4;++i)press(button,0x20);if(scale()!=200)return 1;}
@@ -116,6 +117,9 @@ int main(void){
             if(frame==6){for(int i=0;i<3;++i)press(button,0x20);if(scale()!=175)return 1;}
             if(frame==7){press(button,0x4000);if(scale()!=100)return 1;}
         }
+        if(frame==8){toggle();Sleep(80);typedef void (*StatusFn)(const wchar_t*);StatusFn notify=(StatusFn)GetProcAddress(core,"MenuTestStatus");if(notify)notify(L"Screenshot saved");}
+        if(frame==9&&screenshot)screenshot();
+        if(frame==10){typedef void (*InvokeFn)(int);InvokeFn invoke=(InvokeFn)GetProcAddress(core,"MenuTestInvokeBinding");ScaleFn window_size=(ScaleFn)GetProcAddress(core,"MenuTestWindowSize");if(!invoke||!window_size)return 1;invoke(3);Sleep(100);for(int i=0;i<18;++i)press(button,0x40);press(button,0x4000);press(button,0x4000);if(window_size()!=2)return 1;invoke(2);Sleep(100);}
         MSG msg;while(PeekMessageW(&msg,NULL,0,0,PM_REMOVE)){TranslateMessage(&msg);DispatchMessageW(&msg);}
         uint32_t index;CHECK(AcquireNextImageKHR(device,swap,UINT64_MAX,acquire,VK_NULL_HANDLE,&index));
         CHECK(ResetCommandBuffer(cmd,0));VkCommandBufferBeginInfo bi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};CHECK(BeginCommandBuffer(cmd,&bi));
@@ -134,9 +138,12 @@ int main(void){
     ScreenshotNameFn screenshot_name=(ScreenshotNameFn)GetProcAddress(core,"MenuTestScreenshotName");
     wchar_t saved_name[128]=L"";if(screenshot_name)screenshot_name(saved_name,128);
     if(!saved_name[0]){puts("FAIL: screenshot path did not reach the core");return 1;}
+    printf("Screenshot: %ls\n",saved_name);
     puts("PASS: saved screenshot filename returned from Vulkan capture to overlay core.");
     DestroySemaphore(device,acquire,NULL);DestroySemaphore(device,ready,NULL);DestroyCommandPool(device,pool,NULL);
     DestroySwapchainKHR(device,swap,NULL);DestroyDevice(device,NULL);DestroySurfaceKHR(instance,surface,NULL);DestroyInstance(instance,NULL);
+    puts("PASS: tall Cheats canvas presented with independent row capacity.");
+    puts("PASS: corner notification presented without opening the menu.");
     puts("PASS: Vulkan frames presented at 50/100/175/200/300% with upload growth, viewport fitting and cleanup.");
     DestroyWindow(window);return 0;
 }

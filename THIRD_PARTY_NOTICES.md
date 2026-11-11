@@ -21,3 +21,7 @@ The startup bridge declares API forwarders for the engine's `libwinpthread-1.dll
 ## UFC 6 Xbox Controller Icons
 
 The asset-free `patcher_core.py` and version profile under `vendor/xbox-icons` come from [thyaguster/ufc6-xbox-icons](https://github.com/thyaguster/ufc6-xbox-icons), v1.0.1. They retain their MIT license and notices. Replacement artwork is generated exclusively from the user's own game files. No game assets or restore backups are distributed. The helper bundles CPython and PyInstaller; see `vendor/xbox-icons/THIRD-PARTY-NOTICES.md` and `runtime-licenses/` for the complete runtime terms.
+
+## Controller prompt artwork
+
+The SVG artwork under `src/assets/controller-prompts` is a selected subset of [Kenney Input Prompts 1.5A](https://kenney.nl/assets/input-prompts), distributed under Creative Commons Zero (CC0). The original license is included in that directory. The exact authored paths are compiled into `src/controller_artwork_data.h` by `src/generate_controller_artwork.py` and drawn as vectors. White face-button artwork is tinted to the overlay's Xbox/PlayStation prompt colors; authored direction highlights are preserved. No game artwork is bundled for these overlay prompts.

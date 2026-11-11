@@ -1,3 +1,16 @@
+# UFC 6 Actions Overlay v0.9.14
+
+- Add configurable keyboard shortcuts and controller combinations for screenshots, menus, save backups and game/PC actions. Assigned shortcuts appear beside actions; F10 remains available. Exit and power actions retain their confirmations.
+- Add corner notifications for screenshots and action feedback without taking controller focus. Clean game screenshots exclude the overlay and notifications.
+- Organize Settings into Appearance, Controls, Game & launcher, and Files & support.
+- Add theme presets and a live-reloaded `ufc6-overlay-theme.cfg` for launcher colors. Seed UI scale, font size, box style and window size from config on first use; preserve later user choices and launcher configuration during updates.
+- Keep menu fonts consistent and offer Rounded, Square, Outline, Pill and Octagon box styles.
+- Add Compact, Expanded and Tall window sizes independently of text/UI scale. Tall shows all eleven Cheats rows together while retaining viewport fitting and matching input hit areas.
+- Replace simplified controller drawings with embedded Kenney Xbox/PlayStation vector artwork in shortcut badges and footer controls, including shoulder, pressed-stick, D-pad and PS5 Options buttons. Include the CC0 license and source artwork.
+- Refresh menu screenshots and documentation.
+
+Validated keyboard/controller screenshot shortcuts, themes, notifications, box styles, Tall Cheats layout and both controller icon profiles in the live game. All 28 artwork assets passed rendering checks; native input/configuration/persistence, installer/diagnostics, safe handoff and 29 Python tests passed. Vulkan GPU checks covered tall menus, viewport scaling and clean screenshots excluding notifications.
+
 # UFC 6 Actions Overlay v0.9.11
 
 - Match Cheats row labels to the main menu font size and rename the longevity switch to Never get old.

@@ -1,0 +1,39 @@
+{
+  "source": "https://kenney.nl/assets/input-prompts",
+  "version": "1.5A",
+  "archive_sha256": "ac2fcf599080b0f3ba2d174c9474db6df1a0e96ff0662580e2da79a122ab78a1",
+  "platforms": [
+    [
+      "xbox/xbox_stick_l_press.svg",
+      "xbox/xbox_stick_r_press.svg",
+      "xbox/xbox_lb.svg",
+      "xbox/xbox_rb.svg",
+      "xbox/xbox_button_menu.svg",
+      "xbox/xbox_dpad_up.svg",
+      "xbox/xbox_dpad_down.svg",
+      "xbox/xbox_dpad_left.svg",
+      "xbox/xbox_dpad_right.svg",
+      "xbox/xbox_button_y_outline.svg",
+      "xbox/xbox_button_b_outline.svg",
+      "xbox/xbox_button_a_outline.svg",
+      "xbox/xbox_button_x_outline.svg",
+      "xbox/xbox_dpad.svg"
+    ],
+    [
+      "playstation/playstation_stick_l_press.svg",
+      "playstation/playstation_stick_r_press.svg",
+      "playstation/playstation_trigger_l1.svg",
+      "playstation/playstation_trigger_r1.svg",
+      "playstation/playstation5_button_options.svg",
+      "playstation/playstation_dpad_up.svg",
+      "playstation/playstation_dpad_down.svg",
+      "playstation/playstation_dpad_left.svg",
+      "playstation/playstation_dpad_right.svg",
+      "playstation/playstation_button_triangle_outline.svg",
+      "playstation/playstation_button_circle_outline.svg",
+      "playstation/playstation_button_cross_outline.svg",
+      "playstation/playstation_button_square_outline.svg",
+      "playstation/playstation_dpad.svg"
+    ]
+  ]
+}

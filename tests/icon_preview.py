@@ -33,6 +33,12 @@ parser.add_argument("--longevity-reload-off",action="store_true")
 parser.add_argument("--training-save",action="store_true")
 parser.add_argument("--training-reload",action="store_true")
 parser.add_argument("--training-reload-off",action="store_true")
+parser.add_argument("--bindings",action="store_true")
+parser.add_argument("--bindings-reload",action="store_true")
+parser.add_argument("--appearance",action="store_true")
+parser.add_argument("--appearance-reload",action="store_true")
+parser.add_argument("--window",action="store_true")
+parser.add_argument("--window-reload",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
 if args.reset:
@@ -73,6 +79,8 @@ dll.Ufc6RenderMenu.argtypes=[c.c_void_p,w.DWORD];dll.Ufc6RenderMenu.restype=w.BO
 
 
 def press(button):
+    if not (args.appearance or args.appearance_reload or args.window or args.window_reload) and button==0x4000 and ((dll.MenuTestSnapshot()>>12)&31)==0 and (dll.MenuTestSnapshot()&15)==4:
+        dll.MenuTestLegacySettings();pump(.08);return
     dll.MenuTestButton(button,1);dll.MenuTestButton(button,0);pump(.06)
 
 
@@ -91,8 +99,9 @@ def render(name,viewport=(2560,1440)):
 
 try:
     dll.MenuTestStart(window);pump(.4)
+    dll.MenuTestSettingsMode(0 if (args.appearance or args.appearance_reload or args.window or args.window_reload) else 1)
     dll.Ufc6VulkanActive() # Match production before opening; no desktop-fit/render extent race.
-    assert (dll.MenuTestSnapshot()>>4)&1 == int(args.reload),"Stored profile was not loaded"
+    assert (dll.MenuTestSnapshot()>>4)&1 == (1 if args.appearance_reload else int(args.reload)),"Stored profile was not loaded"
     assert dll.MenuTestScale()==(175 if args.reload and args.scale else 100)
     if args.reload:
         assert dll.MenuTestShortcut()==6,"Recorded shortcut was not persisted"
@@ -101,7 +110,142 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     assert dll.MenuTestSnapshot()&0x100
-    if args.longevity_save or args.longevity_reload or args.longevity_reload_off:
+    if args.window or args.window_reload:
+        if args.window_reload:
+            assert dll.MenuTestWindowSize()==2 and dll.MenuTestFontSize()==18
+            print("PASS: taller window preference survives a fresh process.");raise SystemExit(0)
+        def page():return (dll.MenuTestSnapshot()>>12)&31
+        for _ in range(4):press(0x40)
+        press(0x4000);press(0x4000)
+        for _ in range(4):press(0x40)
+        assert page()==17 and dll.MenuTestSnapshot()&15==4
+        press(0x4000);assert dll.MenuTestWindowSize()==1 and dll.MenuTestVisibleRows()==7
+        render("appearance-expanded.png")
+        press(0x2000);press(0x2000);press(0x10);press(0x4000);assert page()==7
+        assert dll.MenuTestVisibleRows()==9 and dll.MenuTestFontSize()==18 and dll.MenuTestScale()==100
+        width,height=w.DWORD(),w.DWORD();dll.Ufc6MenuExtent(2560,1440,c.byref(width),c.byref(height));assert (width.value,height.value)==(570,468)
+        render("cheats-expanded.png")
+        press(0x2000);press(0x40);press(0x4000);press(0x4000)
+        for _ in range(4):press(0x40)
+        press(0x4000);assert dll.MenuTestWindowSize()==2
+        press(0x2000);press(0x2000);press(0x10);press(0x4000)
+        assert dll.MenuTestVisibleRows()==11 and dll.MenuTestFontSize()==18
+        dll.Ufc6MenuExtent(2560,1440,c.byref(width),c.byref(height));assert (width.value,height.value)==(570,532)
+        render("cheats-tall.png")
+        for _ in range(10):press(0x40)
+        render("cheats-tall-back.png")
+        dll.Ufc6MenuExtent(640,360,c.byref(width),c.byref(height));assert width.value<=608 and height.value<=328
+        render("cheats-tall-small-viewport.png",(640,360))
+        print("PASS: expanded/tall windows show 9/11 Cheats rows with unchanged font/scale, selection reaches Back, viewport fitting and saved preference.")
+        raise SystemExit(0)
+    elif args.appearance or args.appearance_reload:
+        if args.appearance_reload:
+            assert dll.MenuTestFontSize()==20 and dll.MenuTestBoxStyle()==4 and dll.MenuTestThemeChoice()==2
+            print("PASS: font size, row style and theme survive a fresh process.");raise SystemExit(0)
+        def page():return (dll.MenuTestSnapshot()>>12)&31
+        for _ in range(4):press(0x40)
+        press(0x4000);assert page()==16;render("settings-categories.png")
+        press(0x4000);assert page()==17;render("appearance.png")
+        press(0x40);press(0x40);press(0x20);assert dll.MenuTestFontSize()==20
+        render("appearance-large-font.png")
+        press(0x40)
+        for style,label in [(1,"square"),(2,"outline"),(3,"pill"),(4,"octagon")]:
+            press(0x20);assert dll.MenuTestBoxStyle()==style;render("appearance-"+label+".png")
+        for _ in range(3):press(0x10)
+        press(0x4000);assert page()==14
+        press(0x40);press(0x40);press(0x4000);press(0x2000);assert page()==17
+        for _ in range(5):press(0x40)
+        press(0x4000);assert (dll.MenuTestSnapshot()>>4)&1==1
+        press(0x2000);assert page()==16
+        press(0x40);press(0x4000);assert page()==18;render("controls.png")
+        press(0x4000);assert page()==12
+        press(0x40);press(0x4000);assert page()==13
+        press(0x40);press(0x4000)
+        dll.MenuTestButton(0x4800,1);pump(.4);dll.MenuTestButton(0x4800,0);pump(.15)
+        assert dll.MenuTestBinding(1,0)==0x4800
+        render("shortcut-ps-symbols.png")
+        for _ in range(4):press(0x2000)
+        assert page()==0;render("main-ps-icons-large-font.png")
+        press(0x4000);press(0x4000)
+        for _ in range(5):press(0x40)
+        press(0x4000);assert not (dll.MenuTestSnapshot()>>4)&1
+        press(0x2000);press(0x2000);render("main-xbox-icons-large-font.png")
+        press(0x4000);press(0x4000)
+        for _ in range(5):press(0x40)
+        press(0x4000);press(0x2000);press(0x2000)
+
+        # Visit every settings category and return without losing the group.
+        for category,expected in [(2,19),(3,20)]:
+            while dll.MenuTestSnapshot()&15!=4:press(0x40)
+            press(0x4000)
+            for _ in range(category):press(0x40)
+            press(0x4000);assert page()==expected
+            render("game-launcher.png" if category==2 else "files-support.png")
+            press(0x2000);assert page()==16;press(0x2000)
+        dll.MenuTestStatus.argtypes=[w.LPCWSTR];dll.MenuTestStatus("Screenshot saved")
+        dll.MenuTestToggle();pump(.12);assert not dll.MenuTestSnapshot()&0x100
+        render("notification-screenshot.png")
+        x,y=w.DWORD(),w.DWORD();dll.Ufc6OverlayPosition.argtypes=[w.DWORD,w.DWORD,c.POINTER(w.DWORD),c.POINTER(w.DWORD)]
+        dll.Ufc6OverlayPosition(2560,1440,c.byref(x),c.byref(y));assert x.value==2116 and y.value==24
+        pump(3.1);assert not dll.Ufc6RenderMenu(None,0),"Notification must expire without opening or capturing the menu"
+        print("PASS: grouped Settings routes/back, consistent large font text bounds, all box styles, PlayStation shortcut glyphs, persisted appearance and focus-free expiring corner notification.")
+        raise SystemExit(0)
+    elif args.bindings or args.bindings_reload:
+        dll.MenuTestKey.argtypes=[c.c_int,c.c_int];dll.MenuTestBinding.argtypes=[c.c_int,c.c_int];dll.MenuTestBinding.restype=w.DWORD
+        def page():return (dll.MenuTestSnapshot()>>12)&31
+        def key(vk,down):dll.MenuTestKey(vk,down);pump(.08)
+        if args.bindings_reload:
+            assert dll.MenuTestBinding(1,1)==0x17b and dll.MenuTestBinding(1,0)==0x802
+            assert dll.MenuTestBinding(0,0)==0xc08
+            assert dll.MenuTestThemeChoice()==2 and dll.MenuTestThemeAccent()==0xffb166
+            print("PASS: fresh process loads keyboard and controller action bindings.")
+            raise SystemExit(0)
+        for _ in range(4):press(0x40)
+        press(0x4000)
+        for _ in range(13):press(0x40)
+        assert page()==1 and dll.MenuTestSnapshot()&15==13
+        render("settings-keybinds.png");press(0x4000);assert page()==12
+        render("keybinds.png");press(0x40);press(0x4000);assert page()==13
+        render("binding-screenshot.png");press(0x4000)
+        render("binding-key-recording.png");key(0x11,1);key(0x7b,1);key(0x7b,0);key(0x11,0)
+        assert dll.MenuTestBinding(1,1)==0x17b
+        press(0x40);press(0x4000)
+        dll.MenuTestButton(0x802,1);pump(.4);dll.MenuTestButton(0x802,0);pump(.15)
+        assert dll.MenuTestBinding(1,0)==0x802
+        render("binding-screenshot-assigned.png")
+        press(0x2000);press(0x2000);press(0x2000);assert page()==0
+        render("main-action-keybind.png")
+        dll.Ufc6ScreenshotCapability(1);key(0x11,1);key(0x7b,1)
+        assert dll.Ufc6ScreenshotRequest()==1
+        pump(.15);assert dll.Ufc6ScreenshotRequest()==0
+        key(0x7b,0);key(0x11,0);dll.Ufc6ScreenshotResult(1)
+        dll.MenuTestButtonDevice.argtypes=[c.c_int,w.DWORD,c.c_int]
+        dll.MenuTestButtonDevice(1,2,1);dll.MenuTestButtonDevice(7,0x800,1);pump(.9)
+        assert dll.Ufc6ScreenshotRequest()==0,"Combos must not combine different controllers"
+        dll.MenuTestButtonDevice(1,2,0);dll.MenuTestButtonDevice(7,0x800,0);pump(.08)
+        dll.MenuTestButton(0x802,1);pump(.9);assert dll.Ufc6ScreenshotRequest()==1
+        pump(.15);assert dll.Ufc6ScreenshotRequest()==0
+        dll.MenuTestButton(0x802,0);pump(.08);dll.Ufc6ScreenshotResult(1)
+        dll.MenuTestInvokeBinding(6);pump(.15);assert page()==15 and dll.MenuTestSnapshot()&15==0
+        render("quit-keybind-confirm.png");press(0x2000)
+        for id,expected in [(5,2),(7,4),(8,3),(2,7),(3,1)]:
+            dll.MenuTestInvokeBinding(id);pump(.15);assert page()==expected
+            assert dll.MenuTestSnapshot()&0x100,"Hotkey must show a page, not execute exit/power"
+        for _ in range(14):press(0x40)
+        press(0x4000);assert page()==14
+        render("themes.png");press(0x40);press(0x40);press(0x4000)
+        render("theme-blue.png")
+        press(0x10);press(0x10);press(0x4000)
+        cfg=folder/"ufc6-overlay-theme.cfg"
+        k.WritePrivateProfileStringW.argtypes=[w.LPCWSTR,w.LPCWSTR,w.LPCWSTR,w.LPCWSTR]
+        original_cfg=cfg.read_bytes();cfg.write_text("[Theme]\nPreset=Purple\nAccent=#C060EE\n")
+        pump(1.2);assert dll.MenuTestThemeAccent()==0xee60c0;render("theme-config-purple.png")
+        if not args.no_render:assert (folder/"theme-blue.png").read_bytes()!=(folder/"theme-config-purple.png").read_bytes()
+        cfg.write_bytes(original_cfg)
+        press(0x40);press(0x40);press(0x4000);assert dll.MenuTestThemeChoice()==2
+        print("PASS: in-frame keyboard/chord recording, saved bindings, once-per-press clean screenshot, shortcut badge, quit/restart/power confirmations, theme presets and config hot reload; no game or power actions executed.")
+        raise SystemExit(0)
+    elif args.longevity_save or args.longevity_reload or args.longevity_reload_off:
         expected=1 if args.longevity_reload else 0
         assert dll.MenuTestLongevity()==expected,"Saved longevity preference was not loaded in a fresh process"
         assert (dll.MenuTestBackendPreferences()&1)==expected,"Career initialization cleared the saved longevity choice"
@@ -132,7 +276,7 @@ try:
         raise SystemExit(0)
     elif args.game_icons:
 
-        def page():return (dll.MenuTestSnapshot()>>12)&15
+        def page():return (dll.MenuTestSnapshot()>>12)&31
         render("main-unclipped.png")
         for _ in range(4):press(0x40)
         press(0x4000);render("settings-overlay-icons.png")
@@ -155,7 +299,7 @@ try:
     elif args.cheats:
         dll.MenuTestCheatStatus.argtypes=[c.c_int,c.c_int]
         def cheat(i,value=-1):return dll.MenuTestCheatStatus(i,value)
-        def page():return (dll.MenuTestSnapshot()>>12)&15
+        def page():return (dll.MenuTestSnapshot()>>12)&31
         render("main-menu-cheats.png")
         for _ in range(3):press(0x40)
         press(0x4000);assert page()==7
@@ -225,7 +369,7 @@ try:
     elif args.screenshot_reset:
         dll.Ufc6ScreenshotResultPath.argtypes=[w.BOOL,w.LPCWSTR]
         dll.MenuTestScreenshotName.argtypes=[w.LPWSTR,c.c_int]
-        def page():return (dll.MenuTestSnapshot()>>12)&15
+        def page():return (dll.MenuTestSnapshot()>>12)&31
         def selected():return dll.MenuTestSnapshot()&15
         dll.Ufc6ScreenshotCapability(1)
         press(0x40);press(0x4000)
@@ -330,7 +474,7 @@ try:
         assert dll.MenuTestAccess()==1 and dll.MenuTestPlayer()==0
         raw(1,0);rpress(1,2);assert dll.MenuTestPlayer()==0
         rpress(0,2);assert dll.MenuTestPlayer()==1 and dll.MenuTestSnapshot()&0xf==8
-        rpress(1,0x2000);assert (dll.MenuTestSnapshot()>>12)&7==1
+        rpress(1,0x2000);assert (dll.MenuTestSnapshot()>>12)&31==1
         rpress(0,0x2000);rpress(0,0x2000)
         assert not dll.MenuTestSnapshot()&0x100
         raw(1,0x400);raw(1,0);assert not dll.MenuTestSnapshot()&0x100,"Player 2 Guide must be blocked"
@@ -367,7 +511,7 @@ try:
         assert dll.MenuTestSnapshot()&0xf==1,"SDL duplicates must not navigate twice"
         raw(1,2);assert dll.MenuTestSnapshot()&0xf==1
         raw_press(0,2);raw_press(0,0x1000)
-        assert (dll.MenuTestSnapshot()>>12)&7==2
+        assert (dll.MenuTestSnapshot()>>12)&31==2
         raw_press(0,0x2000);raw_press(0,0x2000)
         assert not dll.MenuTestSnapshot()&0x100
         raw(1,0);raw(1,0x400);raw(1,0);raw_press(1,2)
@@ -429,7 +573,7 @@ try:
         for _ in range(4):
             dll.MenuTestButtonDevice(1,0x40,1);dll.MenuTestButtonDevice(1,0x40,0);pump(.05)
         dll.MenuTestButtonDevice(1,0x4000,1);dll.MenuTestButtonDevice(1,0x4000,0);pump(.07)
-        assert (dll.MenuTestSnapshot()>>12)&7==1
+        assert (dll.MenuTestSnapshot()>>12)&31==1
         dll.MenuTestButtonDevice(1,0x4000,1);dll.MenuTestButtonDevice(1,0x4000,0);pump(.07)
         assert dll.MenuTestSnapshot()&0x10,"Reconnected pad must not inherit stale held buttons"
         print("PASS: Guide release, two-controller ownership, held secondary input, non-owner isolation, disconnect/reconnect and B resume.")
@@ -490,13 +634,13 @@ try:
         press(0x40);assert dll.MenuTestSnapshot()&0xf==8
         press(0x40);press(0x40);press(0x40);assert dll.MenuTestSnapshot()&0xf==11
         render("settings-updates.png")
-        press(0x4000);assert (dll.MenuTestSnapshot()>>12)&15==1 and dll.MenuTestSnapshot()&0x100
+        press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==1 and dll.MenuTestSnapshot()&0x100
         press(0x40);assert dll.MenuTestSnapshot()&0xf==12
         render("settings-diagnostics.png")
-        press(0x4000);assert (dll.MenuTestSnapshot()>>12)&15==1 and dll.MenuTestSnapshot()&0x100
-        press(0x40);assert dll.MenuTestSnapshot()&0xf==13
+        press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==1 and dll.MenuTestSnapshot()&0x100
+        press(0x40);press(0x40);press(0x40);assert dll.MenuTestSnapshot()&0xf==15
         render("settings-back.png")
-        press(0x4000);assert (dll.MenuTestSnapshot()>>12)&7==0
+        press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==0
         assert windows_preference()==original_windows,"UI test must never change the actual Windows Game Bar preference"
         print("PASS: Game Bar settings row, On/Off, confirm/left/right and Back; actual Windows preference unchanged.")
     elif args.guide or args.reload_guide_off:
@@ -534,13 +678,13 @@ try:
         render("main-auto-off.png")
         press(0x4000)
         render("confirmation-auto-off.png")
-        assert (dll.MenuTestSnapshot()>>12)&7==4
+        assert (dll.MenuTestSnapshot()>>12)&31==4
         print("PASS: auto-launch defaults On, toggles with confirm/left/right, saves Off, and renders status on both pages." if not args.reload_auto_off else "PASS: a fresh process loaded auto-launch Off and showed it in the reboot confirmation.")
     elif args.power or args.reboot:
         render("main-menu.png")
         for _ in range(6 if args.reboot else 7):press(0x40)
         press(0x4000)
-        assert (dll.MenuTestSnapshot()>>12)&7 == (4 if args.reboot else 3) and dll.MenuTestSnapshot()&0xf == 0
+        assert (dll.MenuTestSnapshot()>>12)&31 == (4 if args.reboot else 3) and dll.MenuTestSnapshot()&0xf == 0
         render("reboot-confirmation.png" if args.reboot else "shutdown-confirmation.png")
         press(0x40)
         dll.MenuTestButton(0x4000,1);pump(1.5)
@@ -572,11 +716,11 @@ try:
         assert dll.MenuTestSnapshot()==0x1110
         assert "ButtonIcons=PlayStation" in (folder/"ufc6-quit-menu.test.ini").read_text()
         press(0x40);press(0x4000)
-        assert dll.MenuTestSnapshot()&(1<<16)
+        assert dll.MenuTestSnapshot()&(1<<20)
         render("record-shortcut.png")
         dll.MenuTestButton(2,1);dll.MenuTestButton(4,1);pump(.45)
         dll.MenuTestButton(2,0);dll.MenuTestButton(4,0);pump(.2)
-        assert not dll.MenuTestSnapshot()&(1<<16)
+        assert not dll.MenuTestSnapshot()&(1<<20)
         assert dll.MenuTestShortcut()==6
         render("custom-shortcut.png")
         assert "OpeningShortcut=0x00000006" in (folder/"ufc6-quit-menu.test.ini").read_text()

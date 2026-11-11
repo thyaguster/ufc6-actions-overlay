@@ -13,7 +13,9 @@ $previousRelease = $null
 if (-not $Test -and (Test-Path -LiteralPath 'dist/release.json')) {
     $previousRelease = Get-Content -LiteralPath 'dist/release.json' -Raw | ConvertFrom-Json
 }
-$sources = @('src/quit_menu.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/save_backups.c')
+python src/generate_controller_artwork.py --check
+if ($LASTEXITCODE) { throw 'Controller artwork data verification failed' }
+$sources = @('src/quit_menu.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/save_backups.c','src/overlay_preferences.c')
 $flags = @('cc','-target','x86_64-windows-gnu','-O2','-Wall','-Wextra','-Werror','-shared','-Isrc','-luser32','-lgdi32','-lkernel32','-ladvapi32','-lcomdlg32','-lshell32','-lole32','-luuid')
 if ($Test) { $flags += '-DQUIT_MENU_TEST'; $output = 'dist/quit_menu_test.dll' }
 else { $output = 'dist/version.dll' }
@@ -30,7 +32,7 @@ if (-not $Test) {
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     $manifest = [ordered]@{
-        version = '0.9.11'
+        version = '0.9.14'
         parsec_engine_sha256 = 'ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d'
         engine_revision = '3309ab23f'
         engine_sha256 = 'f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2'
@@ -71,6 +73,14 @@ if (-not $Test) {
     $manifest | ConvertTo-Json | Set-Content -LiteralPath 'dist/release.json' -Encoding utf8
 }
 if ($Test) {
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror tests/controller_artwork_test.c -lgdi32 -luser32 -o .build/controller_artwork_test.exe
+    if ($LASTEXITCODE) { throw 'Controller artwork test compilation failed' }
+    & ./.build/controller_artwork_test.exe
+    if ($LASTEXITCODE) { throw 'Controller artwork rendering test failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -municode tests/overlay_preferences_test.c src/overlay_preferences.c -o .build/overlay_preferences_test.exe
+    if ($LASTEXITCODE) { throw 'Preferences test compilation failed' }
+    & ./.build/overlay_preferences_test.exe (Join-Path $root ('.build/preferences-' + [guid]::NewGuid().ToString('N')))
+    if ($LASTEXITCODE) { throw 'Preferences tests failed' }
     & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror tests/icons_process_env_test.c -o .build/icons_process_env_test.exe
     if ($LASTEXITCODE) { throw 'Icons environment fixture compilation failed' }
     & ./.build/icons_process_env_test.exe
@@ -151,6 +161,18 @@ if ($Test) {
     }
     python tests/icon_preview.py .build/controller-ci --reset --cheats
     if ($LASTEXITCODE) { throw 'Live cheats UI regression failed' }
+    python tests/icon_preview.py .build/controller-ci --reset --bindings
+    if ($LASTEXITCODE) { throw 'Keybind and theme UI tests failed' }
+    python tests/icon_preview.py .build/controller-ci --bindings-reload --no-render
+    if ($LASTEXITCODE) { throw 'Action keybind reload test failed' }
+    python tests/icon_preview.py .build/controller-ci --reset --appearance
+    if ($LASTEXITCODE) { throw 'Appearance/categories/notification tests failed' }
+    python tests/icon_preview.py .build/controller-ci --appearance-reload --no-render
+    if ($LASTEXITCODE) { throw 'Appearance persistence test failed' }
+    python tests/icon_preview.py .build/controller-ci --reset --window
+    if ($LASTEXITCODE) { throw 'Window capacity/rendering test failed' }
+    python tests/icon_preview.py .build/controller-ci --window-reload --no-render
+    if ($LASTEXITCODE) { throw 'Window size reload test failed' }
     python tests/restart_handoff.py
     if ($LASTEXITCODE) { throw 'Restart handoff tests failed' }
     python tests/restart_handoff.py --custom
