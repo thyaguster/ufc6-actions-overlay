@@ -1,4 +1,4 @@
-/* Checked career changes and session-only longevity protection on the game's own selected-user lookup thread.
+/* Checked career changes and remembered longevity protection on the game's own selected-user lookup thread.
    No save-file edits, remote services or heap-value scans. */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -17,11 +17,14 @@ static UserFn original_user;
 static GetFn game_get;
 static SetFn game_set,original_set;
 static CareerField longevity;static uint32_t longevity_identity;
-static volatile LONG longevity_on,longevity_blocked;static volatile LONG64 longevity_store;
+static volatile LONG longevity_on,longevity_blocked,longevity_wanted;static volatile LONG64 longevity_store;
 static DirtyFn game_dirty;
 static SRWLOCK guard=SRWLOCK_INIT;
 static CareerSnapshot snapshot;
 static uint64_t queued;
+static int reward_multiplier=1,reward_active_multiplier=1;static uintptr_t reward_store,reward_packed;static uint32_t reward_rows,reward_original[2048],reward_applied[2048];
+typedef struct {CareerField first;uint32_t rows,stride;} GradePack;
+static uint32_t expected_grade_ids[5];
 static volatile LONG64 next_probe;
 static uintptr_t cache_collection,cache_begin;
 static size_t cached_slot[2]={SIZE_MAX,SIZE_MAX};
@@ -111,6 +114,114 @@ static int describe_training(uintptr_t fighter,uintptr_t owner,CareerField *out,
        !training_field(store,row,11,7,&current)||current.value>=length.value)return 0;
     *reference=ref;*week=current.value;return 1;
 }
+static uintptr_t owned_store(uintptr_t owner,size_t slot){
+    uintptr_t begin=pointer(owner+0x108),end=pointer(owner+0x110);
+    if(!begin||end<begin||(end-begin)%8||(end-begin)/8>16384||slot>=(end-begin)/8)return 0;
+    uintptr_t store=pointer(begin+slot*8);return pointer(store+0x10)==owner?store:0;
+}
+static int packed_value_access(uintptr_t store,uint32_t row,uint32_t index,uint32_t type,uint16_t bits,int32_t bias,CareerField *out,int require_write){
+    uintptr_t schema_ptr=pointer(store+8),begin=pointer(schema_ptr+0x30),end=pointer(schema_ptr+0x38);uint32_t t=0,b=0,rows=0,stride=0,start=0,bit=0,word=0;uint16_t n=0;
+    if(pointer(store)!=guest+0x9bf7be8||!begin||end<begin||(end-begin)%80||index>=(end-begin)/80||bits>31)return 0;
+    uintptr_t f=begin+index*80,p=pointer(store+0x30);
+    if(!rd(f+0x30,&n,2)||n!=bits||!u32(f+0x34,&b)||(int32_t)b!=bias||!u32(f+0x38,&t)||t!=type||
+       !u32(p+0x10,&rows)||!rows||rows>4096||row>=rows||!u32(p+0xc,&stride)||!stride||stride>4096||
+       !u32(p+0x18,&start)||start<8||start>16384||!u32(p+0x20+index*4,&bit)||bit/32>=stride||bit%32+bits>32)return 0;
+    uintptr_t address=p+((uintptr_t)start+(uintptr_t)row*stride+bit/32)*4;
+    if(!u32(address,&word)||(require_write&&!writable(address,4)))return 0;
+    *out=(CareerField){store,p,address,index,bits,bit%32,(word>>(bit%32))&((1u<<bits)-1),(1u<<bits)-1,row};return 1;
+}
+static int packed_value(uintptr_t store,uint32_t row,uint32_t index,uint32_t type,uint16_t bits,int32_t bias,CareerField *out){
+    return packed_value_access(store,row,index,type,bits,bias,out,1);
+}
+static int grade_write_access(uintptr_t address){
+    MEMORY_BASIC_INFORMATION m;
+    return VirtualQuery((void*)address,&m,sizeof(m))&&m.State==MEM_COMMIT&&!(m.Protect&(PAGE_GUARD|PAGE_NOACCESS))&&
+        (m.Type==MEM_PRIVATE||m.Type==MEM_MAPPED)&&address+4<=((uintptr_t)m.BaseAddress+m.RegionSize)&&
+        (m.Protect==PAGE_READONLY||m.Protect==PAGE_READWRITE||m.Protect==PAGE_WRITECOPY);
+}
+static int grade_set(const CareerField *f){
+    if(!grade_write_access(f->address)||game_get(f->store,f->row,f->index)!=f->value-1)return 0;
+    MEMORY_BASIC_INFORMATION m;DWORD old=0,ignored=0;int changed=0;
+    if(!VirtualQuery((void*)f->address,&m,sizeof(m)))return 0;
+    if(m.Protect==PAGE_READONLY){
+        DWORD protection=m.Type==MEM_MAPPED?PAGE_WRITECOPY:PAGE_READWRITE;
+        if(!VirtualProtect((void*)f->address,4,protection,&old))return 0;changed=1;
+    }
+    /* Mapped save snapshots may be read-only. WRITECOPY keeps the backing file
+       untouched; restore protection after the game's enum setter and dirty flag. */
+    game_set(f->store,f->row,f->index,4);game_dirty(f->store);
+    int restored=!changed||VirtualProtect((void*)f->address,4,old,&ignored);
+    return restored&&game_get(f->store,f->row,f->index)==4;
+}
+static int replace_field(const CareerField *f,uint32_t before,uint32_t after){
+    uint32_t mask=f->maximum<<f->shift;
+    for(int tries=0;tries<8;++tries){uint32_t word=0;if(!u32(f->address,&word)||((word>>f->shift)&f->maximum)!=before)return 0;
+        uint32_t desired=(word&~mask)|((after<<f->shift)&mask);
+        if((uint32_t)InterlockedCompareExchange((volatile LONG*)f->address,(LONG)desired,(LONG)word)==word)return 1;
+    }
+    return 0;
+}
+static int reward_schema(uintptr_t store,uint32_t *rows){
+    uintptr_t b=0;if(!schema(store,&b,20)||!name_is(b+10*80,"SkillPointsReward")||!name_is(b+13*80,"TargetPositive")||!name_is(b+19*80,"TrainingStationId"))return 0;
+    return u32(pointer(store+0x30)+0x10,rows)&&*rows&&*rows<=2048;
+}
+static void reward_restore(void){
+    uint32_t rows=0;
+    if(reward_store&&pointer(reward_store+0x30)==reward_packed&&reward_schema(reward_store,&rows)&&rows==reward_rows){
+        for(uint32_t i=0;i<rows;++i){CareerField f;if(packed_value(reward_store,i,10,2,9,0,&f)&&f.value==reward_applied[i])replace_field(&f,reward_applied[i],reward_original[i]);}
+    }
+    reward_store=reward_packed=0;reward_rows=0;reward_active_multiplier=1;snapshot.training_rewards_ready=0;
+}
+static void training_rewards_refresh(uintptr_t owner){
+    snapshot.training_multiplier=(uint32_t)reward_multiplier;
+    uintptr_t master=pointer(owner+0xf0),begin=pointer(master+0x148),end=pointer(master+0x150),store=0;uint32_t rows=0;
+    if(pointer(master)==guest+0x9bf6ae0&&begin&&end>=begin&&(end-begin)%8==0&&(end-begin)/8>211&&(end-begin)/8<=16384){
+        store=pointer(begin+211*8);if(pointer(store+0x10)!=master)store=0;
+    }
+    if(!master||!store||!reward_schema(store,&rows)){snapshot.training_rewards_ready=0;return;}
+    uintptr_t packed=pointer(store+0x30);
+    if(store!=reward_store||packed!=reward_packed||rows!=reward_rows){
+        reward_restore();
+        for(uint32_t i=0;i<rows;++i){CareerField f;if(!packed_value(store,i,10,2,9,0,&f))return;reward_original[i]=reward_applied[i]=f.value;}
+        reward_store=store;reward_packed=packed;reward_rows=rows;
+    }
+    if(reward_active_multiplier==reward_multiplier){snapshot.training_rewards_ready=1;return;}
+    for(uint32_t i=0;i<rows;++i){
+        CareerField f;if(!packed_value(store,i,10,2,9,0,&f)||f.value!=reward_applied[i]){reward_restore();return;}
+        uint64_t scaled=(uint64_t)reward_original[i]*(uint32_t)reward_multiplier;uint32_t desired=scaled>f.maximum?f.maximum:(uint32_t)scaled;
+        if(desired!=f.value&&!replace_field(&f,f.value,desired)){reward_restore();return;}
+        reward_applied[i]=desired;
+    }
+    reward_active_multiplier=reward_multiplier;snapshot.training_rewards_ready=1;
+}
+static int grade_row(const GradePack *pack,uint32_t row,CareerField *out){
+    *out=pack->first;out->row=row;out->address+=(uintptr_t)row*pack->stride*4;
+    uint32_t word=0;if(!u32(out->address,&word))return 0;
+    out->value=(word>>out->shift)&out->maximum;return out->value<=5;
+}
+static int grade_fields(uintptr_t owner,GradePack packs_out[5],uint32_t refs[5]){
+    uintptr_t station=owned_store(owner,326),b=0;
+    if(!schema(station,&b,23)||!name_is(b+7*80,"CurrentChallengePack")||!name_is(b+14*80,"Id"))return 0;
+    uintptr_t p=pointer(station+0x30);uint32_t rows=0,stride=0,start=0,bit=0;
+    if(!u32(p+0x10,&rows)||rows!=5||!u32(p+0xc,&stride)||!stride||stride>4096||!u32(p+0x18,&start)||start<8||start>16384||
+       !u32(p+0x20+7*4,&bit)||bit%32||bit/32>=stride)return 0;
+    int count=0;memset(packs_out,0,sizeof(GradePack)*5);
+    for(uint32_t i=0;i<5;++i){uint32_t ref=0;if(!u32(p+((uintptr_t)start+(uintptr_t)i*stride+bit/32)*4,&ref))return 0;
+        refs[i]=ref;if(ref==UINT32_MAX)continue;
+        uint32_t table=ref>>17;if((table&0x7000)!=0x1000)return 0;
+        uintptr_t store=owned_store(owner,table&0xfff);int duplicate=0;
+        for(uint32_t j=0;j<i;++j)if(packs_out[j].first.store==store)duplicate=1;
+        if(duplicate)continue;
+        if(!schema(store,&b,4)||!name_is(b,"Challenges")||!name_is(b+2*80,"Grade")||!name_is(b+3*80,"Name"))return 0;
+        uintptr_t enumeration=pointer(b+2*80+0x48),eb=pointer(enumeration+0x30),ee=pointer(enumeration+0x38);uint32_t a=0;
+        if(!eb||ee<eb||ee-eb!=6*80||!name_is(eb,"Invalid")||!name_is(eb+5*80,"A")||!u32(eb+5*80+0x40,&a)||a!=4)return 0;
+        GradePack *pack=&packs_out[i];uintptr_t packed=pointer(store+0x30);
+        if(!u32(packed+0x10,&pack->rows)||!pack->rows||pack->rows>256||(ref&0x1ffff)>=pack->rows||
+           !u32(packed+0xc,&pack->stride)||!packed_value_access(store,0,2,3,3,-1,&pack->first,0))return 0;
+        for(uint32_t row=0;row<pack->rows;++row){CareerField f;if(!grade_row(pack,row,&f)||!grade_write_access(f.address))return 0;if(f.value<5)++count;}
+    }
+    return count+1;
+}
 static int resolve(uintptr_t root,CareerField result[2],uintptr_t *owner){
     /* This is the same default-user registry queried by the career service.
        Inactive save-slot metadata and online currencies do not have this chain. */
@@ -143,7 +254,20 @@ static void process_user(uintptr_t root,int64_t user,int has_user){
     longevity=long_field;longevity_identity=identity;snapshot.longevity_ready=long_ready;snapshot.longevity=long_ready?long_field.value:0;snapshot.longevity_enabled=InterlockedCompareExchange(&longevity_on,0,0)!=0;
     CareerField fit={0};int fit_ready=describe(fresh[0].store,CAREER_FITNESS,&fit)&&fit.bits==15&&fit.value<=20000;
     CareerField camp={0};uint32_t ref=0,week=0;int camp_ready=describe_training(fresh[0].store,c,&camp,&ref,&week);
-    if(snapshot.status==CAREER_PENDING){
+    GradePack grades[5];uint32_t grade_refs[5]={0};int grades_ready=grade_fields(c,grades,grade_refs);
+    snapshot.sparring_grades_ready=grades_ready>0;snapshot.sparring_grades_completed=grades_ready>0?(uint32_t)(grades_ready-1):0;
+    if(snapshot.status==CAREER_PENDING&&snapshot.kind==CAREER_GRADES){
+        if(root!=active_root||c!=collection||!grades_ready||memcmp(grade_refs,expected_grade_ids,sizeof(grade_refs))||GetTickCount64()-queued>30000)snapshot.status=CAREER_CHANGED;
+        else{
+            snapshot.status=CAREER_ADDED;
+            for(int i=0;i<5&&snapshot.status==CAREER_ADDED;++i)if(grades[i].first.store){
+                for(uint32_t row=0;row<grades[i].rows;++row){CareerField f;
+                    if(!grade_row(&grades[i],row,&f)){snapshot.status=CAREER_ERROR;break;}
+                    if(f.value<5&&!grade_set(&f)){snapshot.status=CAREER_ERROR;break;}
+                }
+            }
+        }
+    }else if(snapshot.status==CAREER_PENDING){
         int k=snapshot.kind;CareerField *target=k==CAREER_DAYS?&camp:k==CAREER_FITNESS?&fit:&fresh[k];
         if(root!=active_root||c!=collection||!same(&expected[0],&fresh[0])||!same(&expected[1],&fresh[1])||GetTickCount64()-queued>30000)snapshot.status=CAREER_CHANGED;
         else if(k==CAREER_FITNESS&&(!fit_ready||!same(&expected_fitness,&fit)))snapshot.status=CAREER_CHANGED;
@@ -164,6 +288,11 @@ static void process_user(uintptr_t root,int64_t user,int has_user){
     fitness=fit;snapshot.fitness_ready=fit_ready;snapshot.fitness=fit_ready?fit.value:0;
     active_root=root;collection=c;memcpy(fields,fresh,sizeof(fields));snapshot.ready=1;
     for(int k=0;k<2;++k){snapshot.balance[k]=fresh[k].value;snapshot.maximum[k]=fresh[k].maximum;}
+    if(long_ready&&original_set&&InterlockedCompareExchange(&longevity_wanted,0,0)){
+        InterlockedExchange64(&longevity_store,(LONG64)long_field.store);InterlockedExchange(&longevity_on,1);snapshot.longevity_enabled=1;
+    }
+    snapshot.longevity_requested=InterlockedCompareExchange(&longevity_wanted,0,0)!=0;
+    training_rewards_refresh(c);
     if(snapshot.status==CAREER_WAIT)snapshot.status=CAREER_READY;
     ReleaseSRWLockExclusive(&guard);
 }
@@ -179,7 +308,7 @@ static void *__attribute__((sysv_abi)) hooked_user(uintptr_t *out,uintptr_t root
 #endif
     uintptr_t selected=0;rd((uintptr_t)out,&selected,8);process_user(root,user,selected!=0);return value;
 }
-void career_cheats_init(uintptr_t base){guest=base;memset(&snapshot,0,sizeof(snapshot));InterlockedExchange64(&next_probe,0);longevity_disable();cache_collection=cache_begin=0;cached_slot[0]=cached_slot[1]=SIZE_MAX;}
+void career_cheats_init(uintptr_t base){guest=base;memset(&snapshot,0,sizeof(snapshot));InterlockedExchange64(&next_probe,0);longevity_disable();InterlockedExchange(&longevity_wanted,0);cache_collection=cache_begin=0;cached_slot[0]=cached_slot[1]=SIZE_MAX;}
 void career_cheats_tick(void){
     if(!original_user){
         unsigned char bytes[sizeof(user_signature)];
@@ -206,7 +335,7 @@ void career_cheats_tick(void){
     if(snapshot.status==CAREER_PENDING&&GetTickCount64()-queued>30000)snapshot.status=CAREER_CHANGED;
     ReleaseSRWLockExclusive(&guard);
 }
-void career_cheats_cancel(void){AcquireSRWLockExclusive(&guard);longevity_disable();if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;ReleaseSRWLockExclusive(&guard);}
+void career_cheats_cancel(void){AcquireSRWLockExclusive(&guard);InterlockedExchange(&longevity_wanted,0);snapshot.longevity_requested=0;longevity_disable();reward_multiplier=1;reward_restore();snapshot.training_multiplier=1;if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;ReleaseSRWLockExclusive(&guard);}
 void career_cheats_snapshot(CareerSnapshot *out){AcquireSRWLockShared(&guard);*out=snapshot;out->longevity_blocked=(uint32_t)InterlockedCompareExchange(&longevity_blocked,0,0);ReleaseSRWLockShared(&guard);}
 int career_cheats_add(int kind,uint32_t amount){
     if(kind<0||kind>=2||!amount)return 0;
@@ -243,10 +372,28 @@ int career_cheats_restore_days(void){
 }
 
 int career_cheats_protect_longevity(int enabled){
-    AcquireSRWLockExclusive(&guard);int ok=0;CareerField current;uint32_t identity=0;
-    if(!enabled){longevity_disable();ok=1;}
-    else if(original_set&&snapshot.ready&&snapshot.longevity_ready&&describe(longevity.store,CAREER_LONGEVITY,&current)&&current.bits==17&&current.value<=10000&&same(&longevity,&current)&&fighter_identity(current.store,&identity)&&identity==longevity_identity){
-        InterlockedExchange64(&longevity_store,(LONG64)current.store);InterlockedExchange(&longevity_blocked,0);InterlockedExchange(&longevity_on,1);snapshot.longevity_enabled=1;ok=1;
+    AcquireSRWLockExclusive(&guard);CareerField current;uint32_t identity=0;
+    int was=InterlockedExchange(&longevity_wanted,enabled!=0);snapshot.longevity_requested=enabled!=0;
+    if(!enabled)longevity_disable();
+    else{
+        if(!was)InterlockedExchange(&longevity_blocked,0);
+        if(original_set&&snapshot.ready&&snapshot.longevity_ready&&describe(longevity.store,CAREER_LONGEVITY,&current)&&current.bits==17&&current.value<=10000&&same(&longevity,&current)&&fighter_identity(current.store,&identity)&&identity==longevity_identity){
+            InterlockedExchange64(&longevity_store,(LONG64)current.store);InterlockedExchange(&longevity_on,1);snapshot.longevity_enabled=1;
+        }else longevity_disable(); /* Keep the preference; bind only after a checked career lookup. */
+    }
+    ReleaseSRWLockExclusive(&guard);return 1;
+}
+
+int career_cheats_training_multiplier(int value){
+    if(value!=1&&value!=2&&value!=5&&value!=10)return 0;
+    AcquireSRWLockExclusive(&guard);reward_multiplier=value;snapshot.training_multiplier=(uint32_t)value;
+    if(snapshot.ready)training_rewards_refresh(collection);else if(value==1)reward_restore();
+    ReleaseSRWLockExclusive(&guard);return 1;
+}
+int career_cheats_grade_a(void){
+    AcquireSRWLockExclusive(&guard);GradePack fields_now[5];uint32_t refs[5]={0};int ok=0;
+    if(snapshot.ready&&snapshot.status!=CAREER_PENDING&&grade_fields(collection,fields_now,refs)>1){
+        memcpy(expected_grade_ids,refs,sizeof(refs));snapshot.kind=CAREER_GRADES;snapshot.amount=0;queued=GetTickCount64();snapshot.status=CAREER_PENDING;InterlockedExchange64(&next_probe,0);ok=1;
     }
     ReleaseSRWLockExclusive(&guard);return ok;
 }

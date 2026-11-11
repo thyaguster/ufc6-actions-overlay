@@ -30,7 +30,7 @@ if (-not $Test) {
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     $manifest = [ordered]@{
-        version = '0.9.10'
+        version = '0.9.11'
         parsec_engine_sha256 = 'ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d'
         engine_revision = '3309ab23f'
         engine_sha256 = 'f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2'
@@ -139,6 +139,16 @@ if ($Test) {
     if ($LASTEXITCODE) { throw 'Screenshot and reset UI regression failed' }
     python tests/icon_preview.py .build/controller-ci --reset --game-icons
     if ($LASTEXITCODE) { throw 'Game icons pages and text metrics regression failed' }
+    foreach ($mode in @('--longevity-save','--longevity-reload','--longevity-reload-off')) {
+        if ($mode -eq '--longevity-save') { python tests/icon_preview.py .build/controller-ci --reset $mode --no-render }
+        else { python tests/icon_preview.py .build/controller-ci $mode --no-render }
+        if ($LASTEXITCODE) { throw 'Longevity preference persistence test failed' }
+    }
+    foreach ($mode in @('--training-save','--training-reload','--training-reload-off')) {
+        if ($mode -eq '--training-save') { python tests/icon_preview.py .build/controller-ci --reset $mode --no-render }
+        else { python tests/icon_preview.py .build/controller-ci $mode --no-render }
+        if ($LASTEXITCODE) { throw 'Training multiplier persistence test failed' }
+    }
     python tests/icon_preview.py .build/controller-ci --reset --cheats
     if ($LASTEXITCODE) { throw 'Live cheats UI regression failed' }
     python tests/restart_handoff.py

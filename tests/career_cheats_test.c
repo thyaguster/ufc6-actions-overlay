@@ -6,6 +6,7 @@
 #define CAREER_CHEATS_TEST
 #include "../src/career_cheats.c"
 static unsigned writes,dirty_calls;
+static uintptr_t extra_dirty_store;
 static unsigned char other_store[80],other_buffer[2048];
 static unsigned char camp_store[80],camp_schema[80],camp_descriptors[32*80],camp_buffer[2048];
 static unsigned char root[64],registry[80],registry_schema[80],registry_fields[5*80],owner[0x130];
@@ -18,6 +19,9 @@ static void label(unsigned char *where,const char *value){
     else{putptr(where,value);where[15]=128;}
 }
 static uint32_t __attribute__((sysv_abi)) mock_get(uintptr_t s,uint32_t row,uint32_t index){
+    if(index==2){uintptr_t packed=pointer(s+0x30);uint32_t stride=0,start=0,bit=0,word=0;
+        assert(u32(packed+12,&stride)&&u32(packed+24,&start)&&u32(packed+40,&bit));assert(u32(packed+4*(start+row*stride+bit/32),&word));return ((word>>(bit%32))&7)-1;}
+
     if(s==(uintptr_t)camp_store){CareerField f;assert(index==10&&training_field(s,row,index,10,&f));return f.value;}
     assert(row==0);int k=s==(uintptr_t)store[1]?1:(index==24?CAREER_LONGEVITY:index==50?CAREER_FITNESS:0);assert(index==(k==0?48u:k==CAREER_FITNESS?50u:k==CAREER_LONGEVITY?24u:10u));CareerField f;assert(describe(s,k,&f));return f.value;
 }
@@ -26,9 +30,13 @@ static void __attribute__((sysv_abi)) mock_set(uintptr_t s,uint32_t row,uint32_t
     assert(row==0);int k=s==(uintptr_t)store[1]?1:(index==24?CAREER_LONGEVITY:index==50?CAREER_FITNESS:0);CareerField f;assert(describe(s,k,&f)&&f.index==index);uint32_t word=0;assert(u32(f.address,&word));
     uint32_t mask=f.maximum<<f.shift;word=(word&~mask)|((value<<f.shift)&mask);memcpy((void*)f.address,&word,4);++writes;
 }
-static void __attribute__((sysv_abi)) mock_dirty(uintptr_t s){assert(s==(uintptr_t)store[0]||s==(uintptr_t)store[1]||s==(uintptr_t)camp_store);++dirty_calls;}
+static void __attribute__((sysv_abi)) mock_dirty(uintptr_t s){assert(s==(uintptr_t)store[0]||s==(uintptr_t)store[1]||s==(uintptr_t)camp_store||s==extra_dirty_store);++dirty_calls;}
 static uint32_t value(int k){CareerField f;assert(describe((uintptr_t)store[k==CAREER_FITNESS||k==CAREER_LONGEVITY?0:k],k,&f));return f.value;}
 static void __attribute__((sysv_abi)) mock_set_packed(uintptr_t p,uint32_t row,uint32_t index,uint32_t amount){
+    if(index==2){uint32_t stride=0,start=0,bit=0,word=0;assert(amount==4);
+        assert(u32(p+12,&stride)&&u32(p+24,&start)&&u32(p+40,&bit));uintptr_t address=p+4*(start+row*stride+bit/32);assert(u32(address,&word));
+        put32((void*)address,(word&~(7u<<(bit%32)))|((amount+1)<<(bit%32)));++writes;return;}
+
     if(p==(uintptr_t)camp_buffer){mock_set((uintptr_t)camp_store,row,index,amount);return;}
     if(p==(uintptr_t)other_buffer){mock_set((uintptr_t)other_store,row,index,amount);return;}
     assert(p==(uintptr_t)buffers[0]||p==(uintptr_t)buffers[1]);mock_set((uintptr_t)store[p==(uintptr_t)buffers[0]?0:1],row,index,amount);
@@ -62,7 +70,7 @@ int main(void){
     label(descriptors[0]+63*80,"TrainingCamp");uint16_t ref_bits=65535;memcpy(descriptors[0]+63*80+0x30,&ref_bits,2);put32(descriptors[0]+63*80+0x38,7);putptr(descriptors[0]+63*80+0x48,camp_schema);put32(buffers[0]+0x20+63*4,64);put32(buffers[0]+328,0x202c0002);
     label(descriptors[0]+24*80,"Longevity");uint16_t long_bits=17;memcpy(descriptors[0]+24*80+0x30,&long_bits,2);put32(descriptors[0]+24*80+0x38,2);put32(buffers[0]+0x20+24*4,32);
     label(descriptors[0]+22*80,"ID");label(descriptors[0]+4*80,"AppearanceId");uint16_t id_bits=16;memcpy(descriptors[0]+22*80+0x30,&id_bits,2);put32(descriptors[0]+22*80+0x34,(uint32_t)-3);put32(descriptors[0]+22*80+0x38,2);put32(buffers[0]+0x20+22*4,96);put32(buffers[0]+332,20003);
-    assert(career_cheats_protect_longevity(0)&&!career_cheats_protect_longevity(1));
+    assert(career_cheats_protect_longevity(0)&&career_cheats_protect_longevity(1)&&!snapshot.longevity_enabled&&snapshot.longevity_requested);assert(career_cheats_protect_longevity(0));
     assert(!career_cheats_add(0,1000));process();CareerSnapshot s;career_cheats_snapshot(&s);
     assert(s.ready&&s.balance[0]==12109126&&s.balance[1]==16&&s.maximum[1]==16383);
     assert(career_cheats_add(0,1000));assert(!career_cheats_add(0,1000)&&!career_cheats_add(1,5));
@@ -129,6 +137,51 @@ int main(void){
     assert(career_cheats_protect_longevity(1));game_set((uintptr_t)store[0],0,24,9800);assert(value(CAREER_LONGEVITY)==9900);
     put32(buffers[0]+332,20004);game_set((uintptr_t)store[0],0,24,9700);assert(value(CAREER_LONGEVITY)==9700&&!InterlockedCompareExchange(&longevity_on,0,0));
     process();assert(career_cheats_protect_longevity(1));career_cheats_cancel();game_set((uintptr_t)store[0],0,24,9600);assert(value(CAREER_LONGEVITY)==9600&&!snapshot.longevity_enabled);
+    assert(career_cheats_protect_longevity(1));process_user((uintptr_t)root,-1,0);assert(!snapshot.ready&&!snapshot.longevity_enabled&&snapshot.longevity_requested);
+    process();assert(snapshot.ready&&snapshot.longevity_enabled&&snapshot.longevity_requested);game_set((uintptr_t)store[0],0,24,9500);assert(value(CAREER_LONGEVITY)==9600);
+    career_cheats_cancel();assert(!snapshot.longevity_requested&&!snapshot.longevity_enabled);game_set((uintptr_t)store[0],0,24,9500);assert(value(CAREER_LONGEVITY)==9500);
+    unsigned char master[0x160]={0},reward_record[80]={0},reward_schema_data[80]={0},reward_descriptors[20*80]={0},reward_buffer[2048]={0};uintptr_t master_stores[213]={0};
+    putptr(master,(void*)(guest+0x9bf6ae0));putptr(owner+0xf0,master);putptr(master+0x148,master_stores);putptr(master+0x150,master_stores+213);master_stores[211]=(uintptr_t)reward_record;
+    putptr(reward_record,(void*)(guest+0x9bf7be8));putptr(reward_record+8,reward_schema_data);putptr(reward_record+0x10,master);putptr(reward_record+0x30,reward_buffer);
+    putptr(reward_schema_data+0x30,reward_descriptors);putptr(reward_schema_data+0x38,reward_descriptors+sizeof(reward_descriptors));
+    label(reward_descriptors+10*80,"SkillPointsReward");label(reward_descriptors+13*80,"TargetPositive");label(reward_descriptors+19*80,"TrainingStationId");uint16_t reward_bits=9;memcpy(reward_descriptors+10*80+0x30,&reward_bits,2);put32(reward_descriptors+10*80+0x38,2);
+    put32(reward_buffer+0xc,1);put32(reward_buffer+0x10,3);put32(reward_buffer+0x18,80);put32(reward_buffer+0x20+10*4,0);
+    put32(reward_buffer+320,0xab000002);put32(reward_buffer+324,0xab000004);put32(reward_buffer+328,0xab000008);
+    uint32_t skills_before=value(1);assert(career_cheats_training_multiplier(2));uint32_t reward_word=0;assert(u32((uintptr_t)reward_buffer+320,&reward_word)&&reward_word==0xab000004);
+    assert(career_cheats_training_multiplier(2));assert(u32((uintptr_t)reward_buffer+320,&reward_word)&&reward_word==0xab000004);assert(career_cheats_training_multiplier(5));assert(u32((uintptr_t)reward_buffer+320,&reward_word)&&reward_word==0xab00000a);
+    assert(!career_cheats_training_multiplier(7));assert(career_cheats_training_multiplier(1));assert(u32((uintptr_t)reward_buffer+320,&reward_word)&&reward_word==0xab000002);assert(value(1)==skills_before);
+    reward_restore();put32(reward_buffer+328,0xab000064);assert(career_cheats_training_multiplier(10));assert(u32((uintptr_t)reward_buffer+328,&reward_word)&&reward_word==0xab0001ff);
+    career_cheats_cancel();assert(u32((uintptr_t)reward_buffer+328,&reward_word)&&reward_word==0xab000064);
+    unsigned char grade_record[80]={0},grade_schema_data[80]={0},grade_descriptors[4*80]={0},grade_buffer[1024]={0},enum_schema[80]={0},enum_fields[6*80]={0};
+    unsigned char station_record[80]={0},station_schema[80]={0},station_descriptors[23*80]={0},station_buffer[1024]={0};
+    stores[301]=(uintptr_t)grade_record;stores[326]=(uintptr_t)station_record;extra_dirty_store=(uintptr_t)grade_record;
+    putptr(grade_record,(void*)(guest+0x9bf7be8));putptr(grade_record+8,grade_schema_data);putptr(grade_record+0x10,owner);putptr(grade_record+0x30,grade_buffer);putptr(grade_schema_data+0x30,grade_descriptors);putptr(grade_schema_data+0x38,grade_descriptors+sizeof(grade_descriptors));
+    label(grade_descriptors,"Challenges");label(grade_descriptors+2*80,"Grade");label(grade_descriptors+3*80,"Name");uint16_t grade_bits=3;memcpy(grade_descriptors+2*80+0x30,&grade_bits,2);put32(grade_descriptors+2*80+0x34,UINT32_MAX);put32(grade_descriptors+2*80+0x38,3);putptr(grade_descriptors+2*80+0x48,enum_schema);
+    putptr(enum_schema+0x30,enum_fields);putptr(enum_schema+0x38,enum_fields+sizeof(enum_fields));label(enum_fields,"Invalid");label(enum_fields+5*80,"A");put32(enum_fields+5*80+0x40,4);
+    put32(grade_buffer+0xc,1);put32(grade_buffer+0x10,6);put32(grade_buffer+0x18,64);put32(grade_buffer+0x20+2*4,0);
+    for(unsigned i=0;i<6;++i)put32(grade_buffer+256+i*4,0xab000000u|(i==2?3:i==4?4:i==5?5:0));
+    putptr(station_record,(void*)(guest+0x9bf7be8));putptr(station_record+8,station_schema);putptr(station_record+0x10,owner);putptr(station_record+0x30,station_buffer);putptr(station_schema+0x30,station_descriptors);putptr(station_schema+0x38,station_descriptors+sizeof(station_descriptors));label(station_descriptors+7*80,"CurrentChallengePack");label(station_descriptors+14*80,"Id");put32(station_buffer+0xc,1);put32(station_buffer+0x10,5);put32(station_buffer+0x18,64);put32(station_buffer+0x20+7*4,0);
+    unsigned active_rows[]={0,1,3,0,1};for(unsigned i=0;i<5;++i)put32(station_buffer+256+i*4,0x225a0000u|active_rows[i]);
+    unsigned char second_grade_record[80]={0};HANDLE grade_mapping=CreateFileMappingW(INVALID_HANDLE_VALUE,NULL,PAGE_READWRITE,0,4096,NULL);assert(grade_mapping);
+    unsigned char *second_grade_seed=MapViewOfFile(grade_mapping,FILE_MAP_READ|FILE_MAP_WRITE,0,0,4096),*second_grade_buffer=MapViewOfFile(grade_mapping,FILE_MAP_READ,0,0,4096);assert(second_grade_seed&&second_grade_buffer);
+    memcpy(second_grade_record,grade_record,sizeof(grade_record));putptr(second_grade_record+0x30,second_grade_buffer);stores[276]=(uintptr_t)second_grade_record;
+    put32(second_grade_seed+0xc,1);put32(second_grade_seed+0x10,2);put32(second_grade_seed+0x18,64);put32(second_grade_seed+0x20+2*4,0);
+    put32(second_grade_seed+256,0xcd000000);put32(second_grade_seed+260,0xcd000002);
+    put32(station_buffer+256,0x22280000); /* Current pack is unattempted; previous pack has a grade. */
+    uint32_t grade_epoch=0;assert(u32((uintptr_t)owner+0xe8,&grade_epoch));
+    process();assert(snapshot.sparring_grades_ready&&snapshot.sparring_grades_completed==7);
+    putptr(second_grade_record+0x10,NULL);assert(!career_cheats_grade_a());putptr(second_grade_record+0x10,owner);
+    assert(career_cheats_grade_a());process();assert(snapshot.status==CAREER_ADDED);
+    uint32_t second_word=0;assert(u32((uintptr_t)second_grade_buffer+256,&second_word)&&second_word==0xcd000005);
+    assert(u32((uintptr_t)second_grade_buffer+260,&second_word)&&second_word==0xcd000005);
+    for(unsigned i=0;i<6;++i){uint32_t word=0;assert(u32((uintptr_t)grade_buffer+256+i*4,&word));assert(word==0xab000005u);}
+    assert(value(1)==skills_before&&!career_cheats_grade_a());
+    MEMORY_BASIC_INFORMATION grade_memory;assert(VirtualQuery(second_grade_buffer,&grade_memory,sizeof(grade_memory))&&grade_memory.Protect==PAGE_READONLY);
+    assert(u32((uintptr_t)second_grade_seed+256,&second_word)&&second_word==0xcd000000);
+    assert(u32((uintptr_t)second_grade_seed+260,&second_word)&&second_word==0xcd000002);
+    uint32_t updated_epoch=0;assert(u32((uintptr_t)owner+0xe8,&updated_epoch)&&updated_epoch==grade_epoch+7);
+    assert(UnmapViewOfFile(second_grade_buffer)&&UnmapViewOfFile(second_grade_seed)&&CloseHandle(grade_mapping));
+    puts("PASS: sparring reward definition multipliers, non-compounding changes, Off/reset restoration, packed-field limits and neighbor bits; confirmed all-pack A grades use the normal setter/dirty tracking, support read-only mapped records, restore protection, preserve backing views and point balances, and reject foreign owners.");
     puts("PASS: real checked SysV longevity setter guard; immediate decrease blocking, allowed increases, immediate Off, unrelated fighters/fitness preserved, career identity change and reset disable.");
     printf("PASS: 100,000 career lookups in %llu ms, %llu probes; relocated schemas cached and additions bypass the idle delay.\n",(unsigned long long)elapsed,(unsigned long long)(probe_count-probes_before));
     puts("PASS: real checked SysV career hook, native setter/dirty calls, career identity/schema checks, exact money/skill/fitness fields, one-time fitness/day restoration, nonzero active camp rows, camp/week changes, schema rejection, one-time additions, no auto-repeat, adjacent-bit preservation, amount limits, pending cancellation, changed career/buffers and schema relocation.");return 0;

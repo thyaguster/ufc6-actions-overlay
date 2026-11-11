@@ -27,6 +27,12 @@ parser.add_argument("--raw-access",action="store_true")
 parser.add_argument("--screenshot-reset",action="store_true")
 parser.add_argument("--cheats",action="store_true")
 parser.add_argument("--game-icons",action="store_true")
+parser.add_argument("--longevity-save",action="store_true")
+parser.add_argument("--longevity-reload",action="store_true")
+parser.add_argument("--longevity-reload-off",action="store_true")
+parser.add_argument("--training-save",action="store_true")
+parser.add_argument("--training-reload",action="store_true")
+parser.add_argument("--training-reload-off",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
 if args.reset:
@@ -95,7 +101,37 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     assert dll.MenuTestSnapshot()&0x100
-    if args.game_icons:
+    if args.longevity_save or args.longevity_reload or args.longevity_reload_off:
+        expected=1 if args.longevity_reload else 0
+        assert dll.MenuTestLongevity()==expected,"Saved longevity preference was not loaded in a fresh process"
+        assert (dll.MenuTestBackendPreferences()&1)==expected,"Career initialization cleared the saved longevity choice"
+        for _ in range(3):press(0x40)
+        press(0x4000)
+        for _ in range(6):press(0x40)
+        if not args.longevity_reload_off:
+            press(0x4000);assert dll.MenuTestLongevity()==1-expected
+        k.GetPrivateProfileIntW.argtypes=[w.LPCWSTR,w.LPCWSTR,c.c_int,w.LPCWSTR]
+        assert k.GetPrivateProfileIntW("Menu","LongevityProtection",0,str(folder/"ufc6-quit-menu.test.ini"))==(0 if args.longevity_reload_off else 1-expected)
+        print("PASS: longevity preference persists On/Off across fresh processes; no game memory changed.")
+        raise SystemExit(0)
+    elif args.training_save or args.training_reload or args.training_reload_off:
+        assert dll.MenuTestBackendPreferences()>>8==(2 if args.training_reload else 1),"Career initialization cleared the saved multiplier"
+        for _ in range(3):press(0x40)
+        press(0x4000)
+        for _ in range(7):press(0x40)
+        assert dll.MenuTestSnapshot()&15==7
+        press(0x4000)
+        k.GetPrivateProfileIntW.argtypes=[w.LPCWSTR,w.LPCWSTR,c.c_int,w.LPCWSTR]
+        def saved():return k.GetPrivateProfileIntW("Menu","TrainingRewardMultiplier",0,str(folder/"ufc6-quit-menu.test.ini"))
+        assert saved()==(5 if args.training_reload else 2),"Fresh process did not load the saved multiplier"
+        if args.training_reload:
+            press(0x80);press(0x80);assert saved()==1
+        elif args.training_reload_off:
+            press(0x80);assert saved()==1
+        print("PASS: training reward multiplier and 1x Off persist across fresh processes.")
+        raise SystemExit(0)
+    elif args.game_icons:
+
         def page():return (dll.MenuTestSnapshot()>>12)&15
         render("main-unclipped.png")
         for _ in range(4):press(0x40)
@@ -168,12 +204,16 @@ try:
         press(0x80);assert dll.MenuTestLongevity()==0
         render("cheats-longevity-off.png")
         press(0x20);assert dll.MenuTestLongevity()==1
+        press(0x40);press(0x20);render("cheats-training-rewards.png")
+        press(0x40);press(0x4000);assert page()==8
+        render("sparring-grade-a-confirm.png")
+        press(0x40);press(0x4000);assert page()==7
         press(0x40);press(0x4000);assert page()==11
         render("savegame-backups.png")
         press(0x4000);assert page()==11
         render("savegame-backup-request.png")
         press(0x40);press(0x4000);assert page()==11
-        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==7
+        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==9
         press(0x40);render("cheats-back-scrolled.png");press(0x4000);assert page()==0 and dll.MenuTestSnapshot()&15==3
         press(0x40);press(0x4000)
         for _ in range(9):press(0x40)

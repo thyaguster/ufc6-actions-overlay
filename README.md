@@ -78,7 +78,7 @@ Windows and network paths are redacted. Saves, screenshots, launcher arguments, 
   </tr>
 </table>
 
-[Cheats over the game](docs/screenshots/cheats-in-game.png) · [Screenshot result](docs/screenshots/screenshot-saved.png) · [Reset confirmation](docs/screenshots/reset-confirmation.png) · [Controller access](docs/screenshots/controller-access.png) · [Game Bar conflict warning](docs/screenshots/gamebar-conflict.png) · [Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
+[Career training controls](docs/screenshots/training-cheats.png) · [Screenshot result](docs/screenshots/screenshot-saved.png) · [Reset confirmation](docs/screenshots/reset-confirmation.png) · [Controller access](docs/screenshots/controller-access.png) · [Game Bar conflict warning](docs/screenshots/gamebar-conflict.png) · [Settings over the actual game menu](docs/screenshots/settings-in-game.png) · [Windows setup window](docs/screenshots/setup.png)
 
 The game-background images are real game-window captures. The isolated page images come from the same overlay renderer in a test host with power actions disabled.
 
@@ -157,9 +157,17 @@ The Cheats page also includes **Add money** and **Add skill points** for the loa
 
 **Restore fitness to 100%** is a one-time career action with a Cancel-first confirmation. It uses the selected career fighter's verified `Fitness` field and the game's setter/change tracking, preserving neighboring packed values. Resume and reopen a career screen if the action is queued. This sets fitness once; it does not freeze fitness or remove injuries. Back up your saves before testing career changes.
 
-**Protect career longevity** is a session-only On/Off switch. Enable it from an active career hub to preserve the current longevity amount. It blocks decreases through the checked career setter while allowing increases and forwarding fitness, currency and other fighters' writes normally. Turning it Off immediately restores normal loss. It starts Off after launch and is disabled by Reset or an invalid/changed career binding. It does not refill longevity already lost. A blocked-decrease entry is added to the support log for verification.
+**Never get old** remembers its On/Off choice between launches. A saved On choice activates only after the selected career and field binding are verified; missing or changed data is left untouched until a fresh valid binding is available. It preserves the current amount, allows increases and forwards fitness, currency and other fighters' writes normally. Turning it Off immediately restores normal loss and saves Off. Reset clears the saved choice to Off. It does not refill longevity already lost. A blocked-decrease entry is added to the support log for verification.
 
-![Career longevity protection](docs/screenshots/longevity.png)
+![Never get old switch](docs/screenshots/longevity.png)
+
+**All sparring grades: A...** records Grade A for the selected career's sparring challenge packs, including unattempted packs, after confirmation. This unlocks simulation for those drills; it does not unlock training stations or change their levels. Resume and reopen training selection if the action is queued, and save normally.
+
+**Training point rewards** offers **1x (Off), 2x, 5x and 10x**. Choose a multiplier before starting training. It scales verified training-objective skill-point rewards from their original amounts, so changing multipliers does not compound them. Switching to 1x or resetting restores the original rewards. The choice is remembered between launches. Validated live at 2x in a Parsec heavy-bag session: three normally 2-point challenges awarded 4 points each, and the career balance rose from 46 to 58. Automated checks also cover 1x restoration, 5x/10x scaling, changing factors without compounding, limits and saved settings.
+
+![Career training controls](docs/screenshots/training-cheats.png)
+
+![All sparring grades confirmation](docs/screenshots/sparring-grades-confirm.png)
 
 **Refill training days** restores the active camp's remaining training days to **7**, with confirmation. It follows the selected fighter's checked camp reference and current record row, and leaves the training week unchanged. Requests are cancelled if the career, camp, week or packed storage changes. It applies once; days can be spent normally afterward. It is unavailable outside an active training camp.
 
@@ -215,7 +223,7 @@ Verification uses the test helper with power APIs compiled out and a file in pla
 
 ## Install, upgrade, and remove
 
-Download **`UFC6-Actions-Overlay-Setup-0.9.10.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
+Download **`UFC6-Actions-Overlay-Setup-0.9.11.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
 
 1. Close UFC 6 and its launcher.
 2. Click **Browse** and select the UFC 6 game folder or its **bin** folder containing **`UFC 6.exe`**.
@@ -227,7 +235,7 @@ To uninstall, run the same setup EXE, choose the same folder, and click **Remove
 
 Version 0.8.2 fixes startup when Windows prefers system DLLs, which can bypass an app-local `version.dll`. The bridge uses the engine's existing non-system runtime import and enables the Vulkan layer only inside the game process. It preserves the Windows security policy, checks all required overlay files before enabling the layer, and does not register a system-wide Vulkan layer. Production rendering is in-frame only; a desktop popup cannot appear behind the game. The installer accepts the verified original runtime and recognized overlay bridges, including PORTHEON 6.2's rebuild; it rejects unknown replacements. The original runtime must still be available in `libwinpthread-1.dll` or its preserved `ufc6_pthread_original.dll` copy.
 
-The full **`UFC6-Actions-Overlay-0.9.10.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
+The full **`UFC6-Actions-Overlay-0.9.11.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
 
 The Python command-line manager remains available for development and scripting:
 

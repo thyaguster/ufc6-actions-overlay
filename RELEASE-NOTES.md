@@ -1,3 +1,16 @@
+# UFC 6 Actions Overlay v0.9.11
+
+- Match Cheats row labels to the main menu font size and rename the longevity switch to Never get old.
+
+- Remember the longevity On/Off preference across launches.
+- Keep the saved preference separate from the active career binding; reactivate only after validating fresh career data.
+- Save Off immediately and clear the remembered choice on Reset.
+
+- Add training skill-point reward choices: 1x (Off), 2x, 5x and 10x, saved across launches. Scale verified training objective rewards from their original amounts without compounding; restore originals at 1x or Reset.
+- Add a confirmed All sparring grades: A action for the selected career's sparring challenge packs, including unattempted packs. Leave station locks, training levels and skill-point balances unchanged.
+
+Fresh-process preference reload, reset, deferred career binding, reward scaling/restoration, packed-neighbor preservation and grade eligibility tests passed. Installer, diagnostics, controller/rendering and safe handoff checks passed. Longevity preference reload and A-grade simulation unlock are confirmed in the live career. Validated live at 2x in Parsec heavy-bag training: three 2-point challenges became 4 points each, paid +12, and raised the career balance from 46 to 58.
+
 # UFC 6 Actions Overlay v0.9.10
 
 - Add session-only Protect career longevity to Cheats, using a checked immediate setter guard for the selected career.

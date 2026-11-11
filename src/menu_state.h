@@ -13,7 +13,7 @@ enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT, PAGE_
 enum { MAIN_RESUME, MAIN_SCREENSHOT, MAIN_RESTART, MAIN_CHEATS, MAIN_SETTINGS, MAIN_QUIT, MAIN_REBOOT, MAIN_SHUTDOWN, MAIN_COUNT };
 enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_LAUNCHER, SETTING_ACCESS, SETTING_SCREENSHOTS, SETTING_RESET, SETTING_GAME_ICONS, SETTING_UPDATE, SETTING_DIAGNOSTICS, SETTING_BACK, SETTING_COUNT };
 enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
-       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED, MENU_LAUNCHER_SETTINGS, MENU_ACCESS_CHANGED, MENU_OPEN_SCREENSHOTS, MENU_RESET_SETTINGS, MENU_CHEAT_STAMINA, MENU_CHEAT_HEALTH, MENU_CAREER_ADD, MENU_GAME_ICONS_OPEN, MENU_GAME_ICONS_APPLY, MENU_BACKUP_CREATE, MENU_BACKUP_FOLDER, MENU_BACKUP_OPEN, MENU_CHECK_UPDATES, MENU_EXPORT_DIAGNOSTICS, MENU_CAREER_LONGEVITY };
+       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED, MENU_LAUNCHER_SETTINGS, MENU_ACCESS_CHANGED, MENU_OPEN_SCREENSHOTS, MENU_RESET_SETTINGS, MENU_CHEAT_STAMINA, MENU_CHEAT_HEALTH, MENU_CAREER_ADD, MENU_GAME_ICONS_OPEN, MENU_GAME_ICONS_APPLY, MENU_BACKUP_CREATE, MENU_BACKUP_FOLDER, MENU_BACKUP_OPEN, MENU_CHECK_UPDATES, MENU_EXPORT_DIAGNOSTICS, MENU_CAREER_LONGEVITY, MENU_TRAINING_MULTIPLIER };
 
 typedef struct {
     int visible,selection,armed,chord_latched,draining;
@@ -28,7 +28,7 @@ typedef struct {
     int disable_guide;
     int gamebar_shortcut;
     int first_player_only;
-    int career_amount_index[2],career_kind,game_icons_xbox;
+    int career_amount_index[2],career_kind,game_icons_xbox,training_multiplier_index;
 } MenuState;
 
 static int menu_power_page(const MenuState *s){return s->page==PAGE_SHUTDOWN||s->page==PAGE_REBOOT;}
@@ -54,7 +54,9 @@ static uint32_t menu_career_amount(const MenuState *s,int kind){
     static const uint32_t points[]={1,5,10,25,50,100,250,500,1000};
     int i=s->career_amount_index[kind];return kind==0?money[i>=0&&i<5?i:0]:points[i>=0&&i<9?i:0];
 }
-static int menu_rows(const MenuState *s) {return s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?9:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?3:s->shutdown_countdown?1:2;}
+static int menu_training_multiplier(const MenuState *s){static const int values[]={1,2,5,10};return values[s->training_multiplier_index>=0&&s->training_multiplier_index<4?s->training_multiplier_index:0];}
+static int menu_career_row(int kind){return kind==5?8:2+kind;}
+static int menu_rows(const MenuState *s) {return s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?11:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?3:s->shutdown_countdown?1:2;}
 static int menu_first_row(const MenuState *s){return (s->page==PAGE_SETTINGS||s->page==PAGE_CHEATS)&&s->selection>=6?s->selection-5:0;}
 static void menu_cancel_shutdown(MenuState *s) {
     s->shutdown_holding=0;s->shutdown_countdown=0;s->shutdown_progress=0;
@@ -128,10 +130,10 @@ static int menu_tick(MenuState *s,uint32_t buttons,uint64_t now,int foreground) 
 static int menu_button(MenuState *s,uint32_t button,int down) {
     if(!s->visible||!s->armed||!down||s->capturing)return MENU_NONE;
     if(button==PAD_B) {
-        if(s->page==PAGE_BACKUPS){s->page=PAGE_CHEATS;s->selection=7;s->armed=0;return MENU_CHANGED;}
+        if(s->page==PAGE_BACKUPS){s->page=PAGE_CHEATS;s->selection=9;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_GAME_ICONS_CONFIRM){s->page=PAGE_GAME_ICONS;s->selection=s->game_icons_xbox?0:1;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_GAME_ICONS){s->page=PAGE_SETTINGS;s->selection=SETTING_GAME_ICONS;s->armed=0;return MENU_CHANGED;}
-        if(s->page==PAGE_CAREER_ADD){s->page=PAGE_CHEATS;s->selection=2+s->career_kind;s->armed=0;return MENU_CHANGED;}
+        if(s->page==PAGE_CAREER_ADD){s->page=PAGE_CHEATS;s->selection=menu_career_row(s->career_kind);s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_CHEATS){s->page=PAGE_MAIN;s->selection=MAIN_CHEATS;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_RESET){s->page=PAGE_SETTINGS;s->selection=SETTING_RESET;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_SCREENSHOT){s->page=PAGE_MAIN;s->selection=MAIN_SCREENSHOT;s->armed=0;return MENU_CHANGED;}
@@ -149,7 +151,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         s->armed=0;
         if(s->selection==0)return MENU_BACKUP_CREATE;
         if(s->selection==1)return MENU_BACKUP_FOLDER;
-        s->page=PAGE_CHEATS;s->selection=7;return MENU_CHANGED;
+        s->page=PAGE_CHEATS;s->selection=9;return MENU_CHANGED;
     }
     if(s->page==PAGE_GAME_ICONS){
         if(button!=PAD_A)return MENU_NONE;
@@ -163,7 +165,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
     }
     if(s->page==PAGE_CAREER_ADD){
         if(button!=PAD_A)return MENU_NONE;
-        int add=s->selection==1;s->page=PAGE_CHEATS;s->selection=2+s->career_kind;s->armed=0;
+        int add=s->selection==1;s->page=PAGE_CHEATS;s->selection=menu_career_row(s->career_kind);s->armed=0;
         return add?MENU_CAREER_ADD:MENU_CHANGED;
     }
     if(s->page==PAGE_CHEATS){
@@ -179,8 +181,10 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         if(s->selection==4&&button==PAD_A){s->career_kind=2;s->page=PAGE_CAREER_ADD;s->selection=0;s->armed=0;return MENU_CHANGED;}
         if(s->selection==5&&button==PAD_A){s->career_kind=3;s->page=PAGE_CAREER_ADD;s->selection=0;s->armed=0;return MENU_CHANGED;}
         if(s->selection==6&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){s->armed=0;return MENU_CAREER_LONGEVITY;}
-        if(s->selection==7&&button==PAD_A){s->page=PAGE_BACKUPS;s->selection=0;s->armed=0;return MENU_BACKUP_OPEN;}
-        if(s->selection==8&&button==PAD_A){s->page=PAGE_MAIN;s->selection=MAIN_CHEATS;s->armed=0;return MENU_CHANGED;}
+        if(s->selection==7&&(button==PAD_A||button==PAD_LEFT||button==PAD_RIGHT)){s->training_multiplier_index=(s->training_multiplier_index+(button==PAD_LEFT?3:1))%4;return MENU_TRAINING_MULTIPLIER;}
+        if(s->selection==8&&button==PAD_A){s->career_kind=5;s->page=PAGE_CAREER_ADD;s->selection=0;s->armed=0;return MENU_CHANGED;}
+        if(s->selection==9&&button==PAD_A){s->page=PAGE_BACKUPS;s->selection=0;s->armed=0;return MENU_BACKUP_OPEN;}
+        if(s->selection==10&&button==PAD_A){s->page=PAGE_MAIN;s->selection=MAIN_CHEATS;s->armed=0;return MENU_CHANGED;}
         return MENU_NONE;
     }
     if(s->page==PAGE_SETTINGS) {
