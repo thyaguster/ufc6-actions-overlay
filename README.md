@@ -49,6 +49,8 @@ Install into the same `bin` folder, then launch with PORTHEON's Parsec option en
 
 ## Photo Mode
 
+The screenshots and controls below describe the current v0.9.26 development preview; see the [complete gallery](docs/SCREENSHOTS.md).
+
 Open **Photo Mode** from the main overlay menu, or press **F9**, during a running fight or practice. Move the free camera, adjust its field of view, freeze the action, hide the game HUD and keep cage panels visible. Closing Photo Mode restores the normal camera and game speed; switching away from the game also exits it.
 
 ![Photo Mode tools over a live UFC 6 fight](docs/screenshots/photo-mode-in-game.png)
@@ -60,8 +62,8 @@ Open **Photo Mode** from the main overlay menu, or press **F9**, during a runnin
 | Move up / down | LB / RB or L1 / R1 | U / O |
 | Zoom (field of view) | Triggers | Page Up / Page Down |
 | Freeze / unfreeze | A / Cross | P |
-| Clean screenshot | X / Square | Your assigned screenshot key |
-| Screenshot with overlay | D-pad Left | Ctrl + Shift + F12 |
+| Take screenshot | X / Square | Your assigned screenshot key |
+| Camera / Effects / Watermark page | Menu / Options | F8 |
 | Reset camera | Y / Triangle | Home |
 | Hide / show game HUD | D-pad Up | H |
 | Toggle cage visibility | D-pad Right | C |
@@ -70,9 +72,9 @@ Open **Photo Mode** from the main overlay menu, or press **F9**, during a runnin
 
 Hold **Shift** for faster keyboard movement. These camera controls apply while the tools menu is closed; **F10** opens the tools. The translucent panel follows the selected Xbox/PlayStation icons, theme, font and UI scale and sits below the fighter HUD. Gameplay input is withheld while the camera is under Photo Mode control.
 
-**Keep cage visible** prevents the normal gameplay camera's fence fading from leaving missing panels in free-camera views. Turn it Off for native fading. If the action is frozen, briefly unfreeze to let a changed cage setting update. The game HUD is temporarily shown while the tools menu is open and hides again when you close the tools with Hide HUD enabled.
+**Keep cage visible** prevents the normal gameplay camera's fence fading from leaving missing panels in free-camera views. Turn it Off for native fading. If the action is frozen, briefly unfreeze to let a changed cage setting update. The selected Hide HUD state remains active while the tools menu is open.
 
-The existing screenshot action stays clean. **Screenshot + overlay**, available in Photo Mode and as a separate Keybinds action, includes the displayed tools or controls panel. Both modes save to **Pictures\Screenshots**. Existing custom shortcuts take priority; configure both actions under **Settings → Controls → Keybinds**.
+In the current development build, screenshots are clean by default. Enable **Settings → Files & support → Include overlay in screenshots** when you want the displayed tools or translucent panel in the image. The normal screenshot action then follows that switch; there is no separate overlay-shot action. PNGs save to **Pictures\Screenshots**. Configure the screenshot key or controller combination under **Settings → Controls → Keybinds**.
 
 ![Translucent Photo Mode controls over a live fight](docs/screenshots/photo-controls-in-game.png)
 
@@ -92,48 +94,40 @@ Windows and network paths are redacted. Saves, screenshots, launcher arguments, 
 
 ## Screenshots
 
+**Current v0.9.26 development preview:** Amber · Rounded boxes · Xbox icons · 18 px · 125% scale · Tall window. All screenshots have been refreshed together. The downloadable release is still v0.9.18.
+
+[Browse every page, confirmation and full game-window capture](docs/SCREENSHOTS.md).
+
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/photo-mode-options.png" alt="Photo Mode controls and screenshot-with-overlay action"><br><strong>Photo Mode tools and cage visibility</strong></td>
-    <td width="50%"><img src="docs/screenshots/photo-panel-xbox.png" alt="Translucent Xbox camera-controls panel"><br><strong>Live controls and camera state</strong></td>
+    <td width="50%"><img src="docs/screenshots/main-menu.png" alt="Actions"><br><strong>Actions</strong></td>
+    <td width="50%"><img src="docs/screenshots/settings.png" alt="Settings"><br><strong>Settings</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/photo-panel-playstation.png" alt="Photo Mode PlayStation button prompts"><br><strong>Matching PlayStation prompts</strong></td>
-    <td width="50%"><img src="docs/screenshots/keybinds-overlay-screenshot.png" alt="Independent clean and overlay-inclusive screenshot keybinds"><br><strong>Separate screenshot actions</strong></td>
+    <td width="50%"><img src="docs/screenshots/live-cheats.png" alt="Cheats — all eleven rows"><br><strong>Cheats — all eleven rows</strong></td>
+    <td width="50%"><img src="docs/screenshots/appearance.png" alt="Appearance"><br><strong>Appearance</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/game-launcher.png" alt="Skip intros and hands-free startup enabled"><br><strong>New: skip intros and hands-free startup</strong></td>
-    <td width="50%"><img src="docs/screenshots/startup-override.png" alt="Skip intros with auto-continue independently disabled"><br><strong>Keep intros skipped with auto-continue Off</strong></td>
+    <td width="50%"><img src="docs/screenshots/photo-panel-camera.png" alt="Translucent Camera page"><br><strong>Translucent Camera page</strong></td>
+    <td width="50%"><img src="docs/screenshots/photo-panel-effects.png" alt="Translucent Effects page"><br><strong>Translucent Effects page</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/main-menu.png" alt="Game actions with controller shortcut icons"><br><strong>Game actions with controller shortcut icons</strong></td>
-    <td width="50%"><img src="docs/screenshots/settings.png" alt="Settings organized by category"><br><strong>Settings organized by category</strong></td>
+    <td width="50%"><img src="docs/screenshots/photo-panel-watermark.png" alt="Translucent Watermark page"><br><strong>Translucent Watermark page</strong></td>
+    <td width="50%"><img src="docs/screenshots/photo-effects.png" alt="Photo effects"><br><strong>Photo effects</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/appearance.png" alt="Appearance: theme, font, Octagon boxes and window size"><br><strong>Appearance: theme, font, Octagon boxes and window size</strong></td>
-    <td width="50%"><img src="docs/screenshots/keybinds.png" alt="Keyboard keys and controller combinations"><br><strong>Keyboard keys and controller combinations</strong></td>
+    <td width="50%"><img src="docs/screenshots/startup-screens.png" alt="Skip title & network warnings"><br><strong>Skip title & network warnings</strong></td>
+    <td width="50%"><img src="docs/screenshots/performance.png" alt="Performance"><br><strong>Performance</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/settings-playstation.png" alt="PlayStation artwork and assigned shortcuts"><br><strong>PlayStation artwork and assigned shortcuts</strong></td>
-    <td width="50%"><img src="docs/screenshots/restart-pc.png" alt="Confirmed restart with optional game auto-launch"><br><strong>Confirmed restart with optional game auto-launch</strong></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/live-cheats.png" alt="Player 1 cheats and career additions"><br><strong>Player 1 cheats and career additions</strong></td>
-    <td width="50%"><img src="docs/screenshots/training-cheats.png" alt="More cheats: longevity, training rewards and A grades"><br><strong>More cheats: longevity, training rewards and A grades</strong></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/cheats-tall.png" alt="Tall window: all eleven Cheats rows together"><br><strong>Tall window: all eleven Cheats rows together</strong></td>
-    <td width="50%"><img src="docs/screenshots/shortcut-editor.png" alt="Record keyboard and controller shortcuts"><br><strong>Record keyboard and controller shortcuts</strong></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/game-button-icons.png" alt="Included Xbox / PlayStation game icon patch"><br><strong>Included Xbox / PlayStation game icon patch</strong></td>
-    <td width="50%"><img src="docs/screenshots/savegame-backups.png" alt="Verified savegame backups"><br><strong>Verified savegame backups</strong></td>
+    <td width="50%"><img src="docs/screenshots/game-button-icons.png" alt="Game button icons"><br><strong>Game button icons</strong></td>
+    <td width="50%"><img src="docs/screenshots/savegame-backups.png" alt="Savegame backups"><br><strong>Savegame backups</strong></td>
   </tr>
 </table>
 
-[Controls](docs/screenshots/controls.png) · [Game & launcher](docs/screenshots/game-launcher.png) · [Files & support](docs/screenshots/files-support.png) · [Screenshot notification](docs/screenshots/notification.png) · [Windows setup](docs/screenshots/setup.png) · [GitHub updater](docs/screenshots/updater.png)
+[Full-window Photo Mode](docs/screenshots/photo-controls-in-game.png) · [Startup bypass](docs/screenshots/startup-in-game.png) · [Installer](docs/screenshots/setup.png) · [Updater](docs/screenshots/updater.png)
 
-The isolated page images use the current overlay renderer in a test host with power actions disabled. The game-background captures show an earlier overlay release running over the actual game.
+The complete gallery distinguishes real game captures from native-renderer page previews with sample values and test-host status. Windows tools keep their own application styling.
 
 ## Change in-game controller icons (included)
 
@@ -253,13 +247,13 @@ The Cheats page also includes **Add money** and **Add skill points** for the loa
 
 **Never get old** remembers its On/Off choice between launches. A saved On choice activates only after the selected career and field binding are verified; missing or changed data is left untouched until a fresh valid binding is available. It preserves the current amount, allows increases and forwards fitness, currency and other fighters' writes normally. Turning it Off immediately restores normal loss and saves Off. Reset clears the saved choice to Off. It does not refill longevity already lost. A blocked-decrease entry is added to the support log for verification.
 
-![Never get old switch](docs/screenshots/longevity.png)
+![Never get old switch](docs/screenshots/live-cheats.png)
 
 **All sparring grades: A...** records Grade A for the selected career's sparring challenge packs, including unattempted packs, after confirmation. This unlocks simulation for those drills; it does not unlock training stations or change their levels. Resume and reopen training selection if the action is queued, and save normally.
 
 **Training point rewards** offers **1x (Off), 2x, 5x and 10x**. Choose a multiplier before starting training. It scales verified training-objective skill-point rewards from their original amounts, so changing multipliers does not compound them. Switching to 1x or resetting restores the original rewards. The choice is remembered between launches. Validated live at 2x in a Parsec heavy-bag session: three normally 2-point challenges awarded 4 points each, and the career balance rose from 46 to 58. Automated checks also cover 1x restoration, 5x/10x scaling, changing factors without compounding, limits and saved settings.
 
-![Career training controls](docs/screenshots/training-cheats.png)
+![Career training controls](docs/screenshots/live-cheats.png)
 
 ![All sparring grades confirmation](docs/screenshots/sparring-grades-confirm.png)
 
