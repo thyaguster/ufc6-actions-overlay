@@ -12,5 +12,6 @@ typedef struct { uintptr_t base; unsigned target; LiveCheat flags[LIVE_COUNT]; }
 void live_cheats_init(LiveCheats *state,uintptr_t guest_base);
 void live_cheats_tick(LiveCheats *state);
 int live_cheats_toggle(LiveCheats *state,int which);
+int live_cheats_fight_ready(void);
 void live_cheats_stop(LiveCheats *state);
 #endif

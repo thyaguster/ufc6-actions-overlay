@@ -39,6 +39,7 @@ void cheat_bindings_apply(CheatBindingCache *cache,uintptr_t binder,unsigned fir
         if(!binding_read(node,&field,8)||!binding_read(node+8,&player,4)||player<0||player>1||!binding_read(field,&value,4)||value<0||value>0xffff)return;
         if(input[player]!=-1&&input[player]!=value)return;input[player]=value;
     }
+    frame->fighters_ready=input[0]>=0&&input[1]>=0;
     frame->player_one=0;
     if(input[0]<0||input[1]<0||!!(input[0]&1)==!!(input[1]&1))return;
     frame->player_one=(input[0]&1)?1:2;

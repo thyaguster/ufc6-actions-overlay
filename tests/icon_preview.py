@@ -81,9 +81,12 @@ dll.Ufc6RenderMenu.argtypes=[c.c_void_p,w.DWORD];dll.Ufc6RenderMenu.restype=w.BO
 
 
 def press(button):
-    if not (args.startup or args.startup_reload or args.appearance or args.appearance_reload or args.window or args.window_reload) and button==0x4000 and ((dll.MenuTestSnapshot()>>12)&31)==0 and (dll.MenuTestSnapshot()&15)==4:
+    if not (args.startup or args.startup_reload or args.appearance or args.appearance_reload or args.window or args.window_reload) and button==0x4000 and ((dll.MenuTestSnapshot()>>12)&31)==0 and (dll.MenuTestSnapshot()&15)==5:
         dll.MenuTestLegacySettings();pump(.08);return
     dll.MenuTestButton(button,1);dll.MenuTestButton(button,0);pump(.06)
+    # These existing scenarios target pre-Photo actions; navigate past its new row.
+    if button in (0x10,0x40) and ((dll.MenuTestSnapshot()>>12)&31)==0 and dll.MenuTestSnapshot()&15==4:
+        dll.MenuTestButton(button,1);dll.MenuTestButton(button,0);pump(.06)
 
 
 def render(name,viewport=(2560,1440)):
@@ -204,7 +207,7 @@ try:
 
         # Visit every settings category and return without losing the group.
         for category,expected in [(2,19),(3,20)]:
-            while dll.MenuTestSnapshot()&15!=4:press(0x40)
+            while dll.MenuTestSnapshot()&15!=5:press(0x40)
             press(0x4000)
             for _ in range(category):press(0x40)
             press(0x4000);assert page()==expected
@@ -448,7 +451,10 @@ try:
     elif args.access or args.reload_access:
         dll.MenuTestPlayers.argtypes=[c.c_int,c.c_int];dll.MenuTestPlayers(42,7)
         dll.MenuTestButtonDevice.argtypes=[c.c_int,w.DWORD,c.c_int]
-        def native(button,pad=42):dll.MenuTestButtonDevice(pad,button,1);dll.MenuTestButtonDevice(pad,button,0);pump(.06)
+        def native(button,pad=42):
+            dll.MenuTestButtonDevice(pad,button,1);dll.MenuTestButtonDevice(pad,button,0);pump(.06)
+            if button in (0x10,0x40) and ((dll.MenuTestSnapshot()>>12)&31)==0 and dll.MenuTestSnapshot()&15==4:
+                dll.MenuTestButtonDevice(pad,button,1);dll.MenuTestButtonDevice(pad,button,0);pump(.06)
         dll.MenuTestButtonDevice(7,0x20,0);pump(.04) # Player 2 is observed before Player 1.
         if args.reload_access:
             assert dll.MenuTestAccess()==1
@@ -491,7 +497,10 @@ try:
     elif args.raw_access:
         dll.MenuTestRawPad.argtypes=[c.c_int,c.c_int,c.c_int]
         def raw(slot,buttons,connected=1):dll.MenuTestRawPad(slot,buttons,connected);pump(.05)
-        def rpress(slot,buttons):raw(slot,buttons);raw(slot,0)
+        def rpress(slot,buttons):
+            raw(slot,buttons);raw(slot,0)
+            if buttons in (1,2) and ((dll.MenuTestSnapshot()>>12)&31)==0 and dll.MenuTestSnapshot()&15==4:
+                raw(slot,buttons);raw(slot,0)
         press(0x2000);raw(0,0);raw(1,0x400);raw(1,0)
         rpress(1,2);assert dll.MenuTestPlayer()==2
         rpress(0,2);assert dll.MenuTestSnapshot()&0xf==1
@@ -598,7 +607,7 @@ try:
         dll.MenuTestDisconnect(1);pump(.08)
         assert not dll.MenuTestSnapshot()&0x100,"Disconnecting the owner must close the menu"
         dll.MenuTestGuide(1);pump(.06);dll.MenuTestGuide(0);pump(.06)
-        for _ in range(4):
+        for _ in range(5):
             dll.MenuTestButtonDevice(1,0x40,1);dll.MenuTestButtonDevice(1,0x40,0);pump(.05)
         dll.MenuTestButtonDevice(1,0x4000,1);dll.MenuTestButtonDevice(1,0x4000,0);pump(.07)
         assert (dll.MenuTestSnapshot()>>12)&31==1

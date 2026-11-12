@@ -33,7 +33,7 @@ int main(void){
     for(int i=0;i<2;++i)ptr(page(base,p->flag[i]),0,objects[i]);
     ptr(binder,0x88,records);ptr(binder,0x90,records+sizeof(records));LiveCheats s;live_cheats_init(&s,(uintptr_t)base);
     live_cheats_tick(&s);assert(hooked_base==(uintptr_t)base&&s.target==LIVE_PLAYER1);BindingSyncFn sync=(BindingSyncFn)(void*)code;
-    frame(&s,sync,binder);assert(s.flags[0].status==LIVE_OFF&&calls==1);
+    assert(!live_cheats_fight_ready());frame(&s,sync,binder);assert(s.flags[0].status==LIVE_OFF&&calls==1&&live_cheats_fight_ready());
     fields[0][2]=1;model[0][1]=0;frame(&s,sync,binder);assert(model[0][1]==1&&s.flags[0].status==LIVE_GAME);
     assert(live_cheats_toggle(&s,0));frame(&s,sync,binder);assert(s.flags[0].status==LIVE_OFF&&fields[0][2]==0&&model[0][1]==0);
     assert(live_cheats_toggle(&s,0));assert(live_cheats_toggle(&s,1));frame(&s,sync,binder);
@@ -41,12 +41,14 @@ int main(void){
     unsigned char inactive_binder[0xa0]={0},inactive_records[sizeof(records)];memcpy(inactive_records,records,sizeof(records));
     for(int i=0;i<3;++i)ptr(inactive_records+i*0x68,0x40,nodes[i]);
     ptr(inactive_binder,0x88,inactive_records);ptr(inactive_binder,0x90,inactive_records+sizeof(inactive_records));
-    frame(&s,sync,inactive_binder);for(int i=0;i<2;++i)assert(s.flags[i].status==LIVE_ON);
+    InterlockedExchange64(&fight_presence_tick,(LONG64)GetTickCount64()-1001);
+    frame(&s,sync,inactive_binder);assert(!live_cheats_fight_ready());for(int i=0;i<2;++i)assert(s.flags[i].status==LIVE_ON);
     input[0]=1;input[1]=2;frame(&s,sync,binder);
     for(int i=0;i<2;++i)assert(s.flags[i].status==LIVE_ON&&fields[i][0]==1&&fields[i][2]==0); /* P1 assignment moves; opponent cleared. */
     input[0]=2;input[1]=1;frame(&s,sync,binder);for(int i=0;i<2;++i)assert(fields[i][0]==0&&fields[i][2]==1);
     live_cheats_stop(&s);for(int n=0;n<10;++n){fields[0][2]=1;frame(&s,sync,binder);assert(s.flags[0].status==LIVE_OFF&&fields[0][2]==0&&model[0][1]==0);}
-    input[0]=input[1]=1;assert(live_cheats_toggle(&s,0));frame(&s,sync,binder);assert(s.flags[0].status==LIVE_WAIT&&fields[0][0]==0&&fields[0][2]==0); /* Never guess ambiguous ownership. */
+    input[0]=input[1]=0;frame(&s,sync,binder);assert(live_cheats_fight_ready()); /* Fighter presence survives neutralized/AI input. */
+    input[0]=input[1]=1;assert(live_cheats_toggle(&s,0));frame(&s,sync,binder);assert(s.flags[0].status==LIVE_WAIT&&fields[0][0]==0&&fields[0][2]==0&&live_cheats_fight_ready()); /* Never guess ambiguous ownership. */
     input[0]=0;input[1]=1;frame(&s,sync,binder);assert(s.flags[0].status==LIVE_ON&&fields[0][0]==0&&fields[0][2]==1);
     unsigned char relocated[sizeof(records)];memcpy(relocated,records,sizeof(records));ptr(binder,0x88,relocated);ptr(binder,0x90,relocated+sizeof(relocated));live_cheats_stop(&s);frame(&s,sync,binder);
     for(int i=0;i<2;++i)assert(s.flags[i].status==LIVE_OFF&&fields[i][0]==0&&fields[i][2]==0);

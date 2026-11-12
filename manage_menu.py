@@ -21,7 +21,7 @@ def digest(path: Path) -> str:
 
 def manage(action: str,bin_dir: Path,payload: Path,manifest: Path) -> dict:
     bin_dir=bin_dir.resolve(strict=True)
-    release=json.loads(manifest.read_text(encoding="utf-8"))
+    release=json.loads(manifest.read_text(encoding="utf-8-sig"))
     companions=release.get("companion_files",{})
     # Commit the core last, after the new companions are in place.
     expected={**companions,"version.dll":release["dll_sha256"]}

@@ -1,3 +1,15 @@
+# UFC 6 Actions Overlay v0.9.18
+
+- Add Photo Mode with controller/keyboard free-camera movement, look, field-of-view zoom, reset and restoration on exit or focus loss. Open it from the main menu or F9 during a running fight/practice.
+- Add reversible action freeze, full game-HUD hiding, and Keep cage visible to prevent missing panels in free-camera views. Expose the cage toggle as C / D-pad Right.
+- Add a translucent controls panel below the fighter HUD, with matching Xbox/PlayStation artwork and live freeze, HUD, cage and FOV information. Tab / D-pad Down hides it. Process raster/conversion work in cached RAM before a bulk GPU upload to avoid the measured uncached-memory FPS drop.
+- Add Screenshot + overlay with Ctrl+Shift+F12, a separate configurable Keybinds action, a Photo Mode menu row and D-pad Left in Photo Mode. Preserve clean screenshots and Windows Pictures\Screenshots storage. Include the same-frame raster with matching alpha/color-space handling; keep startup-recognition frames clean.
+- Broaden renderer startup discovery with legacy and additive layer paths while preserving inherited path entries and requested layers. Record startup elevation/API information and filtered, path-redacted loader messages in normal support reports. Prevent invisible menu openings from retaining game input. The reported remote invisible-overlay case is not yet confirmed fixed on the affected machine.
+- Clarify that setup targets PORTHEON\games\UFC6 or its bin folder, rather than the extracted game-data folder. Keep normal and supported Parsec mode in one installation.
+- Refresh screenshots, Photo Mode documentation and the roadmap.
+
+Validated live in Parsec mode: camera/FOV/freeze controls, HUD and cage restoration, smooth controls-panel rendering, cage toggle and both screenshot modes. Native, controller/UI, startup-security, installer rollback/privacy/update and real-GPU tests passed; GPU coverage includes BGRA/RGBA linear and sRGB output. Installer metadata recognizes the affected user's v0.9.15 components for upgrade.
+
 # UFC 6 Actions Overlay v0.9.15
 
 - Add Skip intros under Game & launcher. Apply the verified short-boot route and its supporting movie/legal callbacks early at launch, removing both Zuffa and EA SPORTS splashes. Turning it Off restores all owned callback defaults. Ignore the obsolete standalone shortening preference.

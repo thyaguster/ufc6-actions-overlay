@@ -15,7 +15,7 @@ if (-not $Test -and (Test-Path -LiteralPath 'dist/release.json')) {
 }
 python src/generate_controller_artwork.py --check
 if ($LASTEXITCODE) { throw 'Controller artwork data verification failed' }
-$sources = @('src/quit_menu.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/save_backups.c','src/overlay_preferences.c','src/startup_options.c','src/startup_prompts.c')
+$sources = @('src/quit_menu.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/save_backups.c','src/overlay_preferences.c','src/startup_options.c','src/startup_prompts.c','src/photo_mode.c')
 $flags = @('cc','-target','x86_64-windows-gnu','-O2','-Wall','-Wextra','-Werror','-shared','-Isrc','-luser32','-lgdi32','-lkernel32','-ladvapi32','-lcomdlg32','-lshell32','-lole32','-luuid')
 if ($Test) { $flags += '-DQUIT_MENU_TEST'; $output = 'dist/quit_menu_test.dll' }
 else { $output = 'dist/version.dll' }
@@ -32,7 +32,7 @@ if (-not $Test) {
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     $manifest = [ordered]@{
-        version = '0.9.15'
+        version = '0.9.18'
         parsec_engine_sha256 = 'ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d'
         engine_revision = '3309ab23f'
         engine_sha256 = 'f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2'
@@ -73,6 +73,23 @@ if (-not $Test) {
     $manifest | ConvertTo-Json | Set-Content -LiteralPath 'dist/release.json' -Encoding utf8
 }
 if ($Test) {
+    New-Item -ItemType Directory -Force -Path '.build/bootstrap-compat' | Out-Null
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror tests/overlay_bootstrap_test.c -o .build/bootstrap-compat/test.exe
+    if ($LASTEXITCODE) { throw 'Bootstrap compatibility fixture compilation failed' }
+    & ./.build/bootstrap-compat/test.exe
+    if ($LASTEXITCODE) { throw 'Bootstrap compatibility fixture failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/photo_mode_test.c -o .build/photo_mode_test.exe
+    if ($LASTEXITCODE) { throw 'Photo Mode fixture compilation failed' }
+    & ./.build/photo_mode_test.exe
+    if ($LASTEXITCODE) { throw 'Photo Mode fixture failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/photo_cage_test.c -o .build/photo_cage_test.exe
+    if ($LASTEXITCODE) { throw 'Photo cage fixture compilation failed' }
+    & ./.build/photo_cage_test.exe
+    if ($LASTEXITCODE) { throw 'Photo cage fixture failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror tests/screenshot_overlay_test.c -o .build/screenshot_overlay_test.exe
+    if ($LASTEXITCODE) { throw 'Overlay screenshot fixture compilation failed' }
+    & ./.build/screenshot_overlay_test.exe
+    if ($LASTEXITCODE) { throw 'Overlay screenshot fixture failed' }
     & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror tests/controller_artwork_test.c -lgdi32 -luser32 -o .build/controller_artwork_test.exe
     if ($LASTEXITCODE) { throw 'Controller artwork test compilation failed' }
     & ./.build/controller_artwork_test.exe
@@ -139,6 +156,12 @@ if ($Test) {
     if ($LASTEXITCODE) { throw 'Startup bridge mitigation test failed' }
     New-Item -ItemType Directory -Force -Path '.build/controller-ci' | Out-Null
     Copy-Item -LiteralPath 'dist/quit_menu_test.dll' -Destination '.build/controller-ci/quit_menu_test.dll' -Force
+    python tests/photo_ui_preview.py .build/controller-ci --reset
+    if ($LASTEXITCODE) { throw 'Photo Mode UI regression failed' }
+    python tests/renderer_gate_test.py .build/controller-ci
+    if ($LASTEXITCODE) { throw 'Inactive renderer input guard failed' }
+    python tests/overlay_screenshot_shortcut_test.py .build/controller-ci
+    if ($LASTEXITCODE) { throw 'Overlay screenshot shortcut regression failed' }
     python tests/icon_preview.py .build/controller-ci --reset --controllers
     if ($LASTEXITCODE) { throw 'Two-controller ownership regression failed' }
     python tests/icon_preview.py .build/controller-ci --reset --raw-controllers

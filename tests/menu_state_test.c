@@ -233,6 +233,17 @@ int main(void) {
     assert(menu_button(&s,PAD_A,1)==MENU_STARTUP_CHANGED&&!s.skip_splashes&&!s.startup_popups);
     menu_tick(&s,0,13200,1);assert(menu_button(&s,PAD_RIGHT,1)==MENU_STARTUP_CHANGED&&s.skip_splashes&&s.startup_popups);
     menu_tick(&s,0,13300,1);assert(menu_button(&s,PAD_A,1)==MENU_STARTUP_CHANGED&&!s.skip_splashes&&!s.startup_popups);
+    s=(MenuState){.visible=1,.armed=1,.page=PAGE_MAIN,.selection=MAIN_PHOTO};
+    assert(menu_canvas_height(&s)==399&&menu_rows(&s)==9);
+    assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_PHOTO);
+    menu_tick(&s,0,14000,1);s.selection=9;assert(menu_button(&s,PAD_A,1)==MENU_CHANGED&&s.page==PAGE_PHOTO_CONTROLS);
+    menu_tick(&s,0,14010,1);assert(menu_button(&s,PAD_B,1)==MENU_CHANGED&&s.page==PAGE_PHOTO&&s.selection==9);
+    menu_tick(&s,0,14020,1);s.selection=1;assert(menu_button(&s,PAD_A,1)==MENU_PHOTO_FREEZE&&s.visible);
+    menu_tick(&s,0,14025,1);s.selection=2;assert(menu_button(&s,PAD_A,1)==MENU_PHOTO_HUD&&s.visible);
+    menu_tick(&s,0,14027,1);s.selection=3;assert(menu_button(&s,PAD_A,1)==MENU_PHOTO_CAGE&&s.visible);
+    menu_tick(&s,0,14028,1);s.selection=4;assert(menu_button(&s,PAD_A,1)==MENU_PHOTO_HELP&&s.visible);
+    menu_tick(&s,0,14029,1);s.selection=7;assert(menu_button(&s,PAD_A,1)==MENU_SCREENSHOT_OVERLAY&&s.visible);
+    menu_tick(&s,0,14030,1);s.selection=0;assert(menu_button(&s,PAD_A,1)==MENU_PHOTO_ENTER&&!s.visible&&s.draining);
     puts("PASS: menu safeguards, UI scaling, Guide default/toggle/edge behavior and independent F10/chord access.");
     return 0;
 }

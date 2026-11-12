@@ -71,6 +71,24 @@ namespace UFC6OverlaySetup {
    }
    return found;
   }
+  static object LoaderMessages(string folder){
+   var messages=new List<object>();string logs=Path.Combine(folder,"_Logs");
+   try{
+    if(!Directory.Exists(logs)||Linked(logs))return new{available=false,messages=messages};
+    foreach(string path in Directory.GetFiles(logs,"*.log").OrderByDescending(File.GetLastWriteTimeUtc).Take(2)){
+     if(Linked(path))continue;
+     using(var file=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete)){
+      const int limit=128*1024;byte[] head=new byte[(int)Math.Min(file.Length,limit)];int count=file.Read(head,0,head.Length);string text=Encoding.UTF8.GetString(head,0,count);
+      if(file.Length>limit){file.Position=Math.Max(limit,file.Length-limit);byte[] tail=new byte[(int)(file.Length-file.Position)];count=file.Read(tail,0,tail.Length);text+="\n"+Encoding.UTF8.GetString(tail,0,count);}
+      int added=0;foreach(string line in text.Split('\n')){
+       if(!Regex.IsMatch(line,@"(?i)(vulkan.?loader|\[loader\].*(error|warn)|failed to (find|load).*layer|vk_layer_ufc6)"))continue;
+       messages.Add(new{log=Path.GetFileName(path),text=Redact(line.Length>1024?line.Substring(0,1024):line)});if(++added>=32)break;
+      }
+     }
+    }
+    return new{available=true,messages=messages};
+   }catch{return new{available=false,messages=messages};}
+  }
   public static string Export(string folder,string destination,string version,string renderer="unknown",int pid=0){
    folder=Folder(folder);destination=Path.GetFullPath(destination);
    string gameRoot=Directory.GetParent(folder).FullName.TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
@@ -84,9 +102,9 @@ namespace UFC6OverlaySetup {
    var report=new {
     format=1,createdUtc=DateTime.UtcNow.ToString("o"),reporterVersion=version,windows=Environment.OSVersion.VersionString,is64BitOS=Environment.Is64BitOperatingSystem,
     runtimeSnapshot=new{rendererAtExport=renderer,requestedProcessId=pid},
-    files=files,processes=Processes(folder,pid),
+    files=files,processes=Processes(folder,pid),vulkanLoaderEvidence=LoaderMessages(folder),
     logEvidence=new{note="Logs can contain previous sessions; runtime snapshot is from the export request.",coreLoaded=coreLog.Contains("loaded inside engine process"),controllerHooks=coreLog.Contains("Controller hooks installed"),layerAttached=vulkanLog.Contains("Vulkan menu layer attached"),swapchainReady=vulkanLog.Contains("Swapchain menu resources ready"),frameDrawn=vulkanLog.Contains("Menu drawn directly into")},
-    privacy="Only component fingerprints, selected runtime/module information and two bounded overlay logs. Paths are redacted. No saves, screenshots, launcher arguments, account names or game content are collected."
+    privacy="Only component fingerprints, selected runtime/module information two bounded overlay logs and filtered Vulkan-loader messages. Paths are redacted. No saves, screenshots, launcher arguments, account names or game content are collected."
    };
    string token=DateTime.UtcNow.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N").Substring(0,8);
    string output=Path.Combine(destination,"UFC6-support-"+token+".zip"),temp=output+".partial";

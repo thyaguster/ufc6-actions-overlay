@@ -35,7 +35,7 @@ namespace UFC6OverlaySetup {
    ShellItem selected=null,start=null;
    try{
     uint flags;dialog.GetOptions(out flags);dialog.SetOptions(flags|0x20u|0x40u|0x800u|0x8u);
-    dialog.SetTitle("Select your UFC 6 game folder");dialog.SetOkButtonLabel("Select folder");
+   dialog.SetTitle("Select PORTHEON\\games\\UFC6 or its bin folder");dialog.SetOkButtonLabel("Select folder");
     if(Directory.Exists(initial)){
      Guid iid=new Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE");
      if(SHCreateItemFromParsingName(Path.GetFullPath(initial),IntPtr.Zero,ref iid,out start)==0)dialog.SetFolder(start);

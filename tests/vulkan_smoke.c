@@ -35,6 +35,7 @@ int main(void){
 #endif
     wchar_t test_settings[MAX_PATH];swprintf(test_settings,MAX_PATH,L"%ls\\ufc6-quit-menu.test.ini",directory);
     WritePrivateProfileStringW(L"Menu",L"UIScale",L"100",test_settings);
+    WritePrivateProfileStringW(L"Menu",L"WindowSize",L"0",test_settings);
     HINSTANCE app=GetModuleHandleW(NULL);
     WNDCLASSW wc={0};wc.lpfnWndProc=proc;wc.hInstance=app;wc.lpszClassName=L"VulkanMenuSmoke";RegisterClassW(&wc);
     HWND window=CreateWindowW(wc.lpszClassName,L"Vulkan menu isolated test",WS_OVERLAPPEDWINDOW,0,0,1024,768,NULL,NULL,app,NULL);
@@ -58,6 +59,7 @@ int main(void){
     StartFn start=(StartFn)GetProcAddress(core,"MenuTestStart");
     ToggleFn toggle=(ToggleFn)GetProcAddress(core,"MenuTestToggle");
     ToggleFn screenshot=(ToggleFn)GetProcAddress(core,"MenuTestScreenshot");
+    ToggleFn screenshot_overlay=(ToggleFn)GetProcAddress(core,"MenuTestScreenshotOverlay");
     ButtonFn button=(ButtonFn)GetProcAddress(core,"MenuTestButton");
     ScaleFn scale=(ScaleFn)GetProcAddress(core,"MenuTestScale");
     if(!start||!toggle){puts("Core test exports missing");return 1;}start(window);
@@ -91,6 +93,13 @@ int main(void){
     VkSurfaceFormatKHR formats[64];uint32_t nformats=64;CHECK(GetPhysicalDeviceSurfaceFormatsKHR(physical,surface,&nformats,formats));
     VkSurfaceFormatKHR format=formats[0];
     for(uint32_t i=0;i<nformats;++i)if(formats[i].format==VK_FORMAT_B8G8R8A8_UNORM){format=formats[i];break;}
+#ifdef PHOTO_BLEND_GPU_TEST
+    wchar_t requested_format[16];if(GetEnvironmentVariableW(L"UFC6_SMOKE_FORMAT",requested_format,16)){
+        int choice=_wtoi(requested_format);VkFormat requested=choice==2?VK_FORMAT_R8G8B8A8_UNORM:choice==3?VK_FORMAT_B8G8R8A8_SRGB:choice==4?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_B8G8R8A8_UNORM;int found=0;
+        for(uint32_t i=0;i<nformats;++i)if(formats[i].format==requested){format=formats[i];found=1;break;}
+        if(!found){printf("SKIP: requested swapchain format %d unavailable\n",requested);return 0;}
+    }
+#endif
     VkExtent2D extent=caps.currentExtent;if(extent.width==UINT32_MAX)extent=(VkExtent2D){1024,768};
     uint32_t nimages=caps.minImageCount+1;if(caps.maxImageCount&&nimages>caps.maxImageCount)nimages=caps.maxImageCount;
     VkSwapchainCreateInfoKHR si={.sType=VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,.surface=surface,.minImageCount=nimages,
@@ -108,9 +117,9 @@ int main(void){
     Sleep(400);typedef void (*SettingsModeFn)(int);SettingsModeFn settings_mode=(SettingsModeFn)GetProcAddress(core,"MenuTestSettingsMode");if(settings_mode)settings_mode(1);
     ToggleFn enable_probe=(ToggleFn)GetProcAddress(core,"MenuTestStartupProbeEnable");if(!enable_probe)return 1;enable_probe();
     toggle();Sleep(100);if(screenshot)screenshot();
-    for(int frame=0;frame<11;++frame){
+    for(int frame=0;frame<16;++frame){
         if(button&&scale){
-            if(frame==1){for(int i=0;i<4;++i)press(button,0x40);press(button,0x4000);press(button,0x40);press(button,0x40);}
+            if(frame==1){for(int i=0;i<5;++i)press(button,0x40);press(button,0x4000);press(button,0x40);press(button,0x40);}
             if(frame==2){for(int i=0;i<4;++i)press(button,0x20);if(scale()!=200)return 1;}
             if(frame==3){for(int i=0;i<4;++i)press(button,0x20);if(scale()!=300)return 1;}
             if(frame==4){for(int i=0;i<10;++i)press(button,0x80);if(scale()!=50)return 1;}
@@ -120,7 +129,12 @@ int main(void){
         }
         if(frame==8){toggle();Sleep(80);typedef void (*StatusFn)(const wchar_t*);StatusFn notify=(StatusFn)GetProcAddress(core,"MenuTestStatus");if(notify)notify(L"Screenshot saved");}
         if(frame==9&&screenshot)screenshot();
-        if(frame==10){typedef void (*InvokeFn)(int);InvokeFn invoke=(InvokeFn)GetProcAddress(core,"MenuTestInvokeBinding");ScaleFn window_size=(ScaleFn)GetProcAddress(core,"MenuTestWindowSize");if(!invoke||!window_size)return 1;invoke(3);Sleep(100);for(int i=0;i<18;++i)press(button,0x40);press(button,0x4000);press(button,0x4000);if(window_size()!=2)return 1;invoke(2);Sleep(100);}
+        if(frame==10){typedef void (*InvokeFn)(int);InvokeFn invoke=(InvokeFn)GetProcAddress(core,"MenuTestInvokeBinding");ScaleFn window_size=(ScaleFn)GetProcAddress(core,"MenuTestWindowSize");if(!invoke||!window_size)return 1;invoke(3);Sleep(100);for(int i=0;i<18;++i)press(button,0x40);press(button,0x4000);press(button,0x4000);if(window_size()!=2){printf("FAIL: expected Tall, got %d\n",window_size());return 1;}invoke(2);Sleep(100);}
+        if(frame==11){press(button,0x2000);press(button,0x40);press(button,0x4000);}
+        if(frame==12){for(int i=0;i<9;++i)press(button,0x40);press(button,0x4000);if(screenshot_overlay)screenshot_overlay();}
+
+        if(frame==13||frame==14){typedef void (*HelpFn)(int,int,int);HelpFn help=(HelpFn)GetProcAddress(core,"MenuTestPhotoHelp");if(!help)return 1;help(1,frame==14,frame==14);Sleep(80);if(frame==13&&screenshot)screenshot();if(frame==14&&screenshot_overlay)screenshot_overlay();}
+        if(frame==15){typedef void (*HelpFn)(int,int,int);((HelpFn)GetProcAddress(core,"MenuTestPhotoHelp"))(0,0,0);}
         MSG msg;while(PeekMessageW(&msg,NULL,0,0,PM_REMOVE)){TranslateMessage(&msg);DispatchMessageW(&msg);}
         uint32_t index;CHECK(AcquireNextImageKHR(device,swap,UINT64_MAX,acquire,VK_NULL_HANDLE,&index));
         CHECK(ResetCommandBuffer(cmd,0));VkCommandBufferBeginInfo bi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};CHECK(BeginCommandBuffer(cmd,&bi));
@@ -134,9 +148,12 @@ int main(void){
         VkPipelineStageFlags stage=VK_PIPELINE_STAGE_TRANSFER_BIT;
         VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.waitSemaphoreCount=1,.pWaitSemaphores=&acquire,.pWaitDstStageMask=&stage,.commandBufferCount=1,.pCommandBuffers=&cmd,.signalSemaphoreCount=1,.pSignalSemaphores=&ready};CHECK(QueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
         VkPresentInfoKHR present={.sType=VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,.waitSemaphoreCount=1,.pWaitSemaphores=&ready,.swapchainCount=1,.pSwapchains=&swap,.pImageIndices=&index};CHECK(QueuePresentKHR(queue,&present));CHECK(DeviceWaitIdle(device));
+        if(frame==12||frame==13||frame==14){typedef void (*PathFn)(wchar_t*,int);PathFn path=(PathFn)GetProcAddress(core,"MenuTestScreenshotPath");wchar_t saved[32768];if(!path)return 1;path(saved,32768);if(!saved[0]||!CopyFileW(saved,frame==12?L"capture-overlay-menu.png":frame==13?L"capture-clean.png":L"capture-overlay-panel.png",FALSE))return 1;}
+
     }
     typedef int (*ProbeFramesFn)(void);
     ProbeFramesFn probe_frames=(ProbeFramesFn)GetProcAddress(core,"MenuTestStartupProbeFrames");
+    ScaleFn probe_dirty=(ScaleFn)GetProcAddress(core,"MenuTestStartupProbeDirty");if(!probe_dirty||probe_dirty()) {puts("FAIL: overlay entered startup recognizer frames");return 1;}
     if(!probe_frames||probe_frames()<1){puts("FAIL: startup probe did not receive GPU readback");return 1;}
     puts("PASS: startup probe receives pre-overlay GPU frames without saving screenshots or injecting test input.");
     typedef void (*ScreenshotNameFn)(wchar_t*,int);
@@ -145,8 +162,15 @@ int main(void){
     if(!saved_name[0]){puts("FAIL: screenshot path did not reach the core");return 1;}
     printf("Screenshot: %ls\n",saved_name);
     puts("PASS: saved screenshot filename returned from Vulkan capture to overlay core.");
+#ifdef PHOTO_BLEND_GPU_TEST
+    wchar_t layer_path[MAX_PATH];swprintf(layer_path,MAX_PATH,L"%ls\\ufc6_menu_layer.dll",directory);HMODULE layer=GetModuleHandleW(layer_path);
+    typedef int (*BlendResult)(void);BlendResult blend_result=layer?(BlendResult)GetProcAddress(layer,"Ufc6LayerTestBlend"):NULL;
+    int verified=blend_result?blend_result():0;if((verified&65535)<2||(verified>>16)){printf("FAIL: GPU blend verification %d\n",verified);return 1;}
+    puts("PASS: real GPU alpha pixels match foreground/background composition for both controller profiles; screenshot capture remains pre-panel.");
+#endif
     DestroySemaphore(device,acquire,NULL);DestroySemaphore(device,ready,NULL);DestroyCommandPool(device,pool,NULL);
     DestroySwapchainKHR(device,swap,NULL);DestroyDevice(device,NULL);DestroySurfaceKHR(instance,surface,NULL);DestroyInstance(instance,NULL);
+    puts("PASS: Photo Mode and controls canvases presented through Vulkan.");
     puts("PASS: tall Cheats canvas presented with independent row capacity.");
     puts("PASS: corner notification presented without opening the menu.");
     puts("PASS: Vulkan frames presented at 50/100/175/200/300% with upload growth, viewport fitting and cleanup.");

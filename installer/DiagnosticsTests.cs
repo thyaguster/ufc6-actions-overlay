@@ -11,13 +11,15 @@ namespace UFC6OverlaySetup {
     File.WriteAllText(Path.Combine(bin,"ufc6-quit-menu.log"),"UFC6 quit menu loaded inside engine process.\nController hooks installed.\nPrivate path C:\\Users\\PrivateName\\Game\\bin\n");
     Directory.CreateDirectory(Path.Combine(bin,"_SaveData"));File.WriteAllText(Path.Combine(bin,"_SaveData","secret-save"),"must never be included");
     File.WriteAllText(Path.Combine(bin,"ufc6-quit-menu.ini"),"LaunchArgs=private-launch-argument");
+    Directory.CreateDirectory(Path.Combine(bin,"_Logs"));File.WriteAllText(Path.Combine(bin,"_Logs","test.log"),"[Vulkan Loader] ERROR: could not load layer C:\\Users\\PrivateName\\layer.dll\nUnrelated private-game-content\n");
     string one=Diagnostics.Export(game,destination,"test","inactive",123),two=Diagnostics.Export(bin,destination,"test");
     Require(one!=two&&File.Exists(one)&&File.Exists(two),"Repeated reports must keep older archives.");
     using(var zip=ZipFile.OpenRead(one)){
      Require(zip.Entries.Count==4,"Report must contain only its manifest, README and two allowlisted logs.");
      string all="";foreach(var e in zip.Entries)using(var reader=new StreamReader(e.Open()))all+=reader.ReadToEnd();
-     Require(!all.Contains("PrivateName")&&!all.Contains("secret-save")&&!all.Contains("private-launch-argument"),"Report must exclude private paths, save contents and launch arguments.");
+     Require(!all.Contains("PrivateName")&&!all.Contains("secret-save")&&!all.Contains("private-launch-argument")&&!all.Contains("private-game-content"),"Report must exclude private paths, save contents and launch arguments.");
      Require(all.Contains("inactive")&&all.Contains("controllerHooks")&&all.Contains("Log is missing.")&&all.Contains("sha256"),"Report must explain runtime, hashes and missing log state.");
+     Require(all.Contains("vulkanLoaderEvidence")&&all.Contains("could not load layer"),"Normal reports must include filtered loader failures.");
      Require(!all.Contains(root),"Report must omit absolute game paths.");
     }
     File.WriteAllText(Path.Combine(bin,"ufc6-quit-menu-vulkan.log"),new string('x',600*1024)+"\nMenu drawn directly into a presented game frame.\n");

@@ -3,6 +3,7 @@ EXPORTS
     Ufc6VulkanActive
     Ufc6RenderMenu
     Ufc6MenuExtent
+    Ufc6OverlayBlend
     Ufc6OverlayPosition
     Ufc6ScreenshotCapability
     Ufc6ScreenshotRequest

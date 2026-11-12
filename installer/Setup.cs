@@ -84,10 +84,10 @@ namespace UFC6OverlaySetup {
         static bool Linked(string path) { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0; }
         public static string Normalize(string folder) {
             folder = Path.GetFullPath(folder.Trim().Trim('"'));
-            if (!Directory.Exists(folder)) throw new IOException("Choose the UFC 6 folder or its bin folder.");
+            if (!Directory.Exists(folder)) throw new IOException("Choose PORTHEON\\games\\UFC6 or its bin folder.");
             if (!File.Exists(Path.Combine(folder,"UFC 6.exe")) && File.Exists(Path.Combine(folder,"bin","UFC 6.exe"))) folder = Path.Combine(folder,"bin");
             if (Linked(folder)) throw new IOException("Choose a real game folder, rather than a linked folder.");
-            if (!File.Exists(Path.Combine(folder,"UFC 6.exe"))) throw new IOException("UFC 6.exe was not found. Choose the game's bin folder, not the PORTHEON program folder.");
+            if (!File.Exists(Path.Combine(folder,"UFC 6.exe"))) throw new IOException("UFC 6.exe was not found. Select PORTHEON\\games\\UFC6 or its bin folder. Your extracted game-data folder is a different folder.");
             return folder;
         }
         public Inspection Inspect(string folder) {
@@ -202,8 +202,8 @@ namespace UFC6OverlaySetup {
             var hint=ModernUi.Label("INSTALL  /  UPDATE  /  REMOVE",118,116,580,24,9,false,true);
             var version=ModernUi.Label("SETUP  v"+manager.Version,32,145,620,20,9,false,true);
             var pathCard=new ModernCard {Bounds=new Rectangle(32,178,696,182)};
-            pathCard.Controls.Add(ModernUi.Label("1   Choose your game folder",20,16,650,28,12,true));
-            pathCard.Controls.Add(ModernUi.Label("Select the UFC6 folder or its bin folder.",20,48,650,22,10,false,true));
+            pathCard.Controls.Add(ModernUi.Label("1   Choose PORTHEON's UFC6 folder",20,16,650,28,12,true));
+            pathCard.Controls.Add(ModernUi.Label("Select PORTHEON\\games\\UFC6 (or its bin folder).",20,48,650,22,10,false,true));
             var input=new ModernCard {Bounds=new Rectangle(20,80,500,44)};
             folder.SetBounds(14,11,472,26);folder.BorderStyle=BorderStyle.None;folder.BackColor=ModernUi.Card;folder.ForeColor=ModernUi.Text;folder.Font=new Font("Segoe UI",11);input.Controls.Add(folder);
             browse.Text="Browse...";browse.SetBounds(536,80,140,44);
@@ -213,7 +213,7 @@ namespace UFC6OverlaySetup {
             var infoCard=new ModernCard {Bounds=new Rectangle(32,376,696,174)};
             infoCard.Controls.Add(ModernUi.Label("2   Check compatibility",20,16,650,27,12,true));
             status.SetBounds(20,52,656,104);ModernUi.Status(status);
-            status.Text="Select your game folder, then click Check folder.\r\nNothing changes until you choose Install / Update or Remove.";infoCard.Controls.Add(status);
+            status.Text="Choose the UFC6 folder inside PORTHEON's games folder.\r\nThis is different from your extracted game-data folder.\r\nClick Check folder to verify the installation location.";infoCard.Controls.Add(status);
             support.Text="Export support report...";support.SetBounds(32,574,238,44);support.Enabled=false;
             support.Click+=delegate{try{using(var diagnostic=new DiagnosticsForm(manager.Version,Diagnostics.Folder(folder.Text))){diagnostic.ShowDialog(this);}}catch(Exception error){status.Text=error.Message;}};
             install.Text="Install / Update";install.SetBounds(288,574,214,44);install.Tone=ButtonTone.Primary;install.Enabled=false;

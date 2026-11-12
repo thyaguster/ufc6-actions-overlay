@@ -9,7 +9,10 @@ foreach ($file in @('README.md','LICENSE','THIRD_PARTY_NOTICES.md','RELEASE-NOTE
 }
 Copy-Item -LiteralPath 'src' -Destination $package -Recurse -Force
 Copy-Item -LiteralPath 'installer' -Destination $package -Recurse -Force
-if (Test-Path -LiteralPath 'docs') { Copy-Item -LiteralPath 'docs' -Destination $package -Recurse -Force }
+New-Item -ItemType Directory -Force -Path "$package\docs", "$package\docs\screenshots" | Out-Null
+foreach ($name in @('PHOTO-MODE.md','ROADMAP.md','theme-config.example.cfg')) { Copy-Item -LiteralPath (Join-Path 'docs' $name) -Destination "$package\docs" }
+Get-ChildItem -LiteralPath 'docs/screenshots' -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination "$package\docs\screenshots" }
+if (Test-Path -LiteralPath 'scripts') { Copy-Item -LiteralPath 'scripts' -Destination $package -Recurse -Force }
 if (Test-Path -LiteralPath '.github') { Copy-Item -LiteralPath '.github' -Destination $package -Recurse -Force }
 Copy-Item -LiteralPath 'dist\UFC6ActionsOverlaySetup.exe' -Destination (Join-Path $package 'UFC6ActionsOverlaySetup.exe')
 New-Item -ItemType Directory -Force -Path "$package\tests" | Out-Null

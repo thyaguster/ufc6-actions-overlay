@@ -18,6 +18,8 @@ int main(int argc,char **argv){
         if(argc>2){REQUIRE(!GetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",NULL,0));puts("PASS: missing overlay files leave original runtime forwarding active without a broken Vulkan layer.");return 0;}
         wchar_t value[1024];REQUIRE(GetEnvironmentVariableW(L"VK_INSTANCE_LAYERS",value,1024));
         REQUIRE(wcsstr(value,L"VK_LAYER_UFC6_quit_menu")!=NULL);
+        wchar_t legacy[2048];REQUIRE(GetEnvironmentVariableW(L"VK_LAYER_PATH",legacy,2048));
+        REQUIRE(wcsstr(legacy,L"startup-bridge")!=NULL); /* Legacy loaders ignore VK_ADD_LAYER_PATH. */
         HMODULE system=LoadLibraryW(L"version.dll");REQUIRE(system);
         REQUIRE(!GetProcAddress(system,"Ufc6RenderMenu"));
         wchar_t path[MAX_PATH];REQUIRE(GetModuleFileNameW(NULL,path,MAX_PATH));

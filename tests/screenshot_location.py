@@ -35,14 +35,14 @@ before=set(folder.glob("UFC6_*.png"))
 old_before=set((fixture/"Screenshots").glob("UFC6_*.png"))
 subprocess.run([str(fixture/"UFC 6.exe")],cwd=fixture,check=True,timeout=20,creationflags=0x08000000)
 created=set(folder.glob("UFC6_*.png"))-before
-assert len(created)==1,f"Expected one PNG in {folder}; found {len(created)}"
+assert len(created)==2,f"Expected two PNGs (menu open and closed) in {folder}; found {len(created)}"
 assert set((fixture/"Screenshots").glob("UFC6_*.png"))==old_before,"Writer still used the old game-local folder"
-path=created.pop()
-with Image.open(path) as screenshot:
-    image=screenshot.convert("RGBA")
-    assert image.size==(1008,729)
-    assert image.getcolors(image.width*image.height)==[(image.width*image.height,(10,15,23,255))],"Overlay pixels entered the screenshot"
-print(f"PASS: PNG saved to the Windows Screenshots known folder: {folder}")
-print("PASS: full game pixels verified; no overlay included.")
-path.unlink()
-print("Removed only the generated test PNG; existing screenshots were untouched.")
+for path in created:
+    with Image.open(path) as screenshot:
+        image=screenshot.convert("RGBA")
+        assert image.size==(1008,729)
+        assert image.getcolors(image.width*image.height)==[(image.width*image.height,(10,15,23,255))],"Overlay pixels entered the screenshot"
+print(f"PASS: PNGs saved to the Windows Screenshots known folder: {folder}")
+print("PASS: full game pixels verified with menu open and closed; no overlay included.")
+for path in created:path.unlink()
+print("Removed only the generated test PNGs; existing screenshots were untouched.")

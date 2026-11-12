@@ -6,7 +6,11 @@
 #include <vulkan/vk_layer.h>
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "screenshot_png.h"
+#include "screenshot_overlay.h"
 #include <objbase.h>
 #include "overlay_layout.h"
 
@@ -28,6 +32,7 @@ static SRWLOCK guard=SRWLOCK_INIT;
 static RenderFn render_menu;
 static ExtentFn menu_extent,overlay_position;
 static ActiveFn mark_active;
+static ScreenshotRequestFn overlay_blend;
 static ScreenshotRequestFn screenshot_request;
 typedef void (*StartupFrameFn)(const void*,uint32_t,uint32_t);
 static ScreenshotRequestFn startup_probe_request;
@@ -35,6 +40,10 @@ static StartupFrameFn startup_probe_frame;
 static ScreenshotResultFn screenshot_result;
 static ScreenshotResultPathFn screenshot_result_path;
 static ScreenshotCapabilityFn screenshot_capability;
+#ifdef PHOTO_BLEND_GPU_TEST
+static int blend_test_passed,blend_test_failed;
+__declspec(dllexport) int Ufc6LayerTestBlend(void){return blend_test_passed|(blend_test_failed<<16);}
+#endif
 static VkInstance instance;
 static PFN_vkGetInstanceProcAddr next_gipa;
 static PFN_GetPhysicalDeviceProcAddr next_phys;
@@ -47,7 +56,13 @@ static PFN_GetPhysicalDeviceProcAddr next_phys;
  X(CmdCopyBufferToImage) X(CmdCopyImageToBuffer) X(CreateBuffer) X(DestroyBuffer) X(GetBufferMemoryRequirements) \
  X(AllocateMemory) X(FreeMemory) X(BindBufferMemory) X(MapMemory) X(UnmapMemory) \
  X(FlushMappedMemoryRanges) X(InvalidateMappedMemoryRanges) X(CreateFence) X(DestroyFence) X(WaitForFences) X(ResetFences) \
- X(CreateSemaphore) X(DestroySemaphore)
+ X(CreateSemaphore) X(DestroySemaphore) \
+ X(CreateImageView) X(DestroyImageView) X(CreateRenderPass) X(DestroyRenderPass) \
+ X(CreateFramebuffer) X(DestroyFramebuffer) X(CreateShaderModule) X(DestroyShaderModule) \
+ X(CreatePipelineLayout) X(DestroyPipelineLayout) X(CreateGraphicsPipelines) X(DestroyPipeline) \
+ X(CreateDescriptorSetLayout) X(DestroyDescriptorSetLayout) X(CreateDescriptorPool) X(DestroyDescriptorPool) \
+ X(AllocateDescriptorSets) X(UpdateDescriptorSets) X(CmdBeginRenderPass) X(CmdEndRenderPass) \
+ X(CmdBindPipeline) X(CmdBindDescriptorSets) X(CmdPushConstants) X(CmdBindVertexBuffers) X(CmdDraw) X(CmdSetViewport) X(CmdSetScissor)
 typedef struct {
     VkCommandBuffer command;
     VkFence fence;
@@ -55,8 +70,10 @@ typedef struct {
     VkBuffer buffer;
     VkDeviceMemory memory;
     void *mapped;
+    void *pixels; /* Cached CPU raster/conversion storage; mapped upload may be uncached. */
     int coherent;
     VkDeviceSize buffer_bytes;
+    VkDescriptorSet blend_set;
 } Frame;
 typedef struct {
     VkSwapchainKHR swap;
@@ -67,7 +84,14 @@ typedef struct {
     Frame frames[MAX_IMAGES];
     VkCommandPool pool;
     uint32_t family;
-    int supported, ready, failed, logged,capture_supported;
+    int supported, ready, failed, logged,capture_supported,blend_supported,blend_ready,blend_failed;
+    VkImageView blend_views[MAX_IMAGES];
+    VkFramebuffer blend_frames[MAX_IMAGES];
+    VkRenderPass blend_pass;
+    VkDescriptorSetLayout blend_descriptors;
+    VkDescriptorPool blend_pool;
+    VkPipelineLayout blend_layout;
+    VkPipeline blend_pipeline;
 } Swap;
 typedef struct {
     VkDevice device;
@@ -79,6 +103,7 @@ typedef struct {
     VkPhysicalDeviceMemoryProperties memory;
     struct {VkQueue queue;uint32_t family;} queues[16];
     uint32_t queue_count;
+    VkQueueFlags family_flags[64];
     Swap swaps[MAX_SWAPS];
 #define FIELD(n) PFN_vk##n n;
     DEVICE_PROCS(FIELD)
@@ -114,6 +139,7 @@ static void bind_menu(void) {
     render_menu=(RenderFn)GetProcAddress(core,"Ufc6RenderMenu");
     menu_extent=(ExtentFn)GetProcAddress(core,"Ufc6MenuExtent");
     overlay_position=(ExtentFn)GetProcAddress(core,"Ufc6OverlayPosition");
+    overlay_blend=(ScreenshotRequestFn)GetProcAddress(core,"Ufc6OverlayBlend");
     mark_active=(ActiveFn)GetProcAddress(core,"Ufc6VulkanActive");
     screenshot_request=(ScreenshotRequestFn)GetProcAddress(core,"Ufc6ScreenshotRequest");
     startup_probe_request=(ScreenshotRequestFn)GetProcAddress(core,"Ufc6StartupProbeRequest");
@@ -149,9 +175,12 @@ static int allocate_capture(Device *d,Swap *s,Capture *capture) {
         d->BindBufferMemory(d->device,capture->buffer,capture->memory,0)==VK_SUCCESS&&
         d->MapMemory(d->device,capture->memory,0,VK_WHOLE_SIZE,0,&capture->mapped)==VK_SUCCESS;
 }
+#include "photo_blend.h"
 static void cleanup_swap(Device *d,Swap *s) {
+    cleanup_blend(d,s);
     for(uint32_t i=0;i<s->count;++i){
         Frame *f=&s->frames[i];
+        if(f->pixels)HeapFree(GetProcessHeap(),0,f->pixels);
         if(f->mapped)d->UnmapMemory(d->device,f->memory);
         if(f->buffer)d->DestroyBuffer(d->device,f->buffer,NULL);
         if(f->memory)d->FreeMemory(d->device,f->memory,NULL);
@@ -164,9 +193,10 @@ static void cleanup_swap(Device *d,Swap *s) {
 static int ensure_upload(Device *d,Frame *f,VkDeviceSize size) {
     if(size<=f->buffer_bytes)return 1;
     VkBuffer buffer=VK_NULL_HANDLE;VkDeviceMemory memory=VK_NULL_HANDLE;void *mapped=NULL;
+    void *pixels=HeapAlloc(GetProcessHeap(),0,(SIZE_T)size);if(!pixels)return 0;
     VkBufferCreateInfo bi={.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,.size=size,
-        .usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT,.sharingMode=VK_SHARING_MODE_EXCLUSIVE};
-    if(d->CreateBuffer(d->device,&bi,NULL,&buffer)!=VK_SUCCESS)return 0;
+        .usage=VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,.sharingMode=VK_SHARING_MODE_EXCLUSIVE};
+    if(d->CreateBuffer(d->device,&bi,NULL,&buffer)!=VK_SUCCESS)goto fail;
     VkMemoryRequirements req;d->GetBufferMemoryRequirements(d->device,buffer,&req);
     uint32_t type=UINT32_MAX;
     for(uint32_t t=0;t<d->memory.memoryTypeCount;++t)
@@ -178,13 +208,15 @@ static int ensure_upload(Device *d,Frame *f,VkDeviceSize size) {
     if(d->AllocateMemory(d->device,&mi,NULL,&memory)!=VK_SUCCESS||
         d->BindBufferMemory(d->device,buffer,memory,0)!=VK_SUCCESS||
         d->MapMemory(d->device,memory,0,VK_WHOLE_SIZE,0,&mapped)!=VK_SUCCESS)goto fail;
+    if(f->pixels)HeapFree(GetProcessHeap(),0,f->pixels);
     if(f->mapped)d->UnmapMemory(d->device,f->memory);
     if(f->buffer)d->DestroyBuffer(d->device,f->buffer,NULL);
     if(f->memory)d->FreeMemory(d->device,f->memory,NULL);
-    f->buffer=buffer;f->memory=memory;f->mapped=mapped;f->buffer_bytes=size;
+    f->buffer=buffer;f->memory=memory;f->mapped=mapped;f->pixels=pixels;f->buffer_bytes=size;
     f->coherent=(d->memory.memoryTypes[type].propertyFlags&VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)!=0;
     return 1;
 fail:
+    HeapFree(GetProcessHeap(),0,pixels);
     if(mapped)d->UnmapMemory(d->device,memory);
     if(buffer)d->DestroyBuffer(d->device,buffer,NULL);
     if(memory)d->FreeMemory(d->device,memory,NULL);
@@ -219,7 +251,8 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     Swap *s=NULL;for(int i=0;i<MAX_SWAPS;++i)if(d->swaps[i].swap==info->pSwapchains[0])s=&d->swaps[i];
     uint32_t index=info->pImageIndices[0],family=UINT32_MAX;
     for(uint32_t i=0;i<d->queue_count;++i)if(d->queues[i].queue==queue)family=d->queues[i].family;
-    int capture=screenshot_request&&screenshot_request();
+    int capture_mode=screenshot_request?screenshot_request():0;
+    int capture=capture_mode!=0,include_overlay=capture_mode==2;
     int probe=startup_probe_request&&startup_probe_frame&&startup_probe_request();
     int readback=capture||probe;
     uint32_t menu_width=MENU_W,menu_height=MENU_H;
@@ -242,15 +275,28 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
         if(capture&&screenshot_result)screenshot_result(FALSE);
         ReleaseSRWLockExclusive(&guard);return d->QueuePresentKHR(queue,info);
     }
-    draw=draw&&ensure_upload(d,f,menu_bytes)&&render_menu(f->mapped,menu_bytes);
+    int blend=draw&&overlay_blend&&overlay_blend()&&s->blend_supported&&!s->blend_failed&&family<64&&(d->family_flags[family]&VK_QUEUE_GRAPHICS_BIT)&&menu_bytes<=32u*1024*1024;
+    if(blend&&!s->blend_ready)blend=initialize_blend(d,s);
+    VkDeviceSize upload_bytes=blend?(VkDeviceSize)menu_bytes*4+48:menu_bytes;
+    draw=draw&&ensure_upload(d,f,upload_bytes)&&render_menu(f->pixels,menu_bytes);
+    if(draw&&blend){
+#ifdef PHOTO_BLEND_GPU_TEST
+    LARGE_INTEGER start,stop,frequency;QueryPerformanceFrequency(&frequency);QueryPerformanceCounter(&start);
+#endif
+    prepare_blend(d,s,f,menu_width,menu_height,overlay_x,overlay_y);
+#ifdef PHOTO_BLEND_GPU_TEST
+    QueryPerformanceCounter(&stop);printf("Photo panel CPU prepare: %.3f ms\n",1000.0*(stop.QuadPart-start.QuadPart)/frequency.QuadPart);
+#endif
+    }
     Capture shot={0};
     if(readback&&(!s->capture_supported||!allocate_capture(d,s,&shot))){
         free_capture(d,&shot);if(capture&&screenshot_result)screenshot_result(FALSE);capture=probe=readback=0;
     }
     if(!draw&&!readback){ReleaseSRWLockExclusive(&guard);return d->QueuePresentKHR(queue,info);}
-    if(draw&&(s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB)){
-        unsigned char *p=f->mapped;for(size_t i=0;i<menu_bytes;i+=4){unsigned char b=p[i];p[i]=p[i+2];p[i+2]=b;}
+    if(draw&&!blend&&(s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB)){
+        unsigned char *p=f->pixels;for(size_t i=0;i<menu_bytes;i+=4){unsigned char b=p[i];p[i]=p[i+2];p[i+2]=b;}
     }
+    if(draw)memcpy(f->mapped,f->pixels,(SIZE_T)upload_bytes);
     if(draw&&!f->coherent){VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
         .memory=f->memory,.size=VK_WHOLE_SIZE};d->FlushMappedMemoryRanges(d->device,1,&range);}
     d->ResetCommandBuffer(f->command,0);
@@ -258,11 +304,11 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     VkResult result=d->BeginCommandBuffer(f->command,&begin);
     if(result!=VK_SUCCESS){s->failed=1;free_capture(d,&shot);if(capture&&screenshot_result)screenshot_result(FALSE);ReleaseSRWLockExclusive(&guard);return d->QueuePresentKHR(queue,info);}
     VkImageMemoryBarrier barrier={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .dstAccessMask=readback?VK_ACCESS_TRANSFER_READ_BIT:VK_ACCESS_TRANSFER_WRITE_BIT,.oldLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .newLayout=readback?VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,.srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
+        .dstAccessMask=readback?VK_ACCESS_TRANSFER_READ_BIT:blend?(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT):VK_ACCESS_TRANSFER_WRITE_BIT,.oldLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .newLayout=readback?VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:blend?VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,.srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.image=s->images[index],
         .subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
-    d->CmdPipelineBarrier(f->command,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&barrier);
+    d->CmdPipelineBarrier(f->command,VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,blend&&!readback?VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT:VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&barrier);
     if(readback){
         VkBufferImageCopy game={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},.imageExtent={s->extent.width,s->extent.height,1}};
         d->CmdCopyImageToBuffer(f->command,s->images[index],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,shot.buffer,1,&game);
@@ -271,25 +317,38 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
             .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.buffer=shot.buffer,.size=VK_WHOLE_SIZE};
         d->CmdPipelineBarrier(f->command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,0,NULL,1,&host,0,NULL);
         if(draw){
-            barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;barrier.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barrier.srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;barrier.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
-            d->CmdPipelineBarrier(f->command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&barrier);
+            barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;barrier.newLayout=blend?VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;barrier.dstAccessMask=blend?(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT):VK_ACCESS_TRANSFER_WRITE_BIT;
+            d->CmdPipelineBarrier(f->command,VK_PIPELINE_STAGE_TRANSFER_BIT,blend?VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT:VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&barrier);
         }
     }
     VkBufferImageCopy copy={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},
         .imageOffset={(int32_t)overlay_x,(int32_t)overlay_y,0},
         .imageExtent={menu_width,menu_height,1}};
-    if(draw)d->CmdCopyBufferToImage(f->command,f->buffer,s->images[index],VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);
-    barrier.srcAccessMask=draw?VK_ACCESS_TRANSFER_WRITE_BIT:VK_ACCESS_TRANSFER_READ_BIT;barrier.dstAccessMask=0;
-    barrier.oldLayout=draw?VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;barrier.newLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    d->CmdPipelineBarrier(f->command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,0,0,NULL,0,NULL,1,&barrier);
+    if(draw){if(blend)draw_blend(d,s,f,index,menu_width,menu_height,overlay_x,overlay_y);else d->CmdCopyBufferToImage(f->command,f->buffer,s->images[index],VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);}
+#ifdef PHOTO_BLEND_GPU_TEST
+    Capture alpha_check={0};unsigned char alpha_sample[4]={0};int have_alpha_sample=0;
+    if(draw&&blend&&allocate_capture(d,s,&alpha_check)){
+        VkImageMemoryBarrier test_barrier=barrier;test_barrier.oldLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;test_barrier.newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;test_barrier.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;test_barrier.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+        d->CmdPipelineBarrier(f->command,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&test_barrier);
+        VkBufferImageCopy all={.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},.imageExtent={s->extent.width,s->extent.height,1}};
+        d->CmdCopyImageToBuffer(f->command,s->images[index],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,alpha_check.buffer,1,&all);
+        test_barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;test_barrier.newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;test_barrier.srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;test_barrier.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        d->CmdPipelineBarrier(f->command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,0,0,NULL,0,NULL,1,&test_barrier);
+        VkBufferMemoryBarrier host_check={.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,.dstAccessMask=VK_ACCESS_HOST_READ_BIT,.srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.buffer=alpha_check.buffer,.size=VK_WHOLE_SIZE};
+        d->CmdPipelineBarrier(f->command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,0,NULL,1,&host_check,0,NULL);
+    }
+#endif
+    barrier.srcAccessMask=draw?(blend?VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT:VK_ACCESS_TRANSFER_WRITE_BIT):VK_ACCESS_TRANSFER_READ_BIT;barrier.dstAccessMask=0;
+    barrier.oldLayout=draw?(blend?VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL):VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;barrier.newLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    d->CmdPipelineBarrier(f->command,draw&&blend?VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT:VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,0,0,NULL,0,NULL,1,&barrier);
     result=d->EndCommandBuffer(f->command);
     if(result!=VK_SUCCESS){s->failed=1;free_capture(d,&shot);if(capture&&screenshot_result)screenshot_result(FALSE);ReleaseSRWLockExclusive(&guard);return d->QueuePresentKHR(queue,info);}
     VkPipelineStageFlags *stages=NULL;
     if(info->waitSemaphoreCount){
         stages=HeapAlloc(GetProcessHeap(),0,info->waitSemaphoreCount*sizeof(*stages));
         if(!stages){free_capture(d,&shot);if(capture&&screenshot_result)screenshot_result(FALSE);ReleaseSRWLockExclusive(&guard);return d->QueuePresentKHR(queue,info);}
-        for(uint32_t i=0;i<info->waitSemaphoreCount;++i)stages[i]=VK_PIPELINE_STAGE_TRANSFER_BIT;
+        for(uint32_t i=0;i<info->waitSemaphoreCount;++i)stages[i]=blend?VK_PIPELINE_STAGE_ALL_COMMANDS_BIT:VK_PIPELINE_STAGE_TRANSFER_BIT;
     }
     VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.waitSemaphoreCount=info->waitSemaphoreCount,
         .pWaitSemaphores=info->pWaitSemaphores,.pWaitDstStageMask=stages,.commandBufferCount=1,
@@ -297,6 +356,20 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
     d->ResetFences(d->device,1,&f->fence);
     result=d->QueueSubmit(queue,1,&submit,f->fence);HeapFree(GetProcessHeap(),0,stages);
     if(result!=VK_SUCCESS){s->failed=1;free_capture(d,&shot);if(capture&&screenshot_result)screenshot_result(FALSE);ReleaseSRWLockExclusive(&guard);return result;}
+#ifdef PHOTO_BLEND_GPU_TEST
+    if(alpha_check.mapped){
+        if(d->WaitForFences(d->device,1,&f->fence,VK_TRUE,UINT64_MAX)==VK_SUCCESS){
+            if(!alpha_check.coherent){VkMappedMemoryRange range={.sType=VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,.memory=alpha_check.memory,.size=VK_WHOLE_SIZE};d->InvalidateMappedMemoryRanges(d->device,1,&range);}
+            unsigned char *pixel=(unsigned char*)alpha_check.mapped+((size_t)(overlay_y+menu_height/2)*s->extent.width+overlay_x+8)*4;
+            float *source=(float*)f->pixels+((size_t)(menu_height/2)*menu_width+8)*4;
+            const float clear[]={.04f,.06f,.09f};int ok=1;
+            for(int channel=0;channel<3;++channel){int at=(s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB)?channel:2-channel;float expected=source[channel]*source[3]+clear[channel]*(1-source[3]);if(s->format==VK_FORMAT_B8G8R8A8_SRGB||s->format==VK_FORMAT_R8G8B8A8_SRGB)expected=expected<=.0031308f?expected*12.92f:1.055f*powf(expected,1.f/2.4f)-.055f;if(fabsf(pixel[at]/255.f-expected)>.012f)ok=0;}
+            memcpy(alpha_sample,pixel,4);have_alpha_sample=1;
+            if(ok)blend_test_passed++;else blend_test_failed++;
+        }else blend_test_failed++;
+        free_capture(d,&alpha_check);
+    }
+#endif
     if(readback){
         BOOL saved=FALSE;PWSTR path=NULL;
         if(d->WaitForFences(d->device,1,&f->fence,VK_TRUE,UINT64_MAX)==VK_SUCCESS){
@@ -304,9 +377,15 @@ static VkResult VKAPI_CALL menu_present(VkQueue queue,const VkPresentInfoKHR *in
                 d->InvalidateMappedMemoryRanges(d->device,1,&range);}
             int rgba=s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB;
             if(probe)startup_probe_frame(shot.mapped,s->extent.width,s->extent.height);
-            if(capture)saved=menu_save_png_path(self,s->extent.width,s->extent.height,shot.mapped,rgba,&path);
+            if(capture){
+                int composed=!include_overlay||!draw||screenshot_overlay_compose(shot.mapped,s->extent.width,s->extent.height,f->pixels,menu_width,menu_height,overlay_x,overlay_y,blend,rgba,s->format==VK_FORMAT_R8G8B8A8_SRGB||s->format==VK_FORMAT_B8G8R8A8_SRGB);
+#ifdef PHOTO_BLEND_GPU_TEST
+                if(composed&&include_overlay&&draw&&blend&&have_alpha_sample){unsigned char *pixel=(unsigned char*)shot.mapped+((size_t)(overlay_y+menu_height/2)*s->extent.width+overlay_x+8)*4;for(int channel=0;channel<3;++channel)if(abs((int)pixel[channel]-(int)alpha_sample[channel])>2)blend_test_failed++;}
+#endif
+                if(composed)saved=menu_save_png_path(self,s->extent.width,s->extent.height,shot.mapped,rgba,&path);
+            }
         }
-        if(capture)log_line(saved?"Clean pre-overlay game frame saved as PNG.":"PNG screenshot failed.");
+        if(capture)log_line(saved?(include_overlay?"Game frame with overlay saved as PNG.":"Clean pre-overlay game frame saved as PNG."):"PNG screenshot failed.");
         free_capture(d,&shot);if(capture&&screenshot_result_path)screenshot_result_path(saved,path);else if(capture&&screenshot_result)screenshot_result(saved);
         if(path)CoTaskMemFree(path);
     }
@@ -322,6 +401,7 @@ static VkResult VKAPI_CALL menu_create_swap(VkDevice device,const VkSwapchainCre
     if(d->surface_caps&&d->surface_caps(d->physical,info->surface,&caps)==VK_SUCCESS&&
         (caps.supportedUsageFlags&VK_IMAGE_USAGE_TRANSFER_SRC_BIT)&&!(info->flags&VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR))
         create.imageUsage|=VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    if(d->surface_caps&&d->surface_caps(d->physical,info->surface,&caps)==VK_SUCCESS&&(caps.supportedUsageFlags&VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))create.imageUsage|=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     VkResult result=d->CreateSwapchainKHR(device,&create,alloc,out);if(result!=VK_SUCCESS)return result;
     AcquireSRWLockExclusive(&guard);
     for(int i=0;i<MAX_SWAPS;++i)if(!d->swaps[i].swap){
@@ -333,6 +413,7 @@ static VkResult VKAPI_CALL menu_create_swap(VkDevice device,const VkSwapchainCre
             (s->format==VK_FORMAT_B8G8R8A8_UNORM||s->format==VK_FORMAT_B8G8R8A8_SRGB||
              s->format==VK_FORMAT_R8G8B8A8_UNORM||s->format==VK_FORMAT_R8G8B8A8_SRGB);
         bind_menu();if(s->supported&&mark_active)mark_active();
+        s->blend_supported=(create.imageUsage&VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)!=0;
         s->capture_supported=s->supported&&(create.imageUsage&VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         if(screenshot_capability)screenshot_capability(s->capture_supported);
         log_line(s->supported?"Supported game swapchain captured.":"Unsupported swapchain format/usage for menu.");break;
@@ -380,6 +461,7 @@ static VkResult VKAPI_CALL menu_create_device(VkPhysicalDevice physical,const Vk
     if(!d){((PFN_vkDestroyDevice)gdpa(*out,"vkDestroyDevice"))(*out,alloc);return VK_ERROR_TOO_MANY_OBJECTS;}
     d->device=*out;d->key=*(void **)*out;d->gdpa=gdpa;d->set_data=set_data;d->physical=physical;
     d->surface_caps=(PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR)gipa(instance,"vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+    VkQueueFamilyProperties families[64];uint32_t family_count=64;((PFN_vkGetPhysicalDeviceQueueFamilyProperties)gipa(instance,"vkGetPhysicalDeviceQueueFamilyProperties"))(physical,&family_count,families);for(uint32_t i=0;i<family_count&&i<64;++i)d->family_flags[i]=families[i].queueFlags;
 #define LOAD(n) d->n=(PFN_vk##n)gdpa(*out,"vk" #n);
     DEVICE_PROCS(LOAD)
 #undef LOAD

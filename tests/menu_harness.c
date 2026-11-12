@@ -27,7 +27,7 @@ static LRESULT CALLBACK proc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
         if (stage == 5) {button(0x40,1);button(0x40,0);}
         if (stage == 8) {button(0x2000,1);button(0x2000,0);}
         if (stage == 10) toggle();
-        if (stage == 13) {for(int i=0;i<5;++i){button(0x40,1);button(0x40,0);}}
+        if (stage == 13) {for(int i=0;i<6;++i){button(0x40,1);button(0x40,0);}}
         if (stage == 16) {button(0x4000,1);button(0x4000,0);}
         if (stage == 20) {puts("FAIL: quit did not close host"); PostQuitMessage(1);}
         return 0;

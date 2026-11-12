@@ -27,5 +27,10 @@ int wmain(int argc,wchar_t **argv){
  assert(WritePrivateProfileStringW(L"Appearance",L"FontSize",L"16",first_cfg));assert(WritePrivateProfileStringW(L"Menu",L"UIScale",L"125",first_ini));preferences_seed_appearance(first_ini);
  assert(GetPrivateProfileIntW(L"Menu",L"FontSize",0,first_ini)==20&&GetPrivateProfileIntW(L"Menu",L"UIScale",0,first_ini)==125);
  DeleteFileW(first_ini);DeleteFileW(first_cfg);assert(RemoveDirectoryW(first_dir));
+ assert(WritePrivateProfileStringW(L"Keybinds",L"PhotoModeKey",NULL,ini));preferences_load(&loaded,ini,0xc08);assert(loaded.actions[BIND_PHOTO].key==VK_F9);
+ assert(WritePrivateProfileStringW(L"Keybinds",L"PhotoModeKey",L"0",ini));preferences_load(&loaded,ini,0xc08);assert(!loaded.actions[BIND_PHOTO].key);
+ assert(WritePrivateProfileStringW(L"Keybinds",L"ScreenshotKey",L"0x78",ini));assert(WritePrivateProfileStringW(L"Keybinds",L"PhotoModeKey",NULL,ini));preferences_load(&loaded,ini,0xc08);assert(loaded.actions[BIND_SCREENSHOT].key==VK_F9&&!loaded.actions[BIND_PHOTO].key);
+ assert(WritePrivateProfileStringW(L"Keybinds",L"ScreenshotOverlayKey",NULL,ini));preferences_load(&loaded,ini,0xc08);assert(loaded.actions[BIND_SCREENSHOT_OVERLAY].key==(KEY_CTRL|KEY_SHIFT|VK_F12));
+ assert(binding_set(&loaded,BIND_SCREENSHOT_OVERLAY,1,VK_F11));assert(preferences_save(&loaded,ini));preferences_load(&p,ini,0xc08);assert(p.actions[BIND_SCREENSHOT_OVERLAY].key==VK_F11);
  DeleteFileW(ini);DeleteFileW(cfg);puts("PASS: key/chord conflicts, modifiers, once-per-hold activation, focus loss, persistence/clear, config theme override, preset independence, invalid colors and launcher-file preservation.");return 0;
 }

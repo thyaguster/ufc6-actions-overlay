@@ -22,6 +22,7 @@ static CheatBindingCache binding_cache[8];
 static volatile LONG binding_commands[2];
 typedef struct {volatile LONG busy,command,known,enabled;volatile LONG64 tick;} Observation;
 static Observation observations[2];
+static volatile LONG64 fight_presence_tick;
 static const unsigned char sync_signature[]={0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x18,0x48,0x8b,0x05,0x88,0xb5,0x9e,0x09,0x48,0x8b,0x00,0x48,0x89,0x45,0xd0};
 static int read_memory(uintptr_t address,void *out,size_t size){SIZE_T got=0;return address>=0x10000&&ReadProcessMemory(GetCurrentProcess(),(void*)address,out,size,&got)&&got==size;}
 static void __attribute__((sysv_abi)) hooked_binding_sync(void *binder,unsigned first,unsigned count){
@@ -34,6 +35,7 @@ static void __attribute__((sysv_abi)) hooked_binding_sync(void *binder,unsigned 
         ReleaseSRWLockExclusive(&binding_guard);
     }
     original_binding_sync(binder,first,count);
+    if(frame.fighters_ready)InterlockedExchange64(&fight_presence_tick,(LONG64)GetTickCount64());
     unsigned known[2],enabled[2];cheat_bindings_observe(&frame,known,enabled);
     for(int i=0;i<2;++i)if((frame.count[i]||frame.player_one==0)&&InterlockedCompareExchange(&observations[i].busy,1,0)==0){
         InterlockedExchange(&observations[i].known,(LONG)known[i]);InterlockedExchange(&observations[i].enabled,(LONG)enabled[i]);
@@ -63,7 +65,7 @@ static unsigned publish(LiveCheats *s,int i,int blocked){
     return old;
 }
 void live_cheats_init(LiveCheats *s,uintptr_t guest_base){
-    memset(s,0,sizeof(*s));s->base=guest_base;s->target=LIVE_PLAYER1;
+    memset(s,0,sizeof(*s));s->base=guest_base;s->target=LIVE_PLAYER1;InterlockedExchange64(&fight_presence_tick,0);
     for(int i=0;i<2;++i){InterlockedExchange(&binding_commands[i],LIVE_PLAYER1);InterlockedExchange64(&observations[i].tick,0);}
 }
 void live_cheats_tick(LiveCheats *s){
@@ -98,3 +100,8 @@ int live_cheats_toggle(LiveCheats *s,int which){
     live_cheats_tick(s);return 1;
 }
 void live_cheats_stop(LiveCheats *s){for(int i=0;i<2;++i)s->flags[i].requested=0;live_cheats_tick(s);}
+
+int live_cheats_fight_ready(void){
+ uint64_t last=(uint64_t)InterlockedCompareExchange64(&fight_presence_tick,0,0);
+ return last&&GetTickCount64()-last<1000;
+}

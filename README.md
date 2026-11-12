@@ -23,7 +23,7 @@
 ## Quick installation
 
 1. [Download the latest installer](https://github.com/thyaguster/ufc6-actions-overlay/releases/latest) — choose **UFC6-Actions-Overlay-Setup-*.exe**.
-2. Close UFC 6 and PORTHEON, run the installer, and choose your **UFC6 game folder** (or its **bin** folder).
+2. Close UFC 6 and PORTHEON, run the installer, and choose **PORTHEON\games\UFC6** (or its **bin** folder). This is the launcher folder containing `UFC6.exe`, not your extracted game-data folder.
 3. Click **Check folder**, then **Install / Update**. The installer checks compatibility before enabling installation.
 4. Launch UFC 6 normally. Hold **LB + RB + Menu/Start** for about one second, then release; **F10** also opens the overlay.
 
@@ -33,9 +33,9 @@
 
 ![Actions overlay over the actual UFC 6 menu](docs/screenshots/overlay-in-game.png)
 
-An in-process extension for the **PORTHEON UFC 6 `3309ab23f` Windows engine**. It draws its menu directly into the game's Vulkan frames and keeps focus on the game. The main menu contains **Resume, Take screenshot, Restart game, Cheats, Settings, and Quit game**, followed by a gap separating **Restart PC and Shut down PC**.
+An in-process extension for the **PORTHEON UFC 6 `3309ab23f` Windows engine**. It draws its menu directly into the game's Vulkan frames and keeps focus on the game. The main menu contains **Resume, Take screenshot, Restart game, Cheats, Photo Mode, Settings, and Quit game**, followed by a gap separating **Restart PC and Shut down PC**.
 
-The engine executable is not patched. The optional controller-icon patch changes verified game-asset ranges and keeps a local restore backup. A startup bridge forwards calls to your verified original threading runtime, preserved byte-for-byte as `ufc6_pthread_original.dll` and restored by the uninstaller. A short-lived helper handles restart or confirmed shutdown after the old game has exited and, when configured, after launcher cleanup.
+The engine executable is not modified on disk. The optional controller-icon patch changes verified game-asset ranges and keeps a local restore backup. A startup bridge forwards calls to your verified original threading runtime, preserved byte-for-byte as `ufc6_pthread_original.dll` and restored by the uninstaller. A short-lived helper handles restart or confirmed shutdown after the old game has exited and, when configured, after launcher cleanup.
 
 This download contains the overlay, asset-free controller-icon patcher, and installer. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. It supports the **PORTHEON `3309ab23f` Windows engine**, including its verified Parsec/two-player derivative, rather than every KytyPS5 build. The installer checks the executable hash before installing.
 
@@ -47,19 +47,60 @@ PORTHEON's **Parsec mode** uses a separate `UFC 6 Parsec.exe` with its own two-p
 
 Install into the same `bin` folder, then launch with PORTHEON's Parsec option enabled. Either pad can open a new menu; Guide and F10 let the first fresh navigation press claim the menu through XInput or the game's controller input. Xbox opening combinations use the matching XInput pad when available. Other pads cannot navigate an already-owned menu. Both pads are withheld from gameplay while the menu is open, and held digital buttons must be released before gameplay input resumes. Restart and quit recognize both supported engine filenames. This does not add Parsec networking or two-player routing itself; those remain PORTHEON's features.
 
+## Photo Mode
+
+Open **Photo Mode** from the main overlay menu, or press **F9**, during a running fight or practice. Move the free camera, adjust its field of view, freeze the action, hide the game HUD and keep cage panels visible. Closing Photo Mode restores the normal camera and game speed; switching away from the game also exits it.
+
+![Photo Mode tools over a live UFC 6 fight](docs/screenshots/photo-mode-in-game.png)
+
+| Action | Controller | Keyboard |
+| --- | --- | --- |
+| Move camera | Left stick | I / J / K / L |
+| Look around | Right stick | Arrow keys |
+| Move up / down | LB / RB or L1 / R1 | U / O |
+| Zoom (field of view) | Triggers | Page Up / Page Down |
+| Freeze / unfreeze | A / Cross | P |
+| Clean screenshot | X / Square | Your assigned screenshot key |
+| Screenshot with overlay | D-pad Left | Ctrl + Shift + F12 |
+| Reset camera | Y / Triangle | Home |
+| Hide / show game HUD | D-pad Up | H |
+| Toggle cage visibility | D-pad Right | C |
+| Hide / show controls panel | D-pad Down | Tab |
+| Exit Photo Mode | B / Circle | Esc |
+
+Hold **Shift** for faster keyboard movement. These camera controls apply while the tools menu is closed; **F10** opens the tools. The translucent panel follows the selected Xbox/PlayStation icons, theme, font and UI scale and sits below the fighter HUD. Gameplay input is withheld while the camera is under Photo Mode control.
+
+**Keep cage visible** prevents the normal gameplay camera's fence fading from leaving missing panels in free-camera views. Turn it Off for native fading. If the action is frozen, briefly unfreeze to let a changed cage setting update. The game HUD is temporarily shown while the tools menu is open and hides again when you close the tools with Hide HUD enabled.
+
+The existing screenshot action stays clean. **Screenshot + overlay**, available in Photo Mode and as a separate Keybinds action, includes the displayed tools or controls panel. Both modes save to **Pictures\Screenshots**. Existing custom shortcuts take priority; configure both actions under **Settings → Controls → Keybinds**.
+
+![Translucent Photo Mode controls over a live fight](docs/screenshots/photo-controls-in-game.png)
+
+See the [Photo Mode guide](docs/PHOTO-MODE.md) for availability and restoration details.
+
 ## Diagnostics and support reports
 
-Use **Settings → Files & support → Export support report...**, then **Export support report** in the desktop window. If the overlay is invisible, run the installer, select your game folder, click **Check folder**, and use **Export support report...** there. Export does not require installing or closing the game.
+Use **Settings → Files & support → Export support report...**, then **Export support report** in the desktop window. If the overlay is invisible, run the installer, select your game folder, click **Check folder**, and use **Export support report...** there. Export does not require installing or closing the game. Keep the game running to include its loaded modules.
 
 ![Local support-report export](docs/screenshots/diagnostics.png)
 
-Reports are stored in **Documents\UFC6 Actions Overlay\SupportReports** as unique ZIP files. They contain component hashes and comparisons with the reporting build, supported-engine checks, loaded overlay module names, renderer state when opened from the overlay, and the last 512 KiB of each of the two overlay logs. Missing files and logs are recorded. Logs may include earlier sessions; v0.9.9 adds a core build marker to distinguish them.
+Reports are stored in **Documents\UFC6 Actions Overlay\SupportReports** as unique ZIP files. They contain component hashes and comparisons with the reporting build, supported-engine checks, loaded overlay module names, renderer state when opened from the overlay, the last 512 KiB of each of the two overlay logs, and bounded, path-redacted Vulkan-loader messages from the two newest PORTHEON logs. Missing files and logs are recorded. Logs may include earlier sessions; v0.9.9 adds a core build marker to distinguish them.
 
 Windows and network paths are redacted. Saves, screenshots, launcher arguments, account details and game content are excluded. Nothing is uploaded; review the ZIP before sharing it in an issue. The desktop window's **Show report in folder** button selects the saved archive.
+
+[Planned additions](docs/ROADMAP.md) · [Photo Mode guide](docs/PHOTO-MODE.md)
 
 ## Screenshots
 
 <table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/photo-mode-options.png" alt="Photo Mode controls and screenshot-with-overlay action"><br><strong>Photo Mode tools and cage visibility</strong></td>
+    <td width="50%"><img src="docs/screenshots/photo-panel-xbox.png" alt="Translucent Xbox camera-controls panel"><br><strong>Live controls and camera state</strong></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/photo-panel-playstation.png" alt="Photo Mode PlayStation button prompts"><br><strong>Matching PlayStation prompts</strong></td>
+    <td width="50%"><img src="docs/screenshots/keybinds-overlay-screenshot.png" alt="Independent clean and overlay-inclusive screenshot keybinds"><br><strong>Separate screenshot actions</strong></td>
+  </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/game-launcher.png" alt="Skip intros and hands-free startup enabled"><br><strong>New: skip intros and hands-free startup</strong></td>
     <td width="50%"><img src="docs/screenshots/startup-override.png" alt="Skip intros with auto-continue independently disabled"><br><strong>Keep intros skipped with auto-continue Off</strong></td>
@@ -246,7 +287,7 @@ Stamina prevention and an unaffected opponent were verified in a fight. Native f
 
 Choose **Take screenshot**. A full-resolution PNG is saved in the Windows **Pictures → Screenshots** folder, with a unique timestamped filename. The destination is resolved through the Windows Screenshots known folder, so folder redirection and OneDrive are respected. If that known folder is unavailable, the mod uses the Windows Pictures known folder plus `Screenshots`. The folder is created as needed. Existing screenshots in the old `bin/Screenshots` folder are left in place.
 
-The Vulkan layer copies the game image **before drawing this menu**, so the menu and its notifications are absent from the saved image. The menu can stay open during capture. Success shows the saved filename and a result page with **Open screenshots folder** and **Back**. The result page starts on Back and appears only if you are still on Take screenshot; a late capture never reopens the overlay or replaces another page. Failures show a notification.
+The normal **Take screenshot** action copies the game image before drawing the overlay, so the menu and notifications are excluded. **Screenshot + overlay** saves the same game frame together with the overlay raster used to present that frame, including the translucent Photo Mode controls panel. Use **Ctrl + Shift + F12** by default, **D-pad Left** while Photo Mode is active with the tools closed, or **Photo Mode → Screenshot + overlay**. Its keyboard/controller binding can be changed independently in **Settings → Controls → Keybinds**. Both modes save to Windows **Pictures\Screenshots**. The menu can stay open during capture. Success shows the saved filename and a result page with **Open screenshots folder** and **Back**. The result page starts on Back and appears only if you are still on Take screenshot; a late capture never reopens the overlay or replaces another page. Failures show a notification.
 
 This captures the game swapchain, not the desktop. Screenshot capture requires a surface that supports transfer-source images; unsupported display modes report that capture is unavailable. The current rendering path supports 8-bit BGRA/RGBA SDR swapchains at least 320×240 pixels, not 10-bit HDR formats.
 
