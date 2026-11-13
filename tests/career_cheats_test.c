@@ -73,6 +73,18 @@ int main(void){
     assert(career_cheats_protect_longevity(0)&&career_cheats_protect_longevity(1)&&!snapshot.longevity_enabled&&snapshot.longevity_requested);assert(career_cheats_protect_longevity(0));
     assert(!career_cheats_add(0,1000));process();CareerSnapshot s;career_cheats_snapshot(&s);
     assert(s.ready&&s.balance[0]==12109126&&s.balance[1]==16&&s.maximum[1]==16383);
+    /* Diagnostics distinguish valid-career rejection from a missing hub. */
+    CareerDiagnostics diagnostic;career_cheats_diagnostics(&diagnostic);assert(diagnostic.reason==CAREER_DIAG_READY);
+    descriptors[0][48*80]='X';process();career_cheats_diagnostics(&diagnostic);
+    assert(!snapshot.ready&&diagnostic.reason==CAREER_DIAG_MONEY&&!career_cheats_add(CAREER_POINTS,1)&&writes==0);
+    label(descriptors[0]+48*80,"Cash");process();assert(snapshot.ready);
+    unsigned char *protected_points=VirtualAlloc(NULL,4096,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);assert(protected_points);
+    memcpy(protected_points,buffers[1],sizeof(buffers[1]));putptr(store[1]+0x30,protected_points);
+    DWORD previous_protection=0;assert(VirtualProtect(protected_points,4096,PAGE_READONLY,&previous_protection));
+    process();career_cheats_diagnostics(&diagnostic);
+    assert(!snapshot.ready&&diagnostic.reason==CAREER_DIAG_POINTS_READONLY&&!career_cheats_add(CAREER_POINTS,1)&&writes==0);
+    assert(!strcmp(career_cheats_diagnostic_name(diagnostic.reason),"points_record_read_only"));
+    putptr(store[1]+0x30,buffers[1]);assert(VirtualFree(protected_points,0,MEM_RELEASE));process();assert(snapshot.ready);
     assert(career_cheats_add(0,1000));assert(!career_cheats_add(0,1000)&&!career_cheats_add(1,5));
     assert(writes==0&&value(0)==12109126);process_user((uintptr_t)root,99,1);assert(!writes);
     process();assert(value(0)==12110126&&value(1)==16&&writes==1&&dirty_calls==1);
@@ -116,8 +128,13 @@ int main(void){
     const unsigned char get_code[]={0x48,0x8b,0x47,0x08,0x89,0xd1,0x4c,0x8d,0x04,0x89,0x49,0xc1,0xe0,0x04};unsigned char *code=page(base,0x56dcf80);memcpy(code,get_code,sizeof(get_code));jump(code+sizeof(get_code),(void*)mock_get);
     const unsigned char set_code[]={0x48,0x8b,0x47,0x08,0x41,0x89,0xd0,0x48,0x8b,0x7f,0x30,0x4f,0x8d,0x04,0x80};code=page(base,0x56dd300);memcpy(code,set_code,sizeof(set_code));jump(code+sizeof(set_code),(void*)mock_set_packed);
     const unsigned char dirty_code[]={0x48,0x8b,0x47,0x10,0xff,0x80,0xe8,0,0,0,0xc3};memcpy(page(base,0x56ccef0),dirty_code,sizeof(dirty_code));
-    unsigned char flag[16]={0};putptr(flag+8,"Fighter_Disable_StaminaLoss");putptr(page(base,0xb452958),flag);FlushInstructionCache(GetCurrentProcess(),base,0xc000000);
-    career_cheats_tick();assert(original_user);UserFn run=(UserFn)(void*)user_code;uintptr_t selected=1;assert(run(&selected,(uintptr_t)root,-1)==&selected&&snapshot.ready);
+    /* A loaded career must bind without registering fight stamina flags. Keep
+       that guest page inaccessible, and still reject altered career code. */
+    FlushInstructionCache(GetCurrentProcess(),base,0xc000000);
+    user_code[0]=0xcc;career_cheats_tick();assert(!original_user&&snapshot.status==CAREER_UNSUPPORTED);
+    user_code[0]=user_signature[0];FlushInstructionCache(GetCurrentProcess(),user_code,1);
+    career_cheats_tick();assert(original_user&&snapshot.status==CAREER_WAIT);UserFn run=(UserFn)(void*)user_code;uintptr_t selected=1;assert(run(&selected,(uintptr_t)root,-1)==&selected&&snapshot.ready&&snapshot.status==CAREER_READY);
+    career_cheats_diagnostics(&diagnostic);assert(diagnostic.hooks&&diagnostic.probes==1&&diagnostic.reason==CAREER_DIAG_READY);
     uint32_t before=value(1),revision=0;assert(u32((uintptr_t)owner+0xe8,&revision));assert(career_cheats_add(1,1));run(&selected,(uintptr_t)root,-1);
     assert(snapshot.status==CAREER_ADDED&&value(1)==before+1);uint32_t after_revision=0;assert(u32((uintptr_t)owner+0xe8,&after_revision)&&after_revision==revision+1);
     run(&selected,(uintptr_t)root,-1);assert(value(1)==before+1);

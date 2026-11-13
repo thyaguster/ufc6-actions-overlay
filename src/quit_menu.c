@@ -30,6 +30,10 @@
 #include "startup_options.h"
 #include "startup_prompts.h"
 #include "photo_mode.h"
+#include "replay_controls.h"
+#include "audio_focus.h"
+#include "photo_effects_settings.h"
+#include "photo_panel_controls.h"
 #include <math.h>
 static StartupOptions startup_options;
 #ifndef QUIT_MENU_TEST
@@ -58,6 +62,11 @@ static OverlayPreferences preferences;
 static OverlayTheme current_theme;
 static __thread OverlayTheme paint_theme;
 static wchar_t theme_path[MAX_PATH];
+static wchar_t performance_bin[LAUNCH_PATH];
+#ifdef QUIT_MENU_TEST
+static PerformanceSettings test_performance_saved={.crowd_off=1,.drs_off=1,.render_scale=133};
+static int test_performance_saves,test_performance_restarts;
+#endif
 static BindingLatch pad_bindings[BIND_COUNT][20],key_bindings[BIND_COUNT];
 static uint64_t next_theme_read;
 static int key_capture_ready;static uint32_t captured_key;
@@ -102,6 +111,7 @@ static PWSTR last_screenshot_path;
 static uint64_t status_until;
 static LiveCheats live_cheats;
 static CareerSnapshot career;
+static int ko_status;
 static int live_status[LIVE_COUNT],live_enabled[LIVE_COUNT];
 static uint64_t next_live_check;
 #ifdef QUIT_MENU_TEST
@@ -122,7 +132,16 @@ static void refresh_live_cheats(void){
     if(test_mode){memcpy(live_status,test_live_status,sizeof(live_status));for(int i=0;i<LIVE_COUNT;++i)live_enabled[i]=test_live_requested[i]||test_live_status[i]==LIVE_LAUNCHER||test_live_status[i]==LIVE_GAME;LeaveCriticalSection(&lock);return;}
 #endif
     live_cheats_tick(&live_cheats);
+    ReplaySnapshot ko_replay;replay_snapshot(&ko_replay);
+    int previous_ko=ko_status;ko_status=live_ko_poll(foreground()&&!IsIconic(game_window)&&!menu.photo_active&&!ko_replay.available);
+    if(previous_ko==1&&ko_status!=1)status(ko_status==2?L"Knockout triggered. Next hit KO disarmed.":L"Next hit KO cancelled or expired.");
     CareerSnapshot before=career;career_cheats_tick();career_cheats_snapshot(&career);
+    CareerDiagnostics diagnostic;career_cheats_diagnostics(&diagnostic);
+    static int last_career_diagnostic=-1;static uint64_t next_career_diagnostic;
+    if(diagnostic.reason!=last_career_diagnostic&&GetTickCount64()>=next_career_diagnostic){
+        char line[200];snprintf(line,sizeof(line),"Career binding: reason=%s hooks=%d probes=%u ready=%d status=%d.",career_cheats_diagnostic_name(diagnostic.reason),diagnostic.hooks,diagnostic.probes,career.ready,career.status);log_line(line);
+        last_career_diagnostic=diagnostic.reason;next_career_diagnostic=GetTickCount64()+5000;
+    }
     if(career.ready&&(!before.ready||before.balance[0]!=career.balance[0]||before.balance[1]!=career.balance[1])){
         char line[120];snprintf(line,sizeof(line),"Career balances verified: money=%u skill_points=%u.",career.balance[0],career.balance[1]);log_line(line);
     }
@@ -160,9 +179,10 @@ static void add_career_value(void){
 #endif
     {ok=kind==CAREER_GRADES?career_cheats_grade_a():kind==CAREER_DAYS?career_cheats_restore_days():kind==CAREER_FITNESS?career_cheats_restore_fitness():career_cheats_add(kind,amount);career_cheats_snapshot(&career);}
     int result=career.status,grades_ready=career.sparring_grades_ready;uint32_t grade_count=career.sparring_grades_completed;LeaveCriticalSection(&lock);
+    if(!test_mode){CareerDiagnostics diagnostic;career_cheats_diagnostics(&diagnostic);char line[240];snprintf(line,sizeof(line),"Career action: kind=%d amount=%u queued=%d ready=%d status=%d reason=%s hooks=%d probes=%u.",kind,amount,ok,career.ready,result,career_cheats_diagnostic_name(diagnostic.reason),diagnostic.hooks,diagnostic.probes);log_line(line);}
     if(kind==CAREER_GRADES&&!test_mode){char line[140];snprintf(line,sizeof(line),"Grade A request: queued=%d verified=%d upgradable=%u status=%d.",ok,grades_ready,grade_count,result);log_line(line);}
     status(ok?(test_mode?L"Career test addition applied.":L"Addition queued. Resume and reopen a career screen to apply."):
-        result==CAREER_LIMIT?L"This amount exceeds the game's balance limit.":result==CAREER_PENDING?L"An addition is already pending. Resume the game to apply it.":kind==CAREER_GRADES?(grades_ready?L"All sparring grades are already A.":L"Sparring grades unavailable: career data could not be verified."):L"Open the career hub first, then try again.");
+        result==CAREER_LIMIT?L"This amount exceeds the game's balance limit.":result==CAREER_PENDING?L"An addition is already pending. Resume the game to apply it.":kind==CAREER_GRADES?(grades_ready?L"All sparring grades are already A.":L"Sparring grades unavailable: career data could not be verified."):result==CAREER_UNSUPPORTED?L"Career cheats unavailable: loaded game code did not match.":L"Career data could not be verified. Export a support report from Settings.");
 }
 static void format_number(uint32_t value,wchar_t *out){
     wchar_t digits[16];swprintf(digits,16,L"%u",value);size_t n=wcslen(digits),j=0;
@@ -211,6 +231,12 @@ static void log_line(const char *line) {
         WriteFile(h, "\r\n", 2, &n, NULL);
         CloseHandle(h);
     }
+}
+/* Bounded lifecycle records preserve the original log lines for support tools. */
+static void log_timeline(const char *event){
+ SYSTEMTIME utc;GetSystemTime(&utc);
+ EnterCriticalSection(&lock);int photo=menu.photo_active,frozen=menu.photo_frozen,hud=menu.photo_hud,cage=menu.photo_cage,page=menu.page,visible=menu.visible,include_ui=menu.screenshot_include_ui;LeaveCriticalSection(&lock);
+ char line[360];snprintf(line,sizeof(line),"Timeline UTC=%04u-%02u-%02uT%02u:%02u:%02u.%03uZ tick=%llu event=%s photo=%d frozen=%d hud_hidden=%d cage_visible=%d page=%d menu=%d include_ui=%d",utc.wYear,utc.wMonth,utc.wDay,utc.wHour,utc.wMinute,utc.wSecond,utc.wMilliseconds,(unsigned long long)GetTickCount64(),event,photo,frozen,hud,cage,page,visible,include_ui);log_line(line);
 }
 static int read_gamebar(void){
 #ifdef QUIT_MENU_TEST
@@ -299,6 +325,10 @@ static void action(int result) {
         menu.visible=0;menu.draining=0;menu.armed=0;reset_menu_owner();
         log_line("Menu opening blocked: Vulkan renderer is inactive; game input remains available.");return;
     }
+    /* Log page transitions only; no watermark/player name is recorded. */
+    static int diagnostic_page=-1;
+    if(result!=MENU_NONE&&diagnostic_page!=menu.page){diagnostic_page=menu.page;
+        if(menu.page==PAGE_PHOTO||menu.page==PAGE_PHOTO_CONTROLS||menu.page==PAGE_PHOTO_EFFECTS||menu.page==PAGE_PHOTO_WATERMARK){char line[160];snprintf(line,sizeof(line),"Photo tools: page=%d row=%d active=%d filter=%d strength=%d",menu.page,menu.selection,menu.photo_active,menu.effects.preset,menu.effects.strength);log_line(line);}}
     if(result==MENU_ACCESS_CHANGED)reset_menu_owner();
     if (result != MENU_NONE) PostThreadMessageW(ui_thread, WM_MENU_ACTION, result, 0);
 }
@@ -381,7 +411,7 @@ static void text(HDC dc, HFONT f, const wchar_t *str, RECT r, COLORREF color, UI
 static void button_icon(HDC dc,int x,int y,int back,int playstation){controller_artwork_draw(dc,x,y,30,30,back?PAD_B:PAD_A,playstation);}
 static void dpad_icon(HDC dc,int x,int y,int ps){controller_artwork_draw(dc,x,y,30,30,0,ps);}
 static void save_settings(void) {
-    EnterCriticalSection(&lock); int training_setting=menu_training_multiplier(&menu),longevity_setting=career.longevity_requested,ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu),guide_enabled=menu_guide_enabled(&menu),startup_popups=menu.startup_popups,skip_splashes=menu.skip_splashes,first_only=menu.first_player_only;uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
+    EnterCriticalSection(&lock); int training_setting=menu_training_multiplier(&menu),longevity_setting=career.longevity_requested,ps=menu.playstation_icons,scale=menu_scale(&menu),auto_launch=menu_auto_launch(&menu),guide_enabled=menu_guide_enabled(&menu),startup_popups=menu.startup_popups,skip_splashes=menu.skip_splashes,first_only=menu.first_player_only,include_ui=menu.screenshot_include_ui,mute_background=menu.mute_background,decision_replays=menu.decision_replays,replay_step=menu.replay_step_index;uint32_t chord=menu_shortcut(&menu); LeaveCriticalSection(&lock);
     wchar_t value[24];swprintf(value,24,L"0x%08lx",(unsigned long)chord);
     BOOL saved=WritePrivateProfileStringW(L"Menu",L"ButtonIcons",ps?L"PlayStation":L"Xbox",settings_path);
     saved=WritePrivateProfileStringW(L"Menu",L"OpeningShortcut",value,settings_path)&&saved;
@@ -390,12 +420,48 @@ static void save_settings(void) {
     saved=WritePrivateProfileStringW(L"Menu",L"AutoLaunchAfterRestart",auto_launch?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"SkipStartupSplashes",skip_splashes?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"StartupSkipPopups",startup_popups?L"1":L"0",settings_path)&&saved;
+    saved=WritePrivateProfileStringW(L"Menu",L"OfferDecisionReplays",decision_replays?L"1":L"0",settings_path)&&saved;
+    saved=WritePrivateProfileStringW(L"Menu",L"MuteWhenUnfocused",mute_background?L"1":L"0",settings_path)&&saved;
+    swprintf(value,24,L"%d",replay_step);saved=WritePrivateProfileStringW(L"Menu",L"ReplayStepIndex",value,settings_path)&&saved;
+    saved=WritePrivateProfileStringW(L"Menu",L"IncludeOverlayInScreenshots",include_ui?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"GuideButtonOpensMenu",guide_enabled?L"1":L"0",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"ControllerAccess",first_only?L"Player1":L"Either",settings_path)&&saved;
     saved=WritePrivateProfileStringW(L"Menu",L"LongevityProtection",longevity_setting?L"1":L"0",settings_path)&&saved;
     swprintf(value,24,L"%d",training_setting);saved=WritePrivateProfileStringW(L"Menu",L"TrainingRewardMultiplier",value,settings_path)&&saved;
-    EnterCriticalSection(&lock);saved=preferences_save(&preferences,settings_path)&&saved; settings_save_failed=!saved; LeaveCriticalSection(&lock);
+    EnterCriticalSection(&lock);saved=photo_effects_save(&menu.effects,settings_path)&&saved;saved=preferences_save(&preferences,settings_path)&&saved; settings_save_failed=!saved; LeaveCriticalSection(&lock);
     log_line(saved ? "Overlay settings saved." : "Could not save overlay settings.");
+}
+static void open_performance(void){
+ PerformanceSettings values={0};int available;
+#ifdef QUIT_MENU_TEST
+ if(test_mode){values=test_performance_saved;available=1;}else
+#endif
+ available=performance_load(performance_bin,&values)==PERF_OK;
+ EnterCriticalSection(&lock);menu.performance=values;menu.performance_original=values;menu.performance_available=available;menu.performance_dirty=0;menu.performance_feedback=0;LeaveCriticalSection(&lock);
+ if(!available)status(L"Performance controls require the PORTHEON launcher and its settings file.");
+}
+static void save_performance(int restart){
+ if(!test_mode&&!foreground())return;
+ EnterCriticalSection(&lock);PerformanceSettings desired=menu.performance,expected=menu.performance_original;int available=menu.performance_available;LeaveCriticalSection(&lock);
+ if(!available){status(L"PORTHEON performance settings are unavailable.");return;}
+ int result;
+#ifdef QUIT_MENU_TEST
+ if(test_mode){test_performance_saved=desired;++test_performance_saves;result=PERF_OK;}else
+#endif
+ result=performance_save(performance_bin,&expected,&desired);
+ if(result!=PERF_OK){
+  status(result==PERF_CHANGED_EXTERNALLY?L"PORTHEON changed these settings. Reopen Performance to reload them.":L"Could not save performance settings. Check folder access and retry.");
+  EnterCriticalSection(&lock);menu.page=PAGE_PERFORMANCE;menu.selection=restart?PERF_RESTART:PERF_SAVE;menu.performance_feedback=result==PERF_CHANGED_EXTERNALLY?3:2;menu.armed=0;LeaveCriticalSection(&lock);return;
+ }
+ EnterCriticalSection(&lock);menu.performance_original=desired;menu.performance_dirty=0;menu.performance_feedback=1;menu.page=PAGE_PERFORMANCE;menu.selection=restart?PERF_RESTART:PERF_SAVE;menu.armed=0;LeaveCriticalSection(&lock);
+ log_timeline(restart?"performance_saved_restart_requested":"performance_saved_next_launch");
+ if(!restart){status(L"Performance settings saved for the next game launch.");return;}
+#ifdef QUIT_MENU_TEST
+ if(test_mode){++test_performance_restarts;status(L"Test performance restart; no game was closed.");return;}
+#endif
+ photo_mode_command(PHOTO_STOP);
+ if(menu_restart_game(game_window,instance)){EnterCriticalSection(&lock);menu_close(&menu,MENU_RESUME);LeaveCriticalSection(&lock);ShowWindow(overlay,SW_HIDE);}
+ else {EnterCriticalSection(&lock);menu.performance_feedback=4;LeaveCriticalSection(&lock);status(L"Performance settings saved. Restart the game through PORTHEON to apply.");}
 }
 static void shortcut_label(uint32_t chord,int ps,wchar_t *out,size_t capacity) {
     static const uint32_t buttons[]={2,4,PAD_LB,PAD_RB,PAD_MENU,PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,0x1000,PAD_B,PAD_A,0x8000};
@@ -454,17 +520,17 @@ static void value_chip(HDC dc,RECT row,const wchar_t *label,int selected,int adj
 #include "shortcut_badges.h"
 static void row_geometry(int page,int index,int first,int *top,int *height) {
     int global_index=index;if(menu_scroll_page(page))index-=first;
-    *top=page==PAGE_CHEATS?84+32*index+(first<=2&&global_index>=2?24:0):page==PAGE_MAIN?84+27*index+(index>=MAIN_REBOOT?10:0):(menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?86+32*index:page==PAGE_BACKUPS?104+40*index:(page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?182+48*index:100+56*index;
-    *height=page==PAGE_BACKUPS?34:page==PAGE_CHEATS?30:page==PAGE_MAIN?25:(menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?30:(page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?42:50;
+    *top=page==PAGE_CHEATS?84+32*index+(first<=3&&global_index>=3?24:0):page==PAGE_MAIN?84+27*index+(index>=MAIN_REBOOT?10:0):(page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?86+32*index:page==PAGE_BACKUPS?104+40*index:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?182+48*index:100+56*index;
+    *height=page==PAGE_BACKUPS?34:page==PAGE_CHEATS?30:page==PAGE_MAIN?25:(page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?30:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?42:50;
 }
 static void draw_menu(HDC dc, RECT r) {
     EnterCriticalSection(&lock);paint_theme=current_theme;OverlayPreferences bindings=preferences;frame_font_index=(preferences.font_size-16)/2;LeaveCriticalSection(&lock);
     HBRUSH bg = CreateSolidBrush(paint_theme.background);
     FillRect(dc, &r, bg); DeleteObject(bg);
     SetBkMode(dc, TRANSPARENT);
-    CareerSnapshot career_state;MenuState state;int save_failed,conflict,owner_player=0,has_owner=0;int cheat_states[LIVE_COUNT],cheat_enabled[LIVE_COUNT];wchar_t message[120],filename[128];
+    CareerSnapshot career_state;MenuState state;int save_failed,conflict,owner_player=0,has_owner=0;int ko_state;int cheat_states[LIVE_COUNT],cheat_enabled[LIVE_COUNT];wchar_t message[120],filename[128];
     EnterCriticalSection(&lock);
-    memcpy(cheat_states,live_status,sizeof(cheat_states));memcpy(cheat_enabled,live_enabled,sizeof(cheat_enabled));
+    ko_state=ko_status;memcpy(cheat_states,live_status,sizeof(cheat_states));memcpy(cheat_enabled,live_enabled,sizeof(cheat_enabled));
     career_state=career;state=menu;save_failed=settings_save_failed;conflict=gamebar_conflict;
     lstrcpynW(filename,last_screenshot_name,128);
     if(raw_navigation&&raw_owner>=0){has_owner=1;owner_player=raw_owner+1;}
@@ -477,27 +543,37 @@ static void draw_menu(HDC dc, RECT r) {
     if(test_mode){icon_state=test_game_icons;wcscpy(icon_reason,L"Test game icons; no game files are changed.");}else
 #endif
     icon_state=game_icons_status(icon_reason,512);
+    wchar_t startup_reason[512];int startup_state;
+#ifdef QUIT_MENU_TEST
+    if(test_mode){startup_state=GAME_ICONS_PS;lstrcpyW(startup_reason,L"Test startup page; no game assets changed.");}else
+#endif
+    startup_state=startup_assets_status(startup_reason,512);
     RECT title = {36, 10, r.right - 36, 57};
-    text(dc,font_title,state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_THEME?L"Theme":state.page==PAGE_QUIT?L"Quit game?":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_GAME_ICONS?L"Controller icon patch":state.page==PAGE_GAME_ICONS_CONFIRM?(state.game_icons_xbox?L"Apply Xbox icons?":L"Restore PS icons?"):state.page==PAGE_CAREER_ADD?(state.career_kind==CAREER_GRADES?L"Set all grades to A?":state.career_kind==CAREER_DAYS?L"Refill training days?":state.career_kind==CAREER_FITNESS?L"Restore fitness?":state.career_kind==0?L"Add money?":L"Add skill points?"):state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_SETTINGS_HOME?L"Settings":state.page==PAGE_APPEARANCE?L"Appearance":state.page==PAGE_CONTROLS?L"Controls":state.page==PAGE_GAME_SETTINGS?L"Game & launcher":state.page==PAGE_TOOLS?L"Files & support":state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_SCREENSHOT?L"Screenshot saved":state.page==PAGE_RESET?L"Reset settings?":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
+    text(dc,font_title,state.page==PAGE_STARTUP?L"Startup screens":state.page==PAGE_STARTUP_CONFIRM?(state.startup_patch_enable?L"Enable startup bypass?":L"Restore startup screens?"):state.page==PAGE_PERFORMANCE?L"Performance":state.page==PAGE_PERFORMANCE_RESTART?L"Save and restart?":state.page==PAGE_PERFORMANCE_DISCARD?L"Discard edits?":state.page==PAGE_PHOTO_EFFECTS?L"Filters & effects":state.page==PAGE_PHOTO_WATERMARK?L"Photo watermark":state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_THEME?L"Theme":state.page==PAGE_QUIT?L"Quit game?":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_GAME_ICONS?L"Controller icon patch":state.page==PAGE_GAME_ICONS_CONFIRM?(state.game_icons_xbox?L"Apply Xbox icons?":L"Restore PS icons?"):state.page==PAGE_CAREER_ADD?(state.career_kind==CAREER_GRADES?L"Set all grades to A?":state.career_kind==CAREER_DAYS?L"Refill training days?":state.career_kind==CAREER_FITNESS?L"Restore fitness?":state.career_kind==0?L"Add money?":L"Add skill points?"):state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_SETTINGS_HOME?L"Settings":state.page==PAGE_APPEARANCE?L"Appearance":state.page==PAGE_CONTROLS?L"Controls":state.page==PAGE_GAME_SETTINGS?L"Game & launcher":state.page==PAGE_TOOLS?L"Files & support":state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_SCREENSHOT?L"Screenshot saved":state.page==PAGE_RESET?L"Reset settings?":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
     wchar_t owner_label[64];
     if(owner_player>0)swprintf(owner_label,64,L"Player %d",owner_player);
     else wcscpy(owner_label,has_owner?L"Controller":state.first_player_only?L"Waiting for Player 1":L"Waiting for controller");
     RECT owner_rect={330,25,r.right-36,48};if(state.page==PAGE_MAIN||state.page==PAGE_CHEATS||state.page==PAGE_SETTINGS_HOME)text(dc,font_small,owner_label,owner_rect,paint_theme.muted,DT_RIGHT|DT_SINGLELINE);
     RECT sub = {38, 57, r.right - 36, 84};
-    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_PHOTO?L"Free camera, zoom and freeze during a fight.":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera. Esc exits.":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations.":state.page==PAGE_BINDING?L"Choose an input to record or clear.":state.page==PAGE_THEME?L"From config follows the launcher theme file.":state.page==PAGE_QUIT?L"Close UFC 6 normally through your launcher.":state.page==PAGE_BACKUPS?L"Save in UFC 6 first; wait for autosave to finish.":state.page==PAGE_GAME_ICONS?L"Replace in-game button icons with Xbox or PlayStation.":state.page==PAGE_GAME_ICONS_CONFIRM?L"Your game will close and restart through your launcher.":state.page==PAGE_CAREER_ADD?L"Career changes are included in normal game saves.":state.page==PAGE_CHEATS?L"Stamina and health apply to Player 1.":state.page==PAGE_SCREENSHOT?(state.screenshot_overlay?L"Game and overlay saved together.":L"Clean game frame saved. The overlay is excluded."):state.page==PAGE_RESET?L"Restore overlay and launcher defaults?":state.page==PAGE_SETTINGS_HOME?L"Choose a category.":state.page==PAGE_APPEARANCE?L"Theme, size and menu style.":state.page==PAGE_CONTROLS?L"Shortcuts and controller access.":state.page==PAGE_GAME_SETTINGS?L"Launcher, restart and game controller icons.":state.page==PAGE_TOOLS?L"Screenshots, updates, support and reset.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):paint_theme.muted,DT_LEFT);
+    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_STARTUP?L"Skip title input and known offline network warnings.":state.page==PAGE_STARTUP_CONFIRM?L"Save progress first. The game will close and relaunch.":state.page==PAGE_PERFORMANCE?L"PORTHEON settings. Restart the game to apply.":state.page==PAGE_PERFORMANCE_RESTART?L"Save these settings and relaunch through PORTHEON.":state.page==PAGE_PERFORMANCE_DISCARD?L"Your performance edits have not been saved.":state.page==PAGE_PHOTO_EFFECTS?L"Live preview in Photo Mode. Left/right adjusts.":state.page==PAGE_PHOTO_WATERMARK?L"Uses your PORTHEON player name. Saved in photos.":state.page==PAGE_PHOTO?L"Free camera, zoom and freeze during a fight.":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera. Esc exits.":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations.":state.page==PAGE_BINDING?L"Choose an input to record or clear.":state.page==PAGE_THEME?L"From config follows the launcher theme file.":state.page==PAGE_QUIT?L"Close UFC 6 normally through your launcher.":state.page==PAGE_BACKUPS?L"Save in UFC 6 first; wait for autosave to finish.":state.page==PAGE_GAME_ICONS?L"Replace in-game button icons with Xbox or PlayStation.":state.page==PAGE_GAME_ICONS_CONFIRM?L"Your game will close and restart through your launcher.":state.page==PAGE_CAREER_ADD?L"Career changes are included in normal game saves.":state.page==PAGE_CHEATS?L"Stamina and health apply to Player 1.":state.page==PAGE_SCREENSHOT?(state.screenshot_overlay?L"Game and overlay saved together.":L"Clean game frame saved. The overlay is excluded."):state.page==PAGE_RESET?L"Restore overlay and launcher defaults?":state.page==PAGE_SETTINGS_HOME?L"Choose a category.":state.page==PAGE_APPEARANCE?L"Theme, size and menu style.":state.page==PAGE_CONTROLS?L"Shortcuts and controller access.":state.page==PAGE_GAME_SETTINGS?L"Launcher, startup screens and game controller icons.":state.page==PAGE_TOOLS?L"Screenshots, updates, support and reset.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):paint_theme.muted,DT_LEFT);
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Cheats",L"Photo Mode",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
-    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size",L"Auto-continue startup",L"Skip intros"};
-    const wchar_t *photo_labels[]={state.photo_active?L"Continue camera":L"Enter Photo Mode",L"Freeze action",L"Hide HUD",L"Keep cage visible",L"Show controls panel",L"Reset camera",L"Take screenshot",L"Screenshot + overlay",L"Exit Photo Mode",L"Controls...",L"Back"};
-    const wchar_t *photo_control_labels[]={L"Move: left stick / I J K L",L"Look: right stick / arrow keys",L"Height: bumpers / U O",L"Zoom: triggers / Page Up, Down",L"Freeze: confirm button / P",L"Screenshot: left face button",L"Overlay shot: D-pad left",L"Reset: top face button / Home",L"Exit: cancel button / Esc",L"Hide HUD: D-pad up / H",L"Keep cage: D-pad right / C",L"Controls panel: D-pad down / Tab",L"Back"};
-    const wchar_t *category_labels[]={L"Appearance...",L"Controls...",L"Game & launcher...",L"Files & support...",L"Back"};
+    const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size",L"Visual auto-confirm fallback",L"Skip intros",L"Include overlay in screenshots",L"Skip title & network warnings...",L"Mute when unfocused",L"Replay after decisions"};
+    const wchar_t *photo_labels[]={state.photo_active?L"Continue camera":L"Enter Photo Mode",L"Freeze action",L"Hide HUD",L"Keep cage visible",L"Show controls panel",L"Reset camera",L"Take screenshot",L"Exit Photo Mode",L"Controls...",L"Filters & effects...",L"Watermark...",L"Back"};
+    const wchar_t *effect_labels[]={L"Filter",L"Filter strength",L"Exposure",L"Contrast",L"Saturation",L"Warmth",L"Vignette",L"Film grain",L"Cinematic bars",L"Reset effects",L"Back"};
+    const wchar_t *mark_labels[]={L"Show watermark",L"Player name",L"Corner",L"Opacity",L"Size",L"Style",L"Font",L"Text color",L"Back"};
+    const wchar_t *photo_control_labels[]={L"Move: left stick / I J K L",L"Look: right stick / arrow keys",L"Height: bumpers / U O",L"Zoom: triggers / Page Up, Down",L"Freeze: confirm button / P",L"Screenshot: left face button",L"Reset: top face button / Home",L"Exit: cancel button / Esc",L"Hide HUD: D-pad up / H",L"Keep cage: D-pad right / C",L"Controls panel: D-pad down / Tab",L"Back"};
+    const wchar_t *category_labels[]={L"Appearance...",L"Controls...",L"Game & launcher...",L"Files & support...",L"Performance...",L"Back"};
+    const wchar_t *performance_labels[]={L"Crowd & animation",L"Particles & sparks",L"Depth of field",L"Dynamic resolution",L"3D render scale",L"Save for next launch",L"Save & restart game...",L"Back"};
+    const wchar_t *performance_restart[]={L"Cancel",L"Save and restart game"},*performance_discard[]={L"Keep editing",L"Discard edits"};
     const wchar_t *screenshot_labels[]={L"Open screenshots folder",L"Back"};
-    const wchar_t *cheat_labels[]={L"Infinite stamina",L"No damage",L"Add money",L"Add skill points",L"Restore fitness to 100%",L"Refill training days",L"Never get old",L"Training point rewards",L"All sparring grades: A...",L"Savegame backups...",L"Back"};
+    const wchar_t *cheat_labels[]={L"Infinite stamina",L"No damage",L"Next hit KO",L"Add money",L"Add skill points",L"Restore fitness to 100%",L"Refill training days",L"Never get old",L"Training point rewards",L"All sparring grades: A...",L"Savegame backups...",L"Back"};
     wchar_t backup_message[512];int backup_state=BACKUP_READY;
 #ifdef QUIT_MENU_TEST
     if(test_mode)wcscpy(backup_message,L"Test backup page; save files are never touched.");else
 #endif
     backup_state=save_backups_state(backup_message,512);
     const wchar_t *backup_labels[]={backup_state==BACKUP_BUSY?L"Creating backup...":L"Create savegame backup",L"Open backups folder",L"Back"};
+    const wchar_t *startup_labels[]={L"Enable bypass",L"Restore startup screens",L"Back"};
     const wchar_t *game_icons_labels[]={L"Xbox game icons",L"PlayStation game icons",L"Back"};
     const wchar_t *game_icons_confirm_labels[]={L"Cancel",L"Apply and restart game"};
     const wchar_t *career_labels[]={L"Cancel",state.career_kind==CAREER_GRADES?L"Set all grades to A":state.career_kind==CAREER_DAYS?L"Refill now":state.career_kind==CAREER_FITNESS?L"Restore now":L"Add now"};
@@ -524,24 +600,35 @@ static void draw_menu(HDC dc, RECT r) {
         if(state.page==PAGE_MAIN&&i==MAIN_REBOOT)label_row.right=330;
         if(menu_setting_page(state.page)&&gi==SETTING_SHORTCUT)label_row.right=280;
         else if(menu_setting_page(state.page)&&(gi==SETTING_ICONS||gi==SETTING_SCALE||gi==SETTING_ACCESS||gi==SETTING_FONT||gi==SETTING_BOX_STYLE||gi==SETTING_WINDOW_SIZE))label_row.right=345;
-        else if((menu_setting_page(state.page)&&(gi==SETTING_STARTUP_POPUPS||gi==SETTING_SKIP_SPLASHES||gi==SETTING_AUTO_LAUNCH||gi==SETTING_GUIDE||gi==SETTING_GAMEBAR))||(state.page==PAGE_CHEATS&&(i<2||i==6)))label_row.right=410;
-        else if(state.page==PAGE_CHEATS&&(i==2||i==3||i==7))label_row.right=300;
+        else if((menu_setting_page(state.page)&&(gi==SETTING_SCREENSHOT_UI||gi==SETTING_STARTUP_POPUPS||gi==SETTING_SKIP_SPLASHES||gi==SETTING_AUTO_LAUNCH||gi==SETTING_GUIDE||gi==SETTING_GAMEBAR))||(state.page==PAGE_CHEATS&&(i<2||i==7)))label_row.right=410;
+        else if(state.page==PAGE_CHEATS&&(i==2||i==3||i==4||i==8))label_row.right=300;
         if(state.page==PAGE_KEYBINDS&&i<BIND_COUNT)label_row.right=285;
         if(state.page==PAGE_BINDING&&i<2)label_row.right=280;
+        if(state.page==PAGE_PHOTO_EFFECTS||state.page==PAGE_PHOTO_WATERMARK)label_row.right=300;
         static const int main_binding[]={-1,BIND_SCREENSHOT,BIND_RESTART,BIND_CHEATS,BIND_PHOTO,BIND_SETTINGS,BIND_QUIT,BIND_REBOOT,BIND_SHUTDOWN};
-        int bound=state.page==PAGE_MAIN?main_binding[i]:state.page==PAGE_CHEATS&&i==9?BIND_BACKUP:state.page==PAGE_PHOTO&&i==7?BIND_SCREENSHOT_OVERLAY:-1;
+        int bound=state.page==PAGE_MAIN?main_binding[i]:state.page==PAGE_CHEATS&&i==10?BIND_BACKUP:-1;
         int has_binding=bound>=0&&(bindings.actions[bound].key||bindings.actions[bound].pad);
+        if(state.page==PAGE_PERFORMANCE&&i<PERF_SAVE)label_row.right=i==PERF_SCALE?300:410;
         if(has_binding)label_row.right=300;
         if(state.page==PAGE_MAIN&&bindings.font_size==20){--label_row.top;++label_row.bottom;}
-        text(dc,font_main,state.page==PAGE_PHOTO?photo_labels[i]:state.page==PAGE_PHOTO_CONTROLS?photo_control_labels[i]:state.page==PAGE_SETTINGS_HOME?category_labels[i]:state.page==PAGE_KEYBINDS?(i==BIND_COUNT?L"Back":binding_names[i]):state.page==PAGE_BINDING?binding_labels[i]:state.page==PAGE_THEME?theme_choices[i]:state.page==PAGE_QUIT?quit_labels[i]:state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_GAME_ICONS_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_MAIN?main_labels[i]:menu_setting_page(state.page)?setting_labels[gi]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:state.page==PAGE_CAREER_ADD?career_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],label_row,color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+        text(dc,font_main,state.page==PAGE_PERFORMANCE?performance_labels[i]:state.page==PAGE_PERFORMANCE_RESTART?performance_restart[i]:state.page==PAGE_PERFORMANCE_DISCARD?performance_discard[i]:state.page==PAGE_PHOTO_EFFECTS?effect_labels[i]:state.page==PAGE_PHOTO_WATERMARK?mark_labels[i]:state.page==PAGE_PHOTO?photo_labels[i]:state.page==PAGE_PHOTO_CONTROLS?photo_control_labels[i]:state.page==PAGE_SETTINGS_HOME?category_labels[i]:state.page==PAGE_KEYBINDS?(i==BIND_COUNT?L"Back":binding_names[i]):state.page==PAGE_BINDING?binding_labels[i]:state.page==PAGE_THEME?theme_choices[i]:state.page==PAGE_QUIT?quit_labels[i]:state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_STARTUP?startup_labels[i]:state.page==PAGE_STARTUP_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_GAME_ICONS_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_MAIN?main_labels[i]:menu_setting_page(state.page)?setting_labels[gi]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:state.page==PAGE_CAREER_ADD?career_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],label_row,color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         if(has_binding)binding_chip(dc,control,&bindings.actions[bound],focused,ps,0,bound==BIND_REBOOT?(menu_auto_launch(&state)?L"Auto: On":L"Auto: Off"):NULL);
+        if(state.page==PAGE_PERFORMANCE&&i<PERF_SAVE){
+            if(!state.performance_available)value_chip(dc,control,L"Unavailable",focused,0);
+            else if(i<PERF_SCALE){const int flags[]={state.performance.crowd_off,state.performance.particles_off,state.performance.dof_off,state.performance.drs_off};toggle_switch(dc,control,!flags[i],focused);}
+            else{wchar_t scale[64];if(state.performance.render_scale)swprintf(scale,64,L"%d%%",state.performance.render_scale);else wcscpy(scale,L"Launcher default");value_chip(dc,control,scale,focused,1);}
+        }
+        if(state.page==PAGE_PHOTO_EFFECTS&&i<FX_RESET){wchar_t value[64];photo_effect_value(&state.effects,i,value,64);value_chip(dc,control,value,focused,1);}
+        if(state.page==PAGE_PHOTO_WATERMARK&&i<MARK_BACK){wchar_t value[64];PhotoEffects *p=&state.effects;
+            if(i==MARK_ENABLED)toggle_switch(dc,control,p->watermark&&p->name[0],focused);
+            else value_chip(dc,control,photo_mark_value(p,i,value,64),focused,i!=MARK_NAME);}
         if(state.page==PAGE_PHOTO&&i==2)toggle_switch(dc,control,state.photo_hud,focused);
         if(state.page==PAGE_PHOTO&&i==3)toggle_switch(dc,control,state.photo_cage,focused);
         if(state.page==PAGE_PHOTO&&i==4)toggle_switch(dc,control,!state.photo_help_hidden,focused);
         if(state.page==PAGE_PHOTO&&i==1)toggle_switch(dc,control,state.photo_frozen,focused);
         if(state.page==PAGE_PHOTO&&i==0)value_chip(dc,control,state.photo_active?L"Active":L"Off",focused,0);
-        if(state.page==PAGE_PHOTO_CONTROLS&&i==9)controller_artwork_draw(dc,control.right-44,control.top+2,26,26,PAD_UP,ps);
-        if(state.page==PAGE_PHOTO_CONTROLS&&i>=4&&i<=8){const uint32_t icons[]={PAD_A,0x8000,PAD_LEFT,0x1000,PAD_B};controller_artwork_draw(dc,control.right-44,control.top+2,26,26,icons[i-4],ps);}
+        if(state.page==PAGE_PHOTO_CONTROLS&&i==8)controller_artwork_draw(dc,control.right-44,control.top+2,26,26,PAD_UP,ps);
+        if(state.page==PAGE_PHOTO_CONTROLS&&i>=4&&i<=7){const uint32_t icons[]={PAD_A,0x8000,0x1000,PAD_B};controller_artwork_draw(dc,control.right-44,control.top+2,26,26,icons[i-4],ps);}
         if(state.page==PAGE_KEYBINDS&&i<BIND_COUNT)binding_chip(dc,control,&bindings.actions[i],focused,ps,i==BIND_OPEN,NULL);
         if(state.page==PAGE_BINDING&&i<2){
             if(state.capturing)value_chip(dc,control,L"Recording...",focused,0);
@@ -549,13 +636,14 @@ static void draw_menu(HDC dc, RECT r) {
             else{ActionBinding chord={.pad=bindings.actions[state.binding_action].pad};binding_chip(dc,control,&chord,focused,ps,0,NULL);}
         }
         if(state.page==PAGE_THEME&&i<6&&i==bindings.theme_choice)value_chip(dc,control,i==0?paint_theme.name:L"Selected",focused,0);
-        if(state.page==PAGE_CHEATS&&i==7){wchar_t factor[32];int multiplier=menu_training_multiplier(&state);swprintf(factor,32,multiplier==1?L"1x (Off)":L"%dx",multiplier);value_chip(dc,control,factor,focused,1);}
-        if(state.page==PAGE_CHEATS&&i==6)toggle_switch(dc,control,career_state.longevity_requested,focused);
+        if(state.page==PAGE_CHEATS&&i==8){wchar_t factor[32];int multiplier=menu_training_multiplier(&state);swprintf(factor,32,multiplier==1?L"1x (Off)":L"%dx",multiplier);value_chip(dc,control,factor,focused,1);}
+        if(state.page==PAGE_CHEATS&&i==7)toggle_switch(dc,control,career_state.longevity_requested,focused);
+        if(state.page==PAGE_CHEATS&&i==2)value_chip(dc,control,ko_state==1?L"Armed / Cancel":L"Arm",focused,0);
         if(state.page==PAGE_CHEATS&&i<2)toggle_switch(dc,control,cheat_enabled[i],focused);
-        if(state.page==PAGE_CHEATS&&(i==2||i==3)){
-            wchar_t amount[32],value_text[64];format_number(menu_career_amount(&state,i-2),amount);
-            int pending=career_state.status==CAREER_PENDING&&career_state.kind==i-2;
-            swprintf(value_text,64,pending?L"Pending...":i==2?L"$%ls":L"%ls",amount);
+        if(state.page==PAGE_CHEATS&&(i==3||i==4)){
+            wchar_t amount[32],value_text[64];format_number(menu_career_amount(&state,i-3),amount);
+            int pending=career_state.status==CAREER_PENDING&&career_state.kind==i-3;
+            swprintf(value_text,64,pending?L"Pending...":i==3?L"$%ls":L"%ls",amount);
             value_chip(dc,control,value_text,focused,!pending);
         }
         if(menu_power_page(&state)&&i==1&&state.shutdown_holding){
@@ -571,6 +659,9 @@ static void draw_menu(HDC dc, RECT r) {
             RECT value={control.right-134,control.top,control.right-14,control.bottom};
             text(dc,font_small,on?L"Auto-launch: On":L"Auto-launch: Off",value,focused?RGB(229,234,242):RGB(168,184,202),DT_RIGHT|DT_VCENTER|DT_SINGLELINE);
         }
+        if(menu_setting_page(state.page)&&gi==SETTING_DECISION_REPLAY)toggle_switch(dc,control,state.decision_replays,focused);
+        if(menu_setting_page(state.page)&&gi==SETTING_AUDIO_FOCUS)toggle_switch(dc,control,state.mute_background,focused);
+        if(menu_setting_page(state.page)&&gi==SETTING_SCREENSHOT_UI)toggle_switch(dc,control,state.screenshot_include_ui,focused);
         if(menu_setting_page(state.page)&&(gi==SETTING_STARTUP_POPUPS||gi==SETTING_SKIP_SPLASHES))toggle_switch(dc,control,gi==SETTING_STARTUP_POPUPS?state.startup_popups:state.skip_splashes,focused);
         if(menu_setting_page(state.page)&&gi==SETTING_AUTO_LAUNCH)toggle_switch(dc,control,menu_auto_launch(&state),focused);
         if(menu_setting_page(state.page)&&(gi==SETTING_GUIDE||gi==SETTING_GAMEBAR)){
@@ -584,11 +675,19 @@ static void draw_menu(HDC dc, RECT r) {
         if(menu_setting_page(state.page)&&gi==SETTING_WINDOW_SIZE){const wchar_t *sizes[]={L"Compact (6 rows)",L"Expanded (9 rows)",L"Tall (12 rows)"};value_chip(dc,control,sizes[state.window_size],focused,1);}
         if(menu_setting_page(state.page)&&gi==SETTING_BOX_STYLE){const wchar_t *styles[]={L"Rounded",L"Square",L"Outline",L"Pill",L"Octagon"};value_chip(dc,control,styles[state.box_style],focused,1);}
         if(menu_setting_page(state.page)&&gi==SETTING_SCALE){wchar_t scale[40];swprintf(scale,40,L"%d%%",menu_scale(&state));value_chip(dc,control,scale,focused,1);}
+        if(state.page==PAGE_STARTUP&&((i==0&&startup_state==GAME_ICONS_XBOX)||(i==1&&startup_state==GAME_ICONS_PS)))value_chip(dc,control,L"Active",focused,0);
         if(state.page==PAGE_GAME_ICONS&&((i==0&&icon_state==GAME_ICONS_XBOX)||(i==1&&icon_state==GAME_ICONS_PS)))value_chip(dc,control,L"Active",focused,0);
-        int simple=(state.page==PAGE_MAIN&&i!=MAIN_REBOOT&&!has_binding)||(menu_setting_page(state.page)&&(gi==SETTING_LAUNCHER||gi==SETTING_SCREENSHOTS||gi==SETTING_RESET||gi==SETTING_GAME_ICONS||gi==SETTING_UPDATE||gi==SETTING_DIAGNOSTICS||gi==SETTING_KEYBINDS||gi==SETTING_THEME||gi==SETTING_BACK))||(state.page==PAGE_CHEATS&&i>=4&&i!=6&&i!=7)||state.page==PAGE_BACKUPS;
+        int simple=(state.page==PAGE_PERFORMANCE&&i>=PERF_SAVE)||(state.page==PAGE_MAIN&&i!=MAIN_REBOOT&&!has_binding)||(menu_setting_page(state.page)&&(gi==SETTING_LAUNCHER||gi==SETTING_SCREENSHOTS||gi==SETTING_RESET||gi==SETTING_GAME_ICONS||gi==SETTING_STARTUP_PATCH||gi==SETTING_UPDATE||gi==SETTING_DIAGNOSTICS||gi==SETTING_KEYBINDS||gi==SETTING_THEME||gi==SETTING_BACK))||(state.page==PAGE_CHEATS&&i>=5&&i!=7&&i!=8)||state.page==PAGE_BACKUPS;
         if(simple&&!has_binding)arrow_mark(dc,control.right-21,(control.top+control.bottom)/2,1,focused?paint_theme.accent:RGB(112,132,155));
     }
-    if(state.page==PAGE_CHEATS&&first<=2){RECT heading={38,148-32*first,r.right-36,172-32*first};text(dc,font_small,L"Career cheats",heading,paint_theme.muted,DT_LEFT|DT_SINGLELINE);}
+    if(state.page==PAGE_CHEATS&&first<=3){RECT heading={38,180-32*first,r.right-36,204-32*first};text(dc,font_small,L"Career cheats",heading,paint_theme.muted,DT_LEFT|DT_SINGLELINE);}
+    if(state.page==PAGE_PERFORMANCE_RESTART||state.page==PAGE_PERFORMANCE_DISCARD){
+        RECT explain={36,98,r.right-36,156};text(dc,font_small,state.page==PAGE_PERFORMANCE_RESTART?L"Save your game progress first. Settings are applied at startup.":L"Discarding keeps the settings currently saved in PORTHEON.",explain,paint_theme.muted,DT_LEFT|DT_WORDBREAK);}
+    if(state.page==PAGE_STARTUP_CONFIRM){
+        RECT scope={36,98,r.right-36,132},backup={36,133,r.right-36,171};
+        text(dc,font_small,state.startup_patch_enable?L"No image matching or button presses are needed.":L"Restore the original title and offline-warning scripts.",scope,paint_theme.text,DT_LEFT|DT_WORDBREAK);
+        text(dc,font_small,L"Original scripts are backed up and verified locally.",backup,paint_theme.muted,DT_LEFT|DT_WORDBREAK);
+    }
     if(state.page==PAGE_GAME_ICONS_CONFIRM){
         RECT scope={36,98,r.right-36,126},backup={36,133,r.right-36,159};
         text(dc,font_small,state.game_icons_xbox?L"Use Xbox prompts throughout the game.":L"Restore the original PlayStation game prompts.",scope,RGB(234,238,244),DT_CENTER|DT_SINGLELINE);
@@ -645,7 +744,7 @@ static void draw_menu(HDC dc, RECT r) {
         RECT select={84,y+5,190,y+28};text(dc,font_small,L"Select",select,RGB(187,196,209),DT_LEFT);
         button_icon(dc,210,y,0,ps);
         int setting=menu_setting_id(state.page,selection);
-        const wchar_t *confirm=state.page==PAGE_CHEATS?((selection<2||selection==6)?L"Change":selection==7?L"Change":selection<4?L"Add...":L"Confirm"):menu_setting_page(state.page)?(setting==SETTING_SHORTCUT?L"Record":(setting==SETTING_ICONS||setting==SETTING_AUTO_LAUNCH||setting==SETTING_GUIDE||setting==SETTING_GAMEBAR||setting==SETTING_ACCESS||setting==SETTING_FONT||setting==SETTING_BOX_STYLE||setting==SETTING_WINDOW_SIZE)?L"Change":setting==SETTING_SCALE?L"Reset":L"Confirm"):menu_power_page(&state)?(state.shutdown_countdown?L"Cancel":selection==1?L"Hold 3s":L"Confirm"):L"Confirm";
+        const wchar_t *confirm=state.page==PAGE_CHEATS?(selection==2?(ko_state==1?L"Cancel":L"Arm"):(selection<2||selection==7||selection==8)?L"Change":selection>=3&&selection<5?L"Add...":L"Confirm"):menu_setting_page(state.page)?(setting==SETTING_SHORTCUT?L"Record":(setting==SETTING_DECISION_REPLAY||setting==SETTING_AUDIO_FOCUS||setting==SETTING_SCREENSHOT_UI||setting==SETTING_ICONS||setting==SETTING_AUTO_LAUNCH||setting==SETTING_GUIDE||setting==SETTING_GAMEBAR||setting==SETTING_ACCESS||setting==SETTING_FONT||setting==SETTING_BOX_STYLE||setting==SETTING_WINDOW_SIZE)?L"Change":setting==SETTING_SCALE?L"Reset":L"Confirm"):menu_power_page(&state)?(state.shutdown_countdown?L"Cancel":selection==1?L"Hold 3s":L"Confirm"):L"Confirm";
         RECT yes={250,y+5,367,y+28};text(dc,font_small,confirm,yes,RGB(187,196,209),DT_LEFT);
         button_icon(dc,386,y,1,ps);
         RECT back={426,y+5,530,y+28};text(dc,font_small,state.page==PAGE_MAIN?L"Resume":L"Back",back,RGB(187,196,209),DT_LEFT);
@@ -655,6 +754,8 @@ static void draw_menu(HDC dc, RECT r) {
             int selection=menu_setting_id(state.page,state.selection);
             wchar_t chord[100],line[130];shortcut_label(menu_shortcut(&state),ps,chord,100);
             swprintf(line,130,L"Open: %ls  |  F10",chord);
+            if(selection==SETTING_DECISION_REPLAY)wcscpy(line,L"Enable before a new offline fight. Requires recorded clips.");
+            if(selection==SETTING_AUDIO_FOCUS)wcscpy(line,L"Silence only UFC 6 while minimized or in the background.");
             if(selection==SETTING_GAME_ICONS)wcscpy(line,L"Patch the game controller icons. Restart required.");
             if(selection==SETTING_ICONS)wcscpy(line,L"Changes this overlay only. Game icons have a separate setting.");
             if(selection==SETTING_SCALE)wcscpy(line,L"Left/right: resize   |   Confirm: reset to 100%");
@@ -666,6 +767,7 @@ static void draw_menu(HDC dc, RECT r) {
             if(selection==SETTING_LAUNCHER)wcscpy(line,L"Opens desktop launcher settings. Mouse/keyboard required.");
             if(selection==SETTING_ACCESS)wcscpy(line,L"Player 1 only, or either controller. F10 always works.");
             if(selection==SETTING_SCREENSHOTS)wcscpy(line,L"Open the Windows screenshots folder on the desktop.");
+            if(selection==SETTING_SCREENSHOT_UI)wcscpy(line,L"Optional: use normal screenshot controls to capture the overlay.");
             if(selection==SETTING_KEYBINDS)wcscpy(line,L"Configure action shortcuts for keyboard and controller.");
             if(selection==SETTING_THEME)wcscpy(line,L"Launcher config or a saved theme preset.");
             if(selection==SETTING_WINDOW_SIZE)wcscpy(line,L"Show more rows without increasing text size.");
@@ -678,8 +780,8 @@ static void draw_menu(HDC dc, RECT r) {
     if(state.page==PAGE_CHEATS&&!conflict){
         wchar_t balances[120],money[32],points[32];format_number(career_state.balance[0],money);format_number(career_state.balance[1],points);
         swprintf(balances,120,career_state.ready?L"Money: $%ls  |  Skill points: %ls":L"Open a career screen to load money and skill points.",money,points);
-        const wchar_t *help=selection>=2&&selection<4?balances:selection<2&&cheat_states[selection]==LIVE_LAUNCHER?L"Disable in PORTHEON, then restart once to use live control.":selection<2&&(cheat_states[selection]==LIVE_UNSUPPORTED||cheat_states[selection]==LIVE_ERROR)?L"This game version could not be verified for live cheats.":L"Player 1 follows the controller, even when fighters move.";
-        if(!message[0])lstrcpynW(message,selection==4?L"Set career fitness to 100% once. Save normally afterward.":selection==5?L"Restore 7 training days once, without advancing the week.":selection==6?L"Saved choice. Activates when a valid career loads.":selection==7?L"Multiplies sparring challenge evolution-point rewards.":selection==8?L"Upgrade completed sparring records to A for simulation.":selection==9?L"Back up your saved progress before using career cheats.":help,120);
+        const wchar_t *help=selection>=3&&selection<5?balances:selection<2&&cheat_states[selection]==LIVE_LAUNCHER?L"Disable in PORTHEON, then restart once to use live control.":selection<2&&(cheat_states[selection]==LIVE_UNSUPPORTED||cheat_states[selection]==LIVE_ERROR)?L"This game version could not be verified for live cheats.":L"Player 1 follows the controller, even when fighters move.";
+        if(!message[0])lstrcpynW(message,selection==2?L"Arm for 25 seconds. Land a head strike; confirm again to cancel.":selection==5?L"Set career fitness to 100% once. Save normally afterward.":selection==6?L"Restore 7 training days once, without advancing the week.":selection==7?L"Saved choice. Activates when a valid career loads.":selection==8?L"Multiplies sparring challenge evolution-point rewards.":selection==9?L"Upgrade completed sparring records to A for simulation.":selection==10?L"Back up your saved progress before using career cheats.":help,120);
     }
     if(state.page==PAGE_BACKUPS&&!conflict){
         RECT info={38,226,r.right-38,274};
@@ -691,8 +793,12 @@ static void draw_menu(HDC dc, RECT r) {
         const wchar_t *label=icon_state==GAME_ICONS_PS?L"Currently installed: PlayStation":icon_state==GAME_ICONS_XBOX?L"Currently installed: Xbox":icon_state==GAME_ICONS_MIXED?L"Mixed icons: choose a theme to repair":icon_state==GAME_ICONS_CHECKING?L"Checking installed game icons...":L"Game icons unavailable; see the message below.";
         RECT hint={20,314+extra,r.right-20,338+extra};text(dc,font_small,label,hint,paint_theme.muted,DT_CENTER|DT_SINGLELINE);
     }
+    if(state.page==PAGE_PERFORMANCE){
+        static const wchar_t *hints[]={L"Turns off both crowd rendering and crowd animation.",L"Controls sparks, sweat spray, smoke and other emitters.",L"Controls the game's depth-of-field blur.",L"On lets the game vary resolution and restores launcher scale.",L"Fixed scale turns dynamic resolution Off. GPU limits still apply.",L"Preserves unrelated launcher settings and game files.",L"Save progress first. The next screen asks before restarting.",L"Unsaved edits ask before being discarded."};
+        RECT hint={20,314+extra,r.right-20,338+extra};text(dc,font_small,hints[selection],hint,paint_theme.muted,DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+        wcscpy(message,!state.performance_available?L"PORTHEON launcher/settings not found.":state.performance_feedback==3?L"Settings changed in PORTHEON. Reopen this page to reload.":state.performance_feedback==2?L"Could not save. Check folder access and retry.":state.performance_feedback==4?L"Saved. Restart the game through PORTHEON to apply.":state.performance_dirty?L"Unsaved changes. Current gameplay is unchanged.":state.performance_feedback==1?L"Saved for next launch. Restart the game to apply.":L"Changes take effect after the game restarts.");}
     RECT note = {20, 345+extra, r.right - 20, 369+extra};
-    text(dc,font_small,conflict?L"In Settings, turn Windows Game Bar shortcut Off.":menu_power_page(&state)?(state.shutdown_countdown?L"Back or F10 cancels. Switching apps also cancels.":L"Unsaved game progress may be lost."):message[0]?message:state.page==PAGE_GAME_ICONS?icon_reason:save_failed?L"Settings could not be saved.":state.page==PAGE_RESTART?L"Unsaved progress may be lost.":state.page==PAGE_CHEATS&&selection>=2&&selection<4?(career_state.status==CAREER_PENDING?L"Pending: resume and reopen a career screen.":career_state.status==CAREER_ADDED?L"Added once. The game saves changes normally.":L"Left/right: amount. Confirm: review addition."):(state.photo_active||state.page==PAGE_PHOTO||state.page==PAGE_PHOTO_CONTROLS)?L"Esc exits Photo Mode. F10 opens the tools.":L"The game keeps running while this menu is open.",note,
+    text(dc,font_small,state.page==PAGE_PERFORMANCE_RESTART?L"Unsaved game progress may be lost.":state.page==PAGE_PERFORMANCE_DISCARD?L"Keep editing preserves your pending choices.":conflict?L"In Settings, turn Windows Game Bar shortcut Off.":menu_power_page(&state)?(state.shutdown_countdown?L"Back or F10 cancels. Switching apps also cancels.":L"Unsaved game progress may be lost."):message[0]?message:state.page==PAGE_STARTUP?startup_reason:state.page==PAGE_GAME_ICONS?icon_reason:save_failed?L"Settings could not be saved.":state.page==PAGE_RESTART?L"Unsaved progress may be lost.":state.page==PAGE_CHEATS&&selection>=3&&selection<5?(career_state.status==CAREER_PENDING?L"Pending: resume and reopen a career screen.":career_state.status==CAREER_ADDED?L"Added once. The game saves changes normally.":L"Left/right: amount. Confirm: review addition."):(state.photo_active||state.page==PAGE_PHOTO||state.page==PAGE_PHOTO_CONTROLS)?L"Esc exits Photo Mode. F10 opens the tools.":L"The game keeps running while this menu is open.",note,
          RGB(137,148,164), DT_CENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 static void paint(HWND w) {
@@ -737,6 +843,7 @@ __declspec(dllexport) void Ufc6ScreenshotResultPath(BOOL saved,const wchar_t *pa
     if(saved&&filename[0]){swprintf(feedback,256,L"Screenshot saved: %ls",filename);status(feedback);}
     else status(saved?L"Saved to Windows Pictures / Screenshots.":L"Screenshot could not be saved.");
     log_line(saved?(included?"Game screenshot with overlay saved.":"Clean game screenshot saved."):"Screenshot capture failed.");
+    log_timeline(saved?"screenshot_completed":"screenshot_failed");
     if(saved&&filename[0])PostThreadMessageW(ui_thread,WM_SCREENSHOT_READY,0,0);
 }
 __declspec(dllexport) void Ufc6ScreenshotResult(BOOL saved){Ufc6ScreenshotResultPath(saved,NULL);}
@@ -768,7 +875,11 @@ static void reset_overlay_settings(void){
     if(!overlay_settings_reset(settings_path)){status(L"Could not reset settings; previous settings kept.");return;}
     stop_live_cheats();
     EnterCriticalSection(&lock);int gamebar=menu.gamebar_shortcut,legacy=menu.settings_legacy;
-    menu=(MenuState){.visible=1,.page=legacy?PAGE_SETTINGS:PAGE_TOOLS,.selection=legacy?SETTING_RESET:3,.gamebar_shortcut=gamebar,.settings_legacy=legacy};
+    menu=(MenuState){.visible=1,.page=legacy?PAGE_SETTINGS:PAGE_TOOLS,.selection=legacy?SETTING_RESET:4,.gamebar_shortcut=gamebar,.settings_legacy=legacy};
+    menu.decision_replays=GetPrivateProfileIntW(L"Menu",L"OfferDecisionReplays",0,settings_path)!=0;
+    menu.mute_background=GetPrivateProfileIntW(L"Menu",L"MuteWhenUnfocused",0,settings_path)!=0;
+    menu.replay_step_index=GetPrivateProfileIntW(L"Menu",L"ReplayStepIndex",0,settings_path);if(menu.replay_step_index<0||menu.replay_step_index>6)menu.replay_step_index=0;
+    photo_effects_load(&menu.effects,settings_path);
     reset_menu_owner();preferences_load(&preferences,settings_path,menu_shortcut(&menu));menu.theme_selection=preferences.theme_choice;menu.font_index=(preferences.font_size-16)/2;menu.box_style=preferences.box_style;menu.window_size=preferences.window_size;theme_load(&current_theme,theme_path,preferences.theme_choice);settings_save_failed=0;
     LeaveCriticalSection(&lock);
     status(L"Overlay defaults restored. Windows Game Bar setting kept.");
@@ -776,16 +887,25 @@ static void reset_overlay_settings(void){
 static void request_screenshot_mode(int included) {
     if(InterlockedCompareExchange(&screenshot_capable,0,0)!=1){status(L"Screenshot is unavailable for this display mode.");return;}
     if(InterlockedCompareExchange(&screenshot_busy,1,0))return;
+    log_timeline(included?"screenshot_request_ui":"screenshot_request_clean");
     InterlockedExchange(&screenshot_with_overlay,included);
     if(!included)status(L"Taking screenshot...");
     InterlockedExchange(&screenshot_request,included?2:1);
 }
-static void request_screenshot(void){request_screenshot_mode(0);}
-static void request_overlay_screenshot(void){request_screenshot_mode(1);}
+static void request_screenshot(void){EnterCriticalSection(&lock);int include_ui=menu.screenshot_include_ui;LeaveCriticalSection(&lock);request_screenshot_mode(include_ui);}
 #include "photo_help_panel.h"
 static uint32_t photo_help_top(uint32_t height){uint32_t top=height*18/100;if(top<24)top=24;if(height>32&&top>height-32)top=height-32;return top;}
 static int photo_help_visible(void){return !menu.visible&&menu.photo_active&&!menu.photo_help_hidden;}
 static int notification_visible(void){return !menu.visible&&GetTickCount64()<toast_until&&status_text[0];}
+#ifdef QUIT_MENU_TEST
+__declspec(dllexport) void MenuTestEffects(const PhotoEffects *p,int active){EnterCriticalSection(&lock);if(p)menu.effects=*p;menu.photo_active=active;menu.photo_help_hidden=active==2?0:1;menu.visible=0;menu.draining=0;toast_until=0;test_photo_help_override=active;LeaveCriticalSection(&lock);}
+#endif
+#ifdef QUIT_MENU_TEST
+__declspec(dllexport) int MenuTestPhotoPanel(uint32_t pad,unsigned keys){EnterCriticalSection(&lock);int save=photo_panel_controls(&menu,&pad,keys);int result=menu.photo_panel_page;if(save==PHOTO_PANEL_EFFECTS_CHANGED)action(MENU_PHOTO_EFFECTS_CHANGED);else if(save==PHOTO_PANEL_REPLAY_STEP_CHANGED)save_settings();LeaveCriticalSection(&lock);return result;}
+#endif
+__declspec(dllexport) BOOL Ufc6PhotoEffects(PhotoEffects *out){if(!out)return FALSE;EnterCriticalSection(&lock);*out=menu.effects;int active=menu.photo_active&&(test_mode||foreground());LeaveCriticalSection(&lock);return active;}
+#include "photo_watermark_raster.h"
+__declspec(dllexport) uint32_t Ufc6PhotoWatermark(void *out,uint32_t capacity){EnterCriticalSection(&lock);uint32_t result=photo_watermark_raster(&menu.effects,out,capacity);LeaveCriticalSection(&lock);return result;}
 __declspec(dllexport) BOOL Ufc6OverlayBlend(void){EnterCriticalSection(&lock);int blend=photo_help_visible();LeaveCriticalSection(&lock);return blend;}
 __declspec(dllexport) void Ufc6OverlayPosition(uint32_t viewport_width,uint32_t viewport_height,uint32_t *x,uint32_t *y){
     EnterCriticalSection(&lock);int help=photo_help_visible(),toast=notification_visible()&&!help;uint32_t width=render_width,height=render_height;
@@ -830,6 +950,7 @@ static uint64_t menu_raster_signature(void){
 #endif
     state=game_icons_status(message,512);
     hash=raster_hash(hash,&state,sizeof(state));hash=raster_hash(hash,message,(wcslen(message)+1)*sizeof(wchar_t));
+    if(!test_mode){state=startup_assets_status(message,512);hash=raster_hash(hash,&state,sizeof(state));hash=raster_hash(hash,message,(wcslen(message)+1)*sizeof(wchar_t));}
     state=save_backups_state(message,512);
     hash=raster_hash(hash,&state,sizeof(state));hash=raster_hash(hash,message,(wcslen(message)+1)*sizeof(wchar_t));
     return hash;
@@ -964,7 +1085,6 @@ static void run_binding(int id){
     EnterCriticalSection(&lock);int blocked=menu.capturing||menu.draining||menu.shutdown_holding||menu.shutdown_countdown;LeaveCriticalSection(&lock);if(blocked)return;
     if(id==BIND_OPEN){toggle_menu();return;}
     if(id==BIND_SCREENSHOT){request_screenshot();return;}
-    if(id==BIND_SCREENSHOT_OVERLAY){request_overlay_screenshot();return;}
     if(id==BIND_PHOTO){start_photo();return;}
     if(photo_mode_blocks_input())photo_mode_command(PHOTO_STOP);
     EnterCriticalSection(&lock);
@@ -1017,17 +1137,22 @@ static void start_photo(void){
     photo_pad=raw_owner>=0?16+raw_owner:menu_device>=0&&devices[menu_device].used?menu_device:-1;
     if(photo_pad<0){for(int i=0;i<4;++i)if(raw_connected[i]&&raw_allowed(i)){photo_pad=16+i;break;}}
     if(photo_pad<0){for(int i=0;i<16;++i)if(devices[i].used&&native_allowed(&devices[i])){photo_pad=i;break;}}
-    int ready=!test_mode&&live_cheats_fight_ready();
+    ReplaySnapshot playback;replay_snapshot(&playback);
+    int ready=!test_mode&&(playback.available||live_cheats_fight_ready());
     int result=photo_mode_start(ready);
     if(result>0){
         neutralize();if(menu.visible)action(menu_close(&menu,MENU_RESUME));
-        photo_armed=0;photo_previous=0;photo_previous_keys=0;
+        photo_armed=0;photo_previous=0;photo_previous_keys=0;menu.photo_panel_page=0;
         status(L"Starting Photo Mode. Esc exits; F10 opens controls.");
     }else {
         status(result==PHOTO_START_BUILD?L"Photo Mode is unavailable on this engine build.":result==PHOTO_START_HOOKS?L"Photo Mode hooks could not load. Restart the game and retry.":L"Photo Mode needs a running fight or practice session.");
         log_line(result==PHOTO_START_HOOKS?"Photo Mode start rejected: native hook installation failed.":result==PHOTO_START_BUILD?"Photo Mode start rejected: unsupported engine.":"Photo Mode start rejected: no fresh fighter-presence observation.");
     }
     LeaveCriticalSection(&lock);
+}
+static void photo_freeze_action(void){
+    ReplaySnapshot replay;replay_snapshot(&replay);
+    if(replay.available)replay_toggle_pause();else photo_mode_command(PHOTO_FREEZE);
 }
 static int photo_key(int key){
     /* User shortcuts take priority over built-in photo controls. */
@@ -1039,9 +1164,14 @@ static void poll_photo(int active){
     if(test_photo_help_override)return;
 #endif
     PhotoSnapshot snap;photo_mode_snapshot(&snap);
-    menu.photo_active=photo_mode_blocks_input();menu.photo_frozen=snap.frozen;menu.photo_fov=snap.fov;menu.photo_hud=snap.hud_hidden;menu.photo_cage=snap.cage_visible;
+    replay_offer_decisions(menu.decision_replays);
+    static unsigned decision_events;unsigned events=replay_decision_events();if(events!=decision_events){decision_events=events;log_line("Decision replay fallback applied using validated native clips.");}
+    menu.photo_active=photo_mode_blocks_input();replay_poll(active,menu.photo_active);
+    ReplaySnapshot replay;replay_snapshot(&replay);menu.replay_ready=replay.available;menu.replay_paused=replay.paused;menu.replay_position_ms=replay.position_ms;menu.replay_duration_ms=replay.duration_ms;menu.replay_extended=replay.extended;menu.replay_range_failed=replay.range_failed;
+    menu.photo_frozen=replay.available?replay.paused:snap.frozen;menu.photo_fov=snap.fov;menu.photo_hud=snap.hud_hidden;menu.photo_cage=snap.cage_visible;
     if(snap.state!=photo_last_state){
         char cage_log[180];snprintf(cage_log,sizeof(cage_log),"Photo Mode state=%d cage_hooks=%d panels=%d visible=%d writes=%d restored=%d",snap.state,snap.cage_available,snap.cage_count,snap.cage_visible,snap.cage_writes,snap.cage_restores);log_line(cage_log);
+        log_timeline(snap.state==2?"photo_entered":snap.state==3?"photo_restored":"photo_state_other");
         if(snap.state==2)status(L"Photo Mode On. F10: tools. Esc: exit.");
         else if(photo_last_state==2&&snap.state==3)status(L"Photo Mode Off. Gameplay restored.");
         else if(snap.state<0)status(L"Photo Mode could not take camera control.");
@@ -1065,29 +1195,49 @@ static void poll_photo(int active){
         in.right+=photo_key('L')-photo_key('J');in.forward+=photo_key('I')-photo_key('K');in.up+=photo_key('U')-photo_key('O');
         in.yaw+=photo_key(VK_LEFT)-photo_key(VK_RIGHT);in.pitch+=photo_key(VK_UP)-photo_key(VK_DOWN);
         in.zoom+=photo_key(VK_NEXT)-photo_key(VK_PRIOR);in.fast=photo_key(VK_SHIFT);
-        keys=(photo_key('P')?1u:0)|(photo_key(VK_HOME)?2u:0)|(photo_key(VK_ESCAPE)?4u:0)|(photo_key('H')?8u:0)|(photo_key(VK_TAB)?16u:0)|(photo_key('C')?32u:0);
+        keys=(photo_key('P')?1u:0)|(photo_key(VK_HOME)?2u:0)|(photo_key(VK_ESCAPE)?4u:0)|(photo_key('H')?8u:0)|(photo_key(VK_TAB)?16u:0)|(photo_key('C')?32u:0)|((photo_key(VK_F8)||photo_key(VK_F4))?PHOTO_PANEL_PAGE_KEY:0)|(photo_key('W')?PHOTO_PANEL_UP_KEY:0)|(photo_key('S')?PHOTO_PANEL_DOWN_KEY:0)|(photo_key('A')?PHOTO_PANEL_LEFT_KEY:0)|(photo_key('D')?PHOTO_PANEL_RIGHT_KEY:0);
         unsigned pressed=keys&~photo_previous_keys;uint32_t pad=photo_armed?buttons&~photo_previous:0;
         for(int id=0;id<BIND_COUNT;++id)if(preferences.actions[id].pad&&(buttons&preferences.actions[id].pad)==preferences.actions[id].pad){pad=0;memset(&in,0,sizeof(in));break;}
-        if((pressed&1)||(pad&PAD_A))photo_mode_command(PHOTO_FREEZE);
+        if((pressed&16)||((pad&PAD_DOWN)&&!photo_panel_editing(&menu))){menu.photo_help_hidden=!menu.photo_help_hidden;pad&=~PAD_DOWN;}
+        if(photo_panel_editing(&menu)&&menu.photo_panel_page==3)in.up=photo_key('U')-photo_key('O');
+        int panel_action=photo_panel_controls(&menu,&pad,pressed);
+        if(panel_action==PHOTO_PANEL_EFFECTS_CHANGED)action(MENU_PHOTO_EFFECTS_CHANGED);
+        else if(panel_action==PHOTO_PANEL_REPLAY_STEP_CHANGED)save_settings();
+        else if(panel_action==PHOTO_PANEL_REPLAY_SPEED)replay_set_speed(menu.replay_speed_index);
+        else if(panel_action==PHOTO_PANEL_REPLAY_RANGE)replay_toggle_range();
+        else if(panel_action==PHOTO_PANEL_REPLAY_TOGGLE)replay_toggle_pause();
+        else if(panel_action==PHOTO_PANEL_REPLAY_BACK)replay_step_ms(-1,menu_replay_step_ms(&menu));
+        else if(panel_action==PHOTO_PANEL_REPLAY_FORWARD)replay_step_ms(1,menu_replay_step_ms(&menu));
+        int editing=photo_panel_editing(&menu);
+        if(((pressed&1)||(!editing&&(pad&PAD_A)))&&!(menu.photo_panel_page==3&&!menu.replay_ready))photo_freeze_action();
         if((pressed&2)||(pad&0x1000))photo_mode_command(PHOTO_RESET);
         if((pressed&4)||(pad&PAD_B))photo_mode_command(PHOTO_STOP);
-        if((pressed&8)||(pad&PAD_UP))photo_mode_command(PHOTO_HUD);
-        if((pressed&16)||(pad&PAD_DOWN))menu.photo_help_hidden=!menu.photo_help_hidden;
-        if((pressed&32)||(pad&PAD_RIGHT)){photo_mode_command(PHOTO_CAGE);if(snap.frozen)status(L"Cage setting changed. Unfreeze briefly to update the fence.");}
+        if((pressed&8)||(!editing&&(pad&PAD_UP)))photo_mode_command(PHOTO_HUD);
+        if((pressed&32)||(!editing&&(pad&PAD_RIGHT))){photo_mode_command(PHOTO_CAGE);if(snap.frozen)status(L"Cage setting changed. Unfreeze briefly to update the fence.");}
         if(pad&0x8000)request_screenshot();
-        if(pad&PAD_LEFT)request_overlay_screenshot();
     }else{memset(&in,0,sizeof(in));photo_armed=0;}
     photo_previous=buttons;photo_previous_keys=keys;
     photo_mode_poll(active,menu.visible||menu.draining,&in);
 }
 static void tick(void) {
-    static int loader_seen;
+    static int loader_seen,replay_ready_logged;
+    static ULONGLONG replay_next,replay_deadline;
+    if(!test_mode&&!replay_ready_logged){
+        ULONGLONG now=GetTickCount64();if(!replay_deadline)replay_deadline=now+90000;
+        if(now>=replay_next){
+            if(replay_prepare()){log_line("Native replay clock controls ready.");replay_ready_logged=1;}
+            else if(now>=replay_deadline){log_line("Native replay controls unavailable: startup verification timed out.");replay_ready_logged=1;}
+            replay_next=now+1000;
+        }
+    }
     if(!test_mode&&!loader_seen){HMODULE loader=GetModuleHandleW(L"vulkan-1.dll");if(loader){
         typedef int (WINAPI *EnumerateVersion)(unsigned*);EnumerateVersion version=(EnumerateVersion)GetProcAddress(loader,"vkEnumerateInstanceVersion");unsigned api=1u<<22;
         int ok=!version||version(&api)==0;char line[120];snprintf(line,sizeof(line),"Vulkan loader observed: API=%u.%u.%u query_ok=%d",api>>22,(api>>12)&1023,api&4095,ok);log_line(line);loader_seen=1;
     }}
     if(GetTickCount64()>=next_theme_read){apply_theme();next_theme_read=GetTickCount64()+1000;}
     int active = test_mode||foreground();
+    EnterCriticalSection(&lock);int mute_background=menu.mute_background;LeaveCriticalSection(&lock);
+    if(!test_mode)audio_focus_poll(mute_background,active&&!IsIconic(game_window));
     int controller_active=active&&!input_redirected();
     if(GetTickCount64()>=next_gamebar_read){refresh_gamebar();next_gamebar_read=GetTickCount64()+1000;}
     int f10 = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
@@ -1275,7 +1425,12 @@ static DWORD WINAPI worker(void *unused) {
     GetModuleFileNameW(instance,settings_path,MAX_PATH);
     slash=wcsrchr(settings_path,L'\\');
     if(slash)lstrcpyW(slash+1,test_mode?L"ufc6-quit-menu.test.ini":L"ufc6-quit-menu.ini");
+    GetModuleFileNameW(instance,performance_bin,LAUNCH_PATH);wchar_t *performance_slash=wcsrchr(performance_bin,L'\\');if(performance_slash)*performance_slash=0;
     preferences_seed_appearance(settings_path);
+    menu.decision_replays=GetPrivateProfileIntW(L"Menu",L"OfferDecisionReplays",0,settings_path)!=0;
+    menu.mute_background=GetPrivateProfileIntW(L"Menu",L"MuteWhenUnfocused",0,settings_path)!=0;
+    menu.replay_step_index=GetPrivateProfileIntW(L"Menu",L"ReplayStepIndex",0,settings_path);if(menu.replay_step_index<0||menu.replay_step_index>6)menu.replay_step_index=0;
+    photo_effects_load(&menu.effects,settings_path);
     wchar_t icons[32];
     GetPrivateProfileStringW(L"Menu",L"ButtonIcons",L"Xbox",icons,32,settings_path);
     EnterCriticalSection(&lock);menu.playstation_icons=lstrcmpiW(icons,L"PlayStation")==0;LeaveCriticalSection(&lock);
@@ -1284,6 +1439,7 @@ static DWORD WINAPI worker(void *unused) {
     EnterCriticalSection(&lock);if(shortcut[0]&&!*end&&menu_valid_shortcut((uint32_t)chord))menu.open_chord=(uint32_t)chord;LeaveCriticalSection(&lock);
     int scale=(int)GetPrivateProfileIntW(L"Menu",L"UIScale",MENU_SCALE_DEFAULT,settings_path);
     EnterCriticalSection(&lock);menu.ui_scale_percent=overlay_valid_scale(scale)?scale:MENU_SCALE_DEFAULT;LeaveCriticalSection(&lock);
+    menu.screenshot_include_ui=GetPrivateProfileIntW(L"Menu",L"IncludeOverlayInScreenshots",0,settings_path)!=0;
     menu.skip_splashes=GetPrivateProfileIntW(L"Menu",L"SkipStartupSplashes",0,settings_path)!=0;
     menu.startup_popups=GetPrivateProfileIntW(L"Menu",L"StartupSkipPopups",0,settings_path)!=0;
     int auto_launch=(int)GetPrivateProfileIntW(L"Menu",L"AutoLaunchAfterRestart",1,settings_path);
@@ -1331,6 +1487,7 @@ static DWORD WINAPI worker(void *unused) {
     HMODULE xi = LoadLibraryExW(L"xinput1_4.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (xi) xstate = (XStateFn)GetProcAddress(xi, (LPCSTR)100);
     log_line(xstate ? "Ready. LB+RB+Menu (800ms), Guide (if available), or F10." : "Ready. LB+RB+Menu (800ms) or F10. Guide unavailable.");
+    log_timeline("session_ready");
     if(!test_mode){game_icons_init(instance);save_backups_init(instance);}
     refresh_gamebar();
     live_cheats_init(&live_cheats,0x900000000ULL);career_cheats_init(0x900000000ULL);
@@ -1350,7 +1507,7 @@ static DWORD WINAPI worker(void *unused) {
             EnterCriticalSection(&lock);if(startup_probe_press_until&&GetTickCount64()>=startup_probe_press_until)startup_release_confirm();LeaveCriticalSection(&lock);
             tick();
         } else if (msg.message == WM_MENU_ACTION) {
-            if (msg.wParam == MENU_OPEN) { position_overlay(); log_line("Menu opened."); }
+            if (msg.wParam == MENU_OPEN) { position_overlay(); log_line("Menu opened.");log_timeline("tools_opened"); }
             else if (msg.wParam == MENU_RESUME) { ShowWindow(overlay, SW_HIDE); log_line("Resume selected."); }
             else if (msg.wParam == MENU_QUIT) {
                 photo_mode_command(PHOTO_STOP);ShowWindow(overlay, SW_HIDE); log_line("Quit selected: posting WM_CLOSE to game window.");
@@ -1367,6 +1524,16 @@ static DWORD WINAPI worker(void *unused) {
                 EnterCriticalSection(&lock);launcher_setup_active=0;menu.armed=0;LeaveCriticalSection(&lock);
                 status(saved?L"Launcher settings saved.":L"Launcher settings unchanged.");
 #endif
+            }
+            else if(msg.wParam==MENU_STARTUP_PATCH_OPEN){status(L"");if(!test_mode)startup_assets_check();}
+            else if(msg.wParam==MENU_STARTUP_PATCH_APPLY){
+                EnterCriticalSection(&lock);int enabled=menu.startup_patch_enable;LeaveCriticalSection(&lock);
+#ifdef QUIT_MENU_TEST
+                if(test_mode){status(L"Test startup patch; no files changed or game restarted.");}else
+#endif
+                if(startup_assets_status(NULL,0)==(enabled?GAME_ICONS_XBOX:GAME_ICONS_PS))status(L"These startup screens are already selected.");
+                else if(startup_assets_apply(game_window,enabled)){photo_mode_command(PHOTO_STOP);EnterCriticalSection(&lock);menu_close(&menu,MENU_RESUME);LeaveCriticalSection(&lock);ShowWindow(overlay,SW_HIDE);}
+                else status(L"Could not prepare startup patch. The game was left running.");
             }
             else if(msg.wParam==MENU_GAME_ICONS_OPEN){if(!test_mode)game_icons_check();}
             else if(msg.wParam==MENU_GAME_ICONS_APPLY){
@@ -1405,9 +1572,20 @@ static DWORD WINAPI worker(void *unused) {
                 if(save_backups_open()){ShowWindow(game_window,SW_MINIMIZE);}else status(L"Create a backup first to open its folder.");
 #endif
             }
+            else if(msg.wParam==MENU_DECISION_REPLAY_CHANGED){save_settings();status(menu.decision_replays?L"Decision replays On for new offline fights.":L"Off for new fights; the current replay remains available.");}
+            else if(msg.wParam==MENU_AUDIO_FOCUS_CHANGED){save_settings();status(menu.mute_background?L"Background audio muting On.":L"Background audio muting Off.");}
             else if(msg.wParam==MENU_STARTUP_CHANGED){save_settings();EnterCriticalSection(&lock);if(menu.startup_popups){startup_probe_deadline=GetTickCount64()+300000;startup_probe_seen=0;}else startup_release_confirm();LeaveCriticalSection(&lock);status(L"Startup option saved. Restart game to test splashes.");}
             else if(msg.wParam==MENU_OPEN_SCREENSHOTS)open_screenshots_folder();
             else if(msg.wParam==MENU_RESET_SETTINGS)reset_overlay_settings();
+            else if(msg.wParam==MENU_NEXT_HIT_KO){
+                int ok=0;EnterCriticalSection(&lock);
+#ifdef QUIT_MENU_TEST
+                if(test_mode){ko_status=ko_status==1?3:1;ok=1;}else
+#endif
+                {ReplaySnapshot replay;replay_snapshot(&replay);if(foreground()&&!menu.photo_active&&!replay.available)ok=live_ko_toggle();}
+                LeaveCriticalSection(&lock);refresh_live_cheats();
+                status(!ok?L"Start a fight with Player 1. Exit Photo Mode/replay first.":ko_status==1?L"Next hit KO armed for 25 seconds. Land a head strike.":L"Next hit KO cancelled.");
+            }
             else if(msg.wParam==MENU_CHEAT_STAMINA||msg.wParam==MENU_CHEAT_HEALTH)change_live_cheat(msg.wParam==MENU_CHEAT_STAMINA?LIVE_STAMINA:LIVE_HEALTH);
             else if(msg.wParam==MENU_BIND_KEY_CAPTURE){key_capture_ready=0;captured_key=0;}
             else if(msg.wParam==MENU_BIND_CLEAR_KEY)save_binding(menu.binding_action,1,0);
@@ -1437,15 +1615,20 @@ static DWORD WINAPI worker(void *unused) {
             }
             else if(msg.wParam==MENU_CAREER_ADD)add_career_value();
             else if(msg.wParam==MENU_GAMEBAR_CHANGED)change_gamebar();
+            else if(msg.wParam==MENU_PERFORMANCE_OPEN)open_performance();
+            else if(msg.wParam==MENU_PERFORMANCE_SAVE)save_performance(0);
+            else if(msg.wParam==MENU_PERFORMANCE_RESTART)save_performance(1);
+            else if(msg.wParam==MENU_SCREENSHOT_UI_CHANGED){save_settings();log_timeline("screenshot_ui_setting_changed");status(menu.screenshot_include_ui?L"Screenshots include the overlay. Turn Off for clean photos.":L"Screenshots exclude the overlay.");}
+            else if(msg.wParam==MENU_PHOTO_EFFECTS_CHANGED){save_settings();EnterCriticalSection(&lock);PhotoEffects settings=menu.effects;LeaveCriticalSection(&lock);char line[200];snprintf(line,sizeof(line),"Photo effects changed: filter=%d strength=%d exposure=%d contrast=%d saturation=%d vignette=%d grain=%d bars=%d watermark=%d",settings.preset,settings.strength,settings.exposure,settings.contrast,settings.saturation,settings.vignette,settings.grain,settings.bars,settings.watermark);log_line(line);}
             else if(msg.wParam==MENU_PHOTO_ENTER){if(!photo_mode_blocks_input())start_photo();}
-            else if(msg.wParam==MENU_PHOTO_FREEZE){if(photo_mode_blocks_input())photo_mode_command(PHOTO_FREEZE);else status(L"Enter Photo Mode first.");}
+            else if(msg.wParam==MENU_PHOTO_FREEZE){if(photo_mode_blocks_input())photo_freeze_action();else status(L"Enter Photo Mode first.");}
             else if(msg.wParam==MENU_PHOTO_HUD){if(photo_mode_blocks_input())photo_mode_command(PHOTO_HUD);else status(L"Enter Photo Mode first.");}
             else if(msg.wParam==MENU_PHOTO_CAGE){PhotoSnapshot snap;photo_mode_snapshot(&snap);if(!snap.cage_available)status(L"Cage control is unavailable on this session.");else if(photo_mode_blocks_input())photo_mode_command(PHOTO_CAGE);else status(L"Enter Photo Mode first.");}
             else if(msg.wParam==MENU_PHOTO_HELP){EnterCriticalSection(&lock);menu.photo_help_hidden=!menu.photo_help_hidden;LeaveCriticalSection(&lock);}
             else if(msg.wParam==MENU_PHOTO_RESET){if(photo_mode_blocks_input())photo_mode_command(PHOTO_RESET);else status(L"Enter Photo Mode first.");}
             else if(msg.wParam==MENU_PHOTO_EXIT)photo_mode_command(PHOTO_STOP);
             else if(msg.wParam==MENU_SCREENSHOT)request_screenshot();
-            else if(msg.wParam==MENU_SCREENSHOT_OVERLAY)request_overlay_screenshot();
+            else if(msg.wParam==MENU_SCREENSHOT_OVERLAY)request_screenshot();
             else if(msg.wParam==MENU_RESTART) {
                 ShowWindow(overlay,SW_HIDE);
 #ifdef QUIT_MENU_TEST
@@ -1541,7 +1724,10 @@ __declspec(dllexport) int MenuTestSnapshot(void) {
 }
 __declspec(dllexport) uint32_t MenuTestShortcut(void){EnterCriticalSection(&lock);uint32_t result=menu_shortcut(&menu);LeaveCriticalSection(&lock);return result;}
 __declspec(dllexport) void MenuTestScreenshot(void){request_screenshot();}
-__declspec(dllexport) void MenuTestScreenshotOverlay(void){request_overlay_screenshot();}
+__declspec(dllexport) void MenuTestScreenshotOverlay(void){request_screenshot_mode(1);}
+__declspec(dllexport) int MenuTestPerformanceSaves(void){return test_performance_saves;}
+__declspec(dllexport) int MenuTestPerformanceRestarts(void){return test_performance_restarts;}
+__declspec(dllexport) int MenuTestScreenshotUI(void){EnterCriticalSection(&lock);int value=menu.screenshot_include_ui;LeaveCriticalSection(&lock);return value;}
 __declspec(dllexport) void MenuTestScreenshotPath(wchar_t *out,int size){EnterCriticalSection(&lock);if(size>0)lstrcpynW(out,last_screenshot_path?last_screenshot_path:L"",size);LeaveCriticalSection(&lock);}
 __declspec(dllexport) int MenuTestShutdownRemaining(void){EnterCriticalSection(&lock);int seconds=menu.shutdown_countdown?menu.shutdown_seconds:0;LeaveCriticalSection(&lock);return seconds;}
 __declspec(dllexport) int MenuTestGuideEnabled(void){EnterCriticalSection(&lock);int value=menu_guide_enabled(&menu);LeaveCriticalSection(&lock);return value;}
@@ -1565,3 +1751,17 @@ BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
+#ifdef QUIT_MENU_TEST
+__declspec(dllexport) void MenuTestReplayHelp(int page,int paused){EnterCriticalSection(&lock);test_photo_help_override=1;menu.photo_active=1;menu.photo_help_hidden=0;menu.visible=0;menu.draining=0;menu.replay_ready=1;menu.replay_paused=paused;menu.photo_frozen=paused;menu.replay_position_ms=1250;menu.replay_duration_ms=4011;menu.photo_panel_page=page;menu.photo_replay_row=1;toast_until=0;LeaveCriticalSection(&lock);}
+
+#endif
+
+#ifdef QUIT_MENU_TEST
+__declspec(dllexport) void MenuTestReplayUnavailable(void){EnterCriticalSection(&lock);menu.replay_ready=0;menu.photo_panel_page=3;LeaveCriticalSection(&lock);}
+__declspec(dllexport) void MenuTestReplayRange(int extended,int failed){EnterCriticalSection(&lock);menu.replay_extended=extended;menu.replay_range_failed=failed;menu.photo_replay_row=3;LeaveCriticalSection(&lock);}
+#endif
+
+#ifdef QUIT_MENU_TEST
+__declspec(dllexport) int MenuTestKoState(void){return ko_status;}
+#endif

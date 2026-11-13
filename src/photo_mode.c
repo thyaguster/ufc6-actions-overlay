@@ -48,7 +48,9 @@ static volatile LONG hud_requested,hud_menu_open;
 static volatile LONG64 hud_poll_tick,hud_camera_tick;
 static void hud_draw(int which,uintptr_t o,uintptr_t a,uintptr_t b,uintptr_t c,uintptr_t d,uintptr_t e){
  int hide=InterlockedCompareExchange(&hud_requested,0,0)&&InterlockedCompareExchange(&state,0,0)==2&&
-    InterlockedCompareExchange(&focused,0,0)&&!InterlockedCompareExchange(&hud_menu_open,0,0)&&
+    /* Opening our Vulkan tools must not flip the game's HUD visibility.
+       Keep the user's choice until an explicit toggle, focus loss or exit. */
+    InterlockedCompareExchange(&focused,0,0)&&
     !(InterlockedCompareExchange(&commands,0,0)&PHOTO_STOP)&&
     PHOTO_NOW()-(ULONGLONG)InterlockedCompareExchange64(&hud_poll_tick,0,0)<1000&&
     PHOTO_NOW()-(ULONGLONG)InterlockedCompareExchange64(&hud_camera_tick,0,0)<1000&&

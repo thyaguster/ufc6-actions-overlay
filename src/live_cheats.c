@@ -5,6 +5,7 @@
 #include "live_cheats.h"
 #include "cheat_bindings.h"
 #include "exact_hooks.h"
+#include "next_hit_ko.h"
 typedef struct {uintptr_t flag[2],hook[2]; const char *off[2],*on[2];} Profile;
 static const Profile profiles[]={
     {{0xb444d78,0xb440610},{0x5A88787,0x5A887B8},
@@ -29,9 +30,11 @@ static void __attribute__((sysv_abi)) hooked_binding_sync(void *binder,unsigned 
     unsigned commands[2];CheatBindingFrame frame;memset(&frame,0,sizeof(frame));frame.player_one=-1;
     for(int i=0;i<2;++i)commands[i]=(unsigned)InterlockedCompareExchange(&binding_commands[i],0,0);
     if(TryAcquireSRWLockExclusive(&binding_guard)){
+        if(ko.cancel){ko_release(3);ko.cancel=0;}
         CheatBindingCache *cache=&binding_cache[0];
         for(int i=0;i<8;++i)if(binding_cache[i].owner==(uintptr_t)binder){cache=&binding_cache[i];break;}else if(!binding_cache[i].owner)cache=&binding_cache[i];
         cheat_bindings_apply(cache,(uintptr_t)binder,first,count,commands,&frame);
+        if(frame.fighters_ready)ko_observe((uintptr_t)binder,frame.player_one,GetTickCount64());
         ReleaseSRWLockExclusive(&binding_guard);
     }
     original_binding_sync(binder,first,count);
@@ -99,9 +102,19 @@ int live_cheats_toggle(LiveCheats *s,int which){
     else{f->requested=1;f->owned_mask|=s->target;}
     live_cheats_tick(s);return 1;
 }
-void live_cheats_stop(LiveCheats *s){for(int i=0;i<2;++i)s->flags[i].requested=0;live_cheats_tick(s);}
+void live_cheats_stop(LiveCheats *s){live_ko_poll(0);for(int i=0;i<2;++i)s->flags[i].requested=0;live_cheats_tick(s);}
 
 int live_cheats_fight_ready(void){
  uint64_t last=(uint64_t)InterlockedCompareExchange64(&fight_presence_tick,0,0);
  return last&&GetTickCount64()-last<1000;
 }
+
+int live_ko_toggle(void){int ok=0;AcquireSRWLockExclusive(&binding_guard);
+ uint64_t now=GetTickCount64();
+ if(ko.requested||ko.armed||ko.cancel){ko.requested=0;ko.cancel=1;ko.result=3;ok=1;}
+ else if(hooked_base&&ko.candidate.valid&&now-ko.candidate.seen<1000&&ko_identity(&ko.candidate)&&ko_values(&ko.candidate)){
+  int32_t value=-1;if(ko_read(ko.candidate.field[0][1-ko.candidate.player],&value,4)&&value==0){ko.requested=1;ko.result=1;ko.deadline=now+25000;ok=1;}
+ }ReleaseSRWLockExclusive(&binding_guard);return ok;}
+int live_ko_poll(int allowed){AcquireSRWLockExclusive(&binding_guard);uint64_t now=GetTickCount64();
+ if((ko.armed||ko.requested)&&(!allowed||now>=ko.deadline||now-ko.candidate.seen>1000)){ko.requested=0;ko.cancel=1;ko.result=3;}
+ int result=ko.result;ReleaseSRWLockExclusive(&binding_guard);return result;}

@@ -1,5 +1,5 @@
 {
-  "version": "0.9.26",
+  "version": "0.9.36",
   "appearance": {
     "theme": "Amber",
     "box_style": "Rounded",
@@ -8,10 +8,11 @@
     "scale_percent": 125,
     "window_size": "Tall"
   },
-  "notes": "Actual full-frame game captures and native-renderer UI previews; Windows tools retain their own styling. No binary release published.",
+  "notes": "New native-renderer pages use v0.9.36. Retained full-game examples show v0.9.26 with the same appearance; versions are recorded per image. No synthetic game screenshots.",
   "images": {
     "appearance.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         505
@@ -20,6 +21,7 @@
     },
     "career-money-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -28,22 +30,43 @@
     },
     "career-points-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
       ],
       "sha256": "9636c5d548ee6758533bf37f79735bb0807e79c1d96f89db7d4a243794352cb7"
     },
+    "cheats-in-game.png": {
+      "kind": "game-frame",
+      "version": "0.9.26",
+      "size": [
+        2560,
+        1440
+      ],
+      "sha256": "f619b9d88927a01fb6c181f014aeb5f23c1d82e2e647fba2d67e3022758e482e"
+    },
     "controls.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
       ],
       "sha256": "322339afc4c3ebe395bab96bb61e8ae802f9e8a9ee2e1b8bed1092286ef8fca2"
     },
+    "decision-replays.png": {
+      "kind": "ui-preview",
+      "version": "0.9.36",
+      "size": [
+        712,
+        585
+      ],
+      "sha256": "70853b32a29c59d080e7a0a4b72901df47121e67c4a4651db657069a9d8e5081"
+    },
     "diagnostics.png": {
       "kind": "windows-tool",
+      "version": "0.9.26",
       "size": [
         680,
         470
@@ -52,6 +75,7 @@
     },
     "files-support.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -60,6 +84,7 @@
     },
     "fitness-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -68,14 +93,16 @@
     },
     "game-button-icons.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
       ],
-      "sha256": "76f0c4ce5bc83557048a1b832e1b925add5a0a7f191d633114203fd0b46d4c09"
+      "sha256": "22f99b87234dd7532cec4d2940f466c844e20370373f48490697c3a57265eb05"
     },
     "game-icons-confirm-playstation.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -84,22 +111,34 @@
     },
     "game-icons-confirm-xbox.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
       ],
       "sha256": "a1ffb1f42e35f5be43c1151d3e1d5d7869f2a5dccc646a055f62e913527cbf7f"
     },
+    "game-launcher-in-game.png": {
+      "kind": "game-frame",
+      "version": "0.9.26",
+      "size": [
+        2560,
+        1440
+      ],
+      "sha256": "8dcbf7adbfc13183c0fef0d73c6adb0f684f58e410223826c4824415ebb6d154"
+    },
     "game-launcher.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
-        505
+        585
       ],
-      "sha256": "1ba968a7c1598d44a782aa60162869806313bada566191ce24dae6437d2bf986"
+      "sha256": "f8ba8ba5a53ccdd9b3f2cada39bf0ac15b7e73e3ed2304b46a0d9a0d4becef8f"
     },
     "keybinds.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         665
@@ -108,38 +147,70 @@
     },
     "live-cheats.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
-        665
+        705
       ],
-      "sha256": "67c90e62a431f676c1fb1f637cd3d810756130daa46f385ccde8286f9e8de48a"
+      "sha256": "b567fd2b459b9a62a9e2768c00693ebc1b906947584ea5900778a0b0030c19c2"
     },
     "main-menu.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         498
       ],
       "sha256": "5d64479358fc83399636abacb1dfca7888891ee17a7adf4537ba88817cdbfce1"
     },
+    "next-hit-ko.png": {
+      "kind": "ui-preview",
+      "version": "0.9.36",
+      "size": [
+        712,
+        705
+      ],
+      "sha256": "3865a4e459c4e39a9295b4d1c17d89eaa99bab1d260086a21775183d5c68a434"
+    },
     "notification.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         525,
         100
       ],
       "sha256": "4e465e65e210041354a2e037111dcc7073f89621b851760ba19ad17d943e4c56"
     },
+    "overlay-in-game.png": {
+      "kind": "game-frame",
+      "version": "0.9.26",
+      "size": [
+        2560,
+        1440
+      ],
+      "sha256": "57e59de633fa11ba53b3fb2e1e88d690eaa4ab5985bcd62d72a78975ecd04595"
+    },
     "performance-discard-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
       ],
       "sha256": "102e8cea9d3ae17b14ca342c19849cff6aa6e0e2f78d0894ce6c0654ba9b742f"
     },
+    "performance-in-game.png": {
+      "kind": "game-frame",
+      "version": "0.9.26",
+      "size": [
+        2560,
+        1440
+      ],
+      "sha256": "9614182d4755eaf142a576a6af55bec0692c47e92754116a1d0aeb09d147c012"
+    },
     "performance-restart-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -148,30 +219,61 @@
     },
     "performance.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         545
       ],
-      "sha256": "9bdf008b81abacafa109da73b92c4b0823d0cbfd2803fec3451c17c1561dfc9a"
+      "sha256": "7cd2513066f8293f08d8ffd3230919ca498a7c6aa213576c7d436a1fe620f053"
+    },
+    "photo-controls-in-game.png": {
+      "kind": "game-frame",
+      "version": "0.9.26",
+      "size": [
+        2560,
+        1440
+      ],
+      "sha256": "2d67e99266daae2fec3d9b6d054679a2b2be67add31a3e8fd030a2b253fff849"
     },
     "photo-controls.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         705
       ],
       "sha256": "b4a40d95c33316204142cbaac11544b5624f8042a465158879924e741475ddf2"
     },
+    "photo-effects-in-game.png": {
+      "kind": "game-frame",
+      "version": "0.9.26",
+      "size": [
+        2560,
+        1440
+      ],
+      "sha256": "9eb728341d3a9238a52667ea872eae4729699451b185db0fe93321e75ef94402"
+    },
     "photo-effects.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         665
       ],
       "sha256": "6aa7be53fc27ecf5d75acbabf77d196d8f942b4af03c34ccddbf3ec76822b518"
     },
+    "photo-mode-in-game.png": {
+      "kind": "game-frame",
+      "version": "0.9.26",
+      "size": [
+        2560,
+        1440
+      ],
+      "sha256": "0d14528fbadd19b719e14a60559141badc6298f51eb6e572d2423d1255064244"
+    },
     "photo-mode-options.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         705
@@ -180,38 +282,61 @@
     },
     "photo-panel-camera.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         550,
         690
       ],
-      "sha256": "6fff7d5e329626a1453c6c2df7ad489e7db8ddee95ea94784cb6ec398bc1ff5b"
+      "sha256": "354f3c60f662e871a019cecfc99f77b0975794e31d7afd768484fe794e28c787"
     },
     "photo-panel-effects.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         550,
         690
       ],
-      "sha256": "292f3e542141a6db754e88bc7496d82d93ca8ee94d29d7f8748ff3dfebe829a4"
+      "sha256": "416c13821d8f56d41a9b1f27acefa08093921f2f299d0a94e65f8b775377c980"
+    },
+    "photo-panel-replay.png": {
+      "kind": "ui-preview",
+      "version": "0.9.36",
+      "size": [
+        550,
+        690
+      ],
+      "sha256": "71ece6fb91dc46999e35af5edeb642535ca0535483dd5ab097a538adef00f03e"
     },
     "photo-panel-watermark.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         550,
         690
       ],
-      "sha256": "e69a2e5aa6f3fc673d3e08e2748702a7e54cb7361b4f26273d14c2b34db1b582"
+      "sha256": "70251e7a41571ff349e45dae4ad9d02d5a020e1ec334a7680665514110aca688"
+    },
+    "photo-watermark-in-game.png": {
+      "kind": "game-frame",
+      "version": "0.9.26",
+      "size": [
+        2560,
+        1440
+      ],
+      "sha256": "a0477f70726db2167c499fffdcb43e7765091dd614844f7821214013b1f10d7e"
     },
     "photo-watermark.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         585
       ],
-      "sha256": "bdf687827ce93d94e452dd714566477d2c93062a0a087b4d925b56df6b648579"
+      "sha256": "6b4c29178a376438eadeebc165c90e48026548110daf9d17454fbd9e0986ec61"
     },
     "quit-game-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -220,6 +345,7 @@
     },
     "reset-confirmation.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -228,6 +354,7 @@
     },
     "restart-game-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -236,6 +363,7 @@
     },
     "restart-pc.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -244,22 +372,34 @@
     },
     "savegame-backups.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
       ],
-      "sha256": "9cdfb99782c9b11fc3a8fa7c4fbab5b870652381b514964c6ee426a1c4671276"
+      "sha256": "38e61d9579365d7033b3a5a2cb6be51ba778d42f980bbbcf9ef2a1a5d7a890d2"
     },
     "screenshot-saved.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
       ],
-      "sha256": "556375c70d4d7bcdd5abc13435332ef75214b5070b9fb605d1b6793847ada894"
+      "sha256": "a036bc76b5161ec84f328df32ea137d5f155bc74a59f26e47d011016bc550133"
+    },
+    "settings-in-game.png": {
+      "kind": "game-frame",
+      "version": "0.9.26",
+      "size": [
+        2560,
+        1440
+      ],
+      "sha256": "961158b82da7800fc90d2df79a95755785f609b02e155782840dc1d8ea3d8fd0"
     },
     "settings.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -268,6 +408,7 @@
     },
     "setup.png": {
       "kind": "windows-tool",
+      "version": "0.9.26",
       "size": [
         760,
         660
@@ -276,6 +417,7 @@
     },
     "shortcut-editor.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -284,6 +426,7 @@
     },
     "shutdown-pc-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -292,6 +435,7 @@
     },
     "sparring-grades-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -300,14 +444,25 @@
     },
     "startup-bypass-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
       ],
       "sha256": "8e3453671e497bce26e08f694ba7b36488279021339e42837c0d0d226baed658"
     },
+    "startup-in-game.png": {
+      "kind": "game-frame",
+      "version": "0.9.26",
+      "size": [
+        2560,
+        1440
+      ],
+      "sha256": "2ffd5ac765208b750917d960074ca0fbfac6df628c10d89c919992482997f2dd"
+    },
     "startup-restore-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -316,14 +471,16 @@
     },
     "startup-screens.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
       ],
-      "sha256": "aafe02fddfb304f6e1b3c96c2c78da003e15969ea87b84213cfab04088f5e0ca"
+      "sha256": "e5c928b7b7caf7bd787aeb7e9bc0b289b3cd4643dc83bfe19fb8733e236fada7"
     },
     "theme.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         505
@@ -332,6 +489,7 @@
     },
     "training-days-confirm.png": {
       "kind": "ui-preview",
+      "version": "0.9.36",
       "size": [
         712,
         465
@@ -340,91 +498,12 @@
     },
     "updater.png": {
       "kind": "windows-tool",
+      "version": "0.9.26",
       "size": [
         680,
         470
       ],
       "sha256": "c0e4af8eaffabb798de945cda872d01d3d1968519e94753bd33468de3b2e47a3"
-    },
-    "cheats-in-game.png": {
-      "kind": "game-frame",
-      "size": [
-        2560,
-        1440
-      ],
-      "sha256": "f619b9d88927a01fb6c181f014aeb5f23c1d82e2e647fba2d67e3022758e482e"
-    },
-    "game-launcher-in-game.png": {
-      "kind": "game-frame",
-      "size": [
-        2560,
-        1440
-      ],
-      "sha256": "8dcbf7adbfc13183c0fef0d73c6adb0f684f58e410223826c4824415ebb6d154"
-    },
-    "overlay-in-game.png": {
-      "kind": "game-frame",
-      "size": [
-        2560,
-        1440
-      ],
-      "sha256": "57e59de633fa11ba53b3fb2e1e88d690eaa4ab5985bcd62d72a78975ecd04595"
-    },
-    "performance-in-game.png": {
-      "kind": "game-frame",
-      "size": [
-        2560,
-        1440
-      ],
-      "sha256": "9614182d4755eaf142a576a6af55bec0692c47e92754116a1d0aeb09d147c012"
-    },
-    "photo-controls-in-game.png": {
-      "kind": "game-frame",
-      "size": [
-        2560,
-        1440
-      ],
-      "sha256": "2d67e99266daae2fec3d9b6d054679a2b2be67add31a3e8fd030a2b253fff849"
-    },
-    "photo-effects-in-game.png": {
-      "kind": "game-frame",
-      "size": [
-        2560,
-        1440
-      ],
-      "sha256": "9eb728341d3a9238a52667ea872eae4729699451b185db0fe93321e75ef94402"
-    },
-    "photo-mode-in-game.png": {
-      "kind": "game-frame",
-      "size": [
-        2560,
-        1440
-      ],
-      "sha256": "0d14528fbadd19b719e14a60559141badc6298f51eb6e572d2423d1255064244"
-    },
-    "photo-watermark-in-game.png": {
-      "kind": "game-frame",
-      "size": [
-        2560,
-        1440
-      ],
-      "sha256": "a0477f70726db2167c499fffdcb43e7765091dd614844f7821214013b1f10d7e"
-    },
-    "settings-in-game.png": {
-      "kind": "game-frame",
-      "size": [
-        2560,
-        1440
-      ],
-      "sha256": "961158b82da7800fc90d2df79a95755785f609b02e155782840dc1d8ea3d8fd0"
-    },
-    "startup-in-game.png": {
-      "kind": "game-frame",
-      "size": [
-        2560,
-        1440
-      ],
-      "sha256": "2ffd5ac765208b750917d960074ca0fbfac6df628c10d89c919992482997f2dd"
     }
   }
 }

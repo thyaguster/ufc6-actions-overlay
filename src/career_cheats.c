@@ -26,6 +26,8 @@ static int reward_multiplier=1,reward_active_multiplier=1;static uintptr_t rewar
 typedef struct {CareerField first;uint32_t rows,stride;} GradePack;
 static uint32_t expected_grade_ids[5];
 static volatile LONG64 next_probe;
+static volatile LONG diagnostic_reason,diagnostic_hooks,diagnostic_probes;
+static void diagnose(int reason){InterlockedExchange(&diagnostic_reason,reason);}
 static uintptr_t cache_collection,cache_begin;
 static size_t cached_slot[2]={SIZE_MAX,SIZE_MAX};
 #ifdef CAREER_CHEATS_TEST
@@ -47,7 +49,7 @@ static int schema(uintptr_t store,uintptr_t *begin,size_t count){
     uintptr_t s=pointer(store+8),b=pointer(s+0x30),e=pointer(s+0x38);
     if(!b||e<b||e-b!=count*80)return 0;*begin=b;return 1;
 }
-static int describe(uintptr_t store,int kind,CareerField *out){
+static int describe_checked(uintptr_t store,int kind,CareerField *out,int *failure){
     int fighter=kind==CAREER_MONEY||kind==CAREER_FITNESS||kind==CAREER_LONGEVITY;
     uintptr_t b=0;uint32_t index=kind==CAREER_MONEY?48:kind==CAREER_FITNESS?50:kind==CAREER_LONGEVITY?24:10;
     if(!schema(store,&b,fighter?64:16))return 0;
@@ -56,14 +58,17 @@ static int describe(uintptr_t store,int kind,CareerField *out){
     }else if(!name_is(b+2*80,"LastSkillPointsEarned")||!name_is(b+10*80,"SkillPoints")||!name_is(b+11*80,"TotalXp"))return 0;
     if(kind==CAREER_FITNESS&&!name_is(b+50*80,"Fitness"))return 0;
     if(kind==CAREER_LONGEVITY&&!name_is(b+24*80,"Longevity"))return 0;
+    if(failure)*failure=1; /* The requested schema matched; distinguish layout/protection failures. */
     uintptr_t f=b+index*80,p=pointer(store+0x30);uint16_t bits=0;uint32_t type=0,bias=1,rows=0,stride=0,start=0,bit=0,word=0;
     if(!rd(f+0x30,&bits,2)||!u32(f+0x34,&bias)||!u32(f+0x38,&type)||type!=2||bias||!bits||bits>31||
        !u32(p+0x10,&rows)||rows!=1||!u32(p+0xc,&stride)||!stride||stride>4096||
        !u32(p+0x18,&start)||start<8||start>16384||!u32(p+0x20+index*4,&bit)||bit/32>=stride||bit%32+bits>32)return 0;
     uintptr_t a=p+((uintptr_t)start+bit/32)*4;
-    if((a&3)||!u32(a,&word)||!writable(a,4)||!writable(pointer(store+0x10)+0xe8,4))return 0;
+    if((a&3)||!u32(a,&word))return 0;
+    if(!writable(a,4)||!writable(pointer(store+0x10)+0xe8,4)){if(failure)*failure=2;return 0;}
     *out=(CareerField){store,p,a,index,bits,bit%32,(word>>(bit%32))&((1u<<bits)-1),(1u<<bits)-1,0};return 1;
 }
+static int describe(uintptr_t store,int kind,CareerField *out){return describe_checked(store,kind,out,NULL);}
 static int same(const CareerField *a,const CareerField *b){return a->store==b->store&&a->packed==b->packed&&a->address==b->address&&a->index==b->index&&a->bits==b->bits&&a->shift==b->shift&&a->row==b->row;}
 static void longevity_disable(void){InterlockedExchange(&longevity_on,0);InterlockedExchange64(&longevity_store,0);snapshot.longevity_enabled=0;}
 static int fighter_identity(uintptr_t store,uint32_t *identity){
@@ -226,27 +231,30 @@ static int resolve(uintptr_t root,CareerField result[2],uintptr_t *owner){
     /* This is the same default-user registry queried by the career service.
        Inactive save-slot metadata and online currencies do not have this chain. */
     uintptr_t registry=pointer(root+0x10),b=0;
-    if(pointer(root)!=guest+0x9c38410||!schema(registry,&b,5)||!name_is(b,"RegisterEvent")||!name_is(b+4*80,"UserList"))return 0;
+    if(pointer(root)!=guest+0x9c38410){diagnose(CAREER_DIAG_ROOT);return 0;}
+    if(!schema(registry,&b,5)||!name_is(b,"RegisterEvent")||!name_is(b+4*80,"UserList")){diagnose(CAREER_DIAG_REGISTRY);return 0;}
     uintptr_t c=pointer(registry+0x10),begin=pointer(c+0x108),end=pointer(c+0x110);
-    if(!begin||end<begin||(end-begin)%8||(end-begin)/8>16384)return 0;
-    size_t n=(end-begin)/8;int found[2]={0,0};
+    if(!begin||end<begin||(end-begin)%8||(end-begin)/8>16384){diagnose(CAREER_DIAG_COLLECTION);return 0;}
+    size_t n=(end-begin)/8;int found[2]={0,0},failures[2]={0,0};
     /* Verified schema slots first, bounded schema lookup if the layout moves. */
     const size_t hints[]={525,109};size_t slot[2]={SIZE_MAX,SIZE_MAX};
     for(int k=0;k<2;++k){
         size_t i=c==cache_collection&&begin==cache_begin?cached_slot[k]:hints[k];
-        if(i<n){uintptr_t s=pointer(begin+i*8);if(pointer(s+0x10)==c&&describe(s,k,&result[k])){found[k]=1;slot[k]=i;}}
+        if(i<n){uintptr_t s=pointer(begin+i*8);if(pointer(s+0x10)==c&&describe_checked(s,k,&result[k],&failures[k])){found[k]=1;slot[k]=i;}}
     }
     if(!found[0]||!found[1])for(size_t i=0;i<n;++i){
         uintptr_t s=pointer(begin+i*8);if(pointer(s+0x10)!=c)continue;
-        for(int k=0;k<2;++k)if(!found[k]&&describe(s,k,&result[k])){found[k]=1;slot[k]=i;}
+        for(int k=0;k<2;++k)if(!found[k]){int failure=0;if(describe_checked(s,k,&result[k],&failure)){found[k]=1;slot[k]=i;}else if(failure>failures[k])failures[k]=failure;}
         if(found[0]&&found[1])break;
     }
-    if(!found[0]||!found[1])return 0;cache_collection=c;cache_begin=begin;memcpy(cached_slot,slot,sizeof(slot));*owner=c;return 1;
+    if(!found[0]||!found[1]){int k=!found[0]?0:1;diagnose((failures[k]==2?CAREER_DIAG_MONEY_READONLY:failures[k]==1?CAREER_DIAG_MONEY_LAYOUT:CAREER_DIAG_MONEY)+k);return 0;}
+    cache_collection=c;cache_begin=begin;memcpy(cached_slot,slot,sizeof(slot));*owner=c;diagnose(CAREER_DIAG_READY);return 1;
 }
 static void process_user(uintptr_t root,int64_t user,int has_user){
     if(user!=-1||!TryAcquireSRWLockExclusive(&guard))return;
     CareerField fresh[2];uintptr_t c=0;
     if(!has_user||!resolve(root,fresh,&c)){
+        if(!has_user)diagnose(CAREER_DIAG_NO_USER);
         snapshot.ready=0;snapshot.fitness_ready=0;snapshot.training_ready=0;snapshot.longevity_ready=0;longevity_disable();if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;active_root=collection=0;ReleaseSRWLockExclusive(&guard);return;
     }
     CareerField long_field={0};uint32_t identity=0;int long_ready=describe(fresh[0].store,CAREER_LONGEVITY,&long_field)&&long_field.bits==17&&long_field.value<=10000&&fighter_identity(fresh[0].store,&identity);
@@ -303,33 +311,37 @@ static void *__attribute__((sysv_abi)) hooked_user(uintptr_t *out,uintptr_t root
     if(user!=-1)return value;
     LONG64 now=(LONG64)GetTickCount64(),due=InterlockedCompareExchange64(&next_probe,0,0);
     if(now<due||InterlockedCompareExchange64(&next_probe,now+250,due)!=due)return value;
+    InterlockedIncrement(&diagnostic_probes);
 #ifdef CAREER_CHEATS_TEST
     ++probe_count;
 #endif
     uintptr_t selected=0;rd((uintptr_t)out,&selected,8);process_user(root,user,selected!=0);return value;
 }
-void career_cheats_init(uintptr_t base){guest=base;memset(&snapshot,0,sizeof(snapshot));InterlockedExchange64(&next_probe,0);longevity_disable();InterlockedExchange(&longevity_wanted,0);cache_collection=cache_begin=0;cached_slot[0]=cached_slot[1]=SIZE_MAX;}
+void career_cheats_init(uintptr_t base){guest=base;memset(&snapshot,0,sizeof(snapshot));InterlockedExchange64(&next_probe,0);diagnose(CAREER_DIAG_CODE_WAIT);InterlockedExchange(&diagnostic_hooks,0);InterlockedExchange(&diagnostic_probes,0);longevity_disable();InterlockedExchange(&longevity_wanted,0);cache_collection=cache_begin=0;cached_slot[0]=cached_slot[1]=SIZE_MAX;}
 void career_cheats_tick(void){
     if(!original_user){
         unsigned char bytes[sizeof(user_signature)];
-        uintptr_t flag=pointer(guest+0xb452958);char flag_name[28];
-        if(!rd(pointer(flag+8),flag_name,28)||memcmp(flag_name,"Fighter_Disable_StaminaLoss",26))return;
+        /* Career screens can load before fight-only NOA flags are registered.
+           The checked career function signatures below establish readiness;
+           a stamina binding is unrelated to the selected career database. */
         static const unsigned char get_sig[]={0x48,0x8b,0x47,0x08,0x89,0xd1,0x4c,0x8d,0x04,0x89,0x49,0xc1,0xe0,0x04};
         static const unsigned char set_sig[]={0x48,0x8b,0x47,0x08,0x41,0x89,0xd0,0x48,0x8b,0x7f,0x30,0x4f,0x8d,0x04,0x80};
         static const unsigned char dirty_sig[]={0x48,0x8b,0x47,0x10,0xff,0x80,0xe8,0x00,0x00,0x00,0xc3};
-        if(!rd(guest+0x5c015d0,bytes,sizeof(bytes)))return;
+        if(!rd(guest+0x5c015d0,bytes,sizeof(bytes))){diagnose(CAREER_DIAG_CODE_WAIT);return;}
         if(memcmp(bytes,user_signature,sizeof(bytes))||!rd(guest+0x56dcf80,bytes,sizeof(get_sig))||memcmp(bytes,get_sig,sizeof(get_sig))||
-           !rd(guest+0x56dd300,bytes,sizeof(set_sig))||memcmp(bytes,set_sig,sizeof(set_sig))||!rd(guest+0x56ccef0,bytes,sizeof(dirty_sig))||memcmp(bytes,dirty_sig,sizeof(dirty_sig))){snapshot.status=CAREER_UNSUPPORTED;return;}
+           !rd(guest+0x56dd300,bytes,sizeof(set_sig))||memcmp(bytes,set_sig,sizeof(set_sig))||!rd(guest+0x56ccef0,bytes,sizeof(dirty_sig))||memcmp(bytes,dirty_sig,sizeof(dirty_sig))){snapshot.status=CAREER_UNSUPPORTED;diagnose(CAREER_DIAG_CODE_MISMATCH);return;}
         game_get=(GetFn)(guest+0x56dcf80);game_set=(SetFn)(guest+0x56dd300);game_dirty=(DirtyFn)(guest+0x56ccef0);
         ExactHook hooks[]={
             {(unsigned char*)(guest+0x5c015d0),(void*)hooked_user,(void**)&original_user,user_signature,17},
             {(unsigned char*)(guest+0x56dd300),(void*)hooked_set,(void**)&original_set,set_sig,sizeof(set_sig)}
         };const char *error=NULL;
-        if(!install_exact_hooks(hooks,2,&error))return;
+        if(!install_exact_hooks(hooks,2,&error)){diagnose(CAREER_DIAG_HOOK_FAILED);return;}
+        InterlockedExchange(&diagnostic_hooks,1);diagnose(CAREER_DIAG_USER_WAIT);
     }
     AcquireSRWLockExclusive(&guard);
+    if(snapshot.status==CAREER_UNSUPPORTED)snapshot.status=CAREER_WAIT; /* Checked hooks are now installed. */
     if(snapshot.ready){CareerField fresh[2];
-        if(!describe(fields[0].store,0,&fresh[0])||!describe(fields[1].store,1,&fresh[1])||!same(&fields[0],&fresh[0])||!same(&fields[1],&fresh[1])){snapshot.ready=0;snapshot.fitness_ready=0;snapshot.training_ready=0;snapshot.longevity_ready=0;longevity_disable();if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;}
+        if(!describe(fields[0].store,0,&fresh[0])||!describe(fields[1].store,1,&fresh[1])||!same(&fields[0],&fresh[0])||!same(&fields[1],&fresh[1])){snapshot.ready=0;snapshot.fitness_ready=0;snapshot.training_ready=0;snapshot.longevity_ready=0;longevity_disable();diagnose(CAREER_DIAG_CHANGED);if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;}
         else for(int k=0;k<2;++k)snapshot.balance[k]=fresh[k].value;
     }
     if(snapshot.status==CAREER_PENDING&&GetTickCount64()-queued>30000)snapshot.status=CAREER_CHANGED;
@@ -337,6 +349,11 @@ void career_cheats_tick(void){
 }
 void career_cheats_cancel(void){AcquireSRWLockExclusive(&guard);InterlockedExchange(&longevity_wanted,0);snapshot.longevity_requested=0;longevity_disable();reward_multiplier=1;reward_restore();snapshot.training_multiplier=1;if(snapshot.status==CAREER_PENDING)snapshot.status=CAREER_CHANGED;ReleaseSRWLockExclusive(&guard);}
 void career_cheats_snapshot(CareerSnapshot *out){AcquireSRWLockShared(&guard);*out=snapshot;out->longevity_blocked=(uint32_t)InterlockedCompareExchange(&longevity_blocked,0,0);ReleaseSRWLockShared(&guard);}
+void career_cheats_diagnostics(CareerDiagnostics *out){out->reason=InterlockedCompareExchange(&diagnostic_reason,0,0);out->hooks=InterlockedCompareExchange(&diagnostic_hooks,0,0);out->probes=(uint32_t)InterlockedCompareExchange(&diagnostic_probes,0,0);}
+const char *career_cheats_diagnostic_name(int reason){
+    static const char *names[]={"waiting_for_guest_code","guest_signature_mismatch","hook_install_failed","waiting_for_default_user_lookup","no_selected_user","user_root_mismatch","user_registry_mismatch","collection_unavailable","money_schema_not_found","points_schema_not_found","money_layout_rejected","points_layout_rejected","money_record_read_only","points_record_read_only","verified","binding_changed"};
+    return reason>=0&&reason<(int)(sizeof(names)/sizeof(names[0]))?names[reason]:"unknown";
+}
 int career_cheats_add(int kind,uint32_t amount){
     if(kind<0||kind>=2||!amount)return 0;
     AcquireSRWLockExclusive(&guard);int ok=0;

@@ -65,6 +65,11 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual(sum(e[0]=='launch' for e in self.events),1)
         ini=configparser.ConfigParser();ini.read(self.report,encoding='utf-16');self.assertEqual(ini['Icons']['State'],'2')
         self.assertFalse(self.job.exists())
+    def test_startup_handoff_uses_separate_status_report(self):
+        self.config['Job']['theme']='startup_on';self.write_job();self.run_job()
+        self.assertLess(self.events.index(('wait',11)),self.events.index(('patch','startup_on')))
+        ini=configparser.ConfigParser();ini.read(self.report,encoding='utf-16')
+        self.assertEqual(ini['Startup']['State'],'2');self.assertNotIn('Icons',ini)
     def test_identity_failure_and_timeout_never_patch_or_relaunch(self):
         for fail in ['identity','timeout']:
             self.write_job();self.events.clear()

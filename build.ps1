@@ -15,7 +15,7 @@ if (-not $Test -and (Test-Path -LiteralPath 'dist/release.json')) {
 }
 python src/generate_controller_artwork.py --check
 if ($LASTEXITCODE) { throw 'Controller artwork data verification failed' }
-$sources = @('src/quit_menu.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/save_backups.c','src/overlay_preferences.c','src/startup_options.c','src/startup_prompts.c','src/photo_mode.c')
+$sources = @('src/quit_menu.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/save_backups.c','src/overlay_preferences.c','src/startup_options.c','src/startup_prompts.c','src/photo_mode.c','src/replay_controls.c','src/audio_focus.c','src/performance_settings.c')
 $flags = @('cc','-target','x86_64-windows-gnu','-O2','-Wall','-Wextra','-Werror','-shared','-Isrc','-luser32','-lgdi32','-lkernel32','-ladvapi32','-lcomdlg32','-lshell32','-lole32','-luuid')
 if ($Test) { $flags += '-DQUIT_MENU_TEST'; $output = 'dist/quit_menu_test.dll' }
 else { $output = 'dist/version.dll' }
@@ -32,7 +32,7 @@ if (-not $Test) {
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     $manifest = [ordered]@{
-        version = '0.9.18'
+        version = '0.9.36'
         parsec_engine_sha256 = 'ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d'
         engine_revision = '3309ab23f'
         engine_sha256 = 'f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2'
@@ -78,6 +78,42 @@ if ($Test) {
     if ($LASTEXITCODE) { throw 'Bootstrap compatibility fixture compilation failed' }
     & ./.build/bootstrap-compat/test.exe
     if ($LASTEXITCODE) { throw 'Bootstrap compatibility fixture failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/performance_settings_test.c src/performance_settings.c src/launch_config.c -o .build/performance_settings_test.exe
+    if ($LASTEXITCODE) { throw 'Performance test compilation failed' }
+    & .build/performance_settings_test.exe
+    if ($LASTEXITCODE) { throw 'Performance tests failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/photo_watermark_test.c -lgdi32 -o .build/photo_watermark_test.exe
+    if ($LASTEXITCODE) { throw 'Photo watermark test compilation failed' }
+    & .build/photo_watermark_test.exe
+    if ($LASTEXITCODE) { throw 'Photo watermark tests failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/photo_effects_test.c -o .build/photo_effects_test.exe
+    if ($LASTEXITCODE) { throw 'Photo effects test compilation failed' }
+    & .build/photo_effects_test.exe
+    if ($LASTEXITCODE) { throw 'Photo effects tests failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/replay_budget_test.c -o .build/replay_budget_test.exe
+    if ($LASTEXITCODE) { throw 'Replay budget build failed' }
+    & .build/replay_budget_test.exe
+    if ($LASTEXITCODE) { throw 'Replay budget tests failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/replay_range_test.c -o .build/replay_range_test.exe
+    if ($LASTEXITCODE) { throw 'Replay range build failed' }
+    & .build/replay_range_test.exe
+    if ($LASTEXITCODE) { throw 'Replay range tests failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/replay_postfight_test.c src/exact_hooks.c -o .build/replay_postfight_test.exe
+    if ($LASTEXITCODE) { throw 'Post-fight replay fixture compilation failed' }
+    & .build/replay_postfight_test.exe
+    if ($LASTEXITCODE) { throw 'Post-fight replay fixture failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/replay_controls_test.c -o .build/replay_controls_test.exe
+    if ($LASTEXITCODE) { throw 'Replay fixture compilation failed' }
+    & .build/replay_controls_test.exe
+    if ($LASTEXITCODE) { throw 'Replay fixture failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/audio_focus_test.c -o .build/audio_focus_test.exe
+    if ($LASTEXITCODE) { throw 'Audio focus fixture compilation failed' }
+    & .build/audio_focus_test.exe
+    if ($LASTEXITCODE) { throw 'Audio focus fixture failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/replay_cinematic_test.c -o .build/replay_cinematic_test.exe
+    if ($LASTEXITCODE) { throw 'Replay cinematic fixture compilation failed' }
+    & .build/replay_cinematic_test.exe
+    if ($LASTEXITCODE) { throw 'Replay cinematic fixture failed' }
     & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Isrc tests/photo_mode_test.c -o .build/photo_mode_test.exe
     if ($LASTEXITCODE) { throw 'Photo Mode fixture compilation failed' }
     & ./.build/photo_mode_test.exe
@@ -114,6 +150,10 @@ if ($Test) {
     if ($LASTEXITCODE) { throw 'Career cheat fixture compilation failed' }
     & ./.build/career_cheats_test.exe
     if ($LASTEXITCODE) { throw 'Career cheat tests failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror tests/next_hit_ko_test.c src/cheat_bindings.c src/exact_hooks.c -o .build/next_hit_ko_test.exe
+    if ($LASTEXITCODE) { throw 'KO fixture compilation failed' }
+    & ./.build/next_hit_ko_test.exe
+    if ($LASTEXITCODE) { throw 'KO fixture failed' }
     & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror tests/live_cheats_test.c src/cheat_bindings.c src/exact_hooks.c -o .build/live_cheats_test.exe
     if ($LASTEXITCODE) { throw 'Live cheat fixture compilation failed' }
     & ./.build/live_cheats_test.exe
@@ -239,4 +279,14 @@ if ($Test) {
     if ($LASTEXITCODE) { throw 'Startup settings UI failed' }
     python tests/icon_preview.py $startupFixture --startup-reload
     if ($LASTEXITCODE) { throw 'Startup settings persistence failed' }
+}
+
+if ($Test) {
+    $decisionFixture = Join-Path $root ('.build/decision-ui-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $decisionFixture | Out-Null
+    Copy-Item -LiteralPath 'dist/quit_menu_test.dll' -Destination $decisionFixture
+    python tests/icon_preview.py $decisionFixture --decision-replays --reset
+    if ($LASTEXITCODE) { throw 'Decision replay UI failed' }
+    python tests/icon_preview.py $decisionFixture --decision-replays-reload
+    if ($LASTEXITCODE) { throw 'Decision replay persistence failed' }
 }

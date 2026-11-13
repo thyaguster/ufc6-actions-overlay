@@ -23,3 +23,6 @@ EXPORTS
 
     Ufc6StartupProbeRequest
     Ufc6StartupProbeFrame
+
+    Ufc6PhotoEffects
+    Ufc6PhotoWatermark

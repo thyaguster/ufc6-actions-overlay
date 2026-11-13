@@ -9,6 +9,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#ifdef PHOTO_EFFECTS_GPU_TEST
+#include "../src/photo_effects.h"
+#endif
 
 #define CHECK(call) do {VkResult r=(call);if(r!=VK_SUCCESS){printf("FAIL %s: %d\n",#call,r);exit(1);}}while(0)
 #define INSTANCE(n) PFN_vk##n n=(PFN_vk##n)gipa(instance,"vk" #n)
@@ -117,7 +120,11 @@ int main(void){
     Sleep(400);typedef void (*SettingsModeFn)(int);SettingsModeFn settings_mode=(SettingsModeFn)GetProcAddress(core,"MenuTestSettingsMode");if(settings_mode)settings_mode(1);
     ToggleFn enable_probe=(ToggleFn)GetProcAddress(core,"MenuTestStartupProbeEnable");if(!enable_probe)return 1;enable_probe();
     toggle();Sleep(100);if(screenshot)screenshot();
-    for(int frame=0;frame<16;++frame){
+    int frame_count=16;
+#ifdef PHOTO_EFFECTS_GPU_TEST
+    frame_count=71;
+#endif
+    for(int frame=0;frame<frame_count;++frame){
         if(button&&scale){
             if(frame==1){for(int i=0;i<5;++i)press(button,0x40);press(button,0x4000);press(button,0x40);press(button,0x40);}
             if(frame==2){for(int i=0;i<4;++i)press(button,0x20);if(scale()!=200)return 1;}
@@ -131,10 +138,34 @@ int main(void){
         if(frame==9&&screenshot)screenshot();
         if(frame==10){typedef void (*InvokeFn)(int);InvokeFn invoke=(InvokeFn)GetProcAddress(core,"MenuTestInvokeBinding");ScaleFn window_size=(ScaleFn)GetProcAddress(core,"MenuTestWindowSize");if(!invoke||!window_size)return 1;invoke(3);Sleep(100);for(int i=0;i<18;++i)press(button,0x40);press(button,0x4000);press(button,0x4000);if(window_size()!=2){printf("FAIL: expected Tall, got %d\n",window_size());return 1;}invoke(2);Sleep(100);}
         if(frame==11){press(button,0x2000);press(button,0x40);press(button,0x4000);}
-        if(frame==12){for(int i=0;i<9;++i)press(button,0x40);press(button,0x4000);if(screenshot_overlay)screenshot_overlay();}
+        if(frame==12){for(int i=0;i<8;++i)press(button,0x40);press(button,0x4000);if(screenshot_overlay)screenshot_overlay();}
 
         if(frame==13||frame==14){typedef void (*HelpFn)(int,int,int);HelpFn help=(HelpFn)GetProcAddress(core,"MenuTestPhotoHelp");if(!help)return 1;help(1,frame==14,frame==14);Sleep(80);if(frame==13&&screenshot)screenshot();if(frame==14&&screenshot_overlay)screenshot_overlay();}
         if(frame==15){typedef void (*HelpFn)(int,int,int);((HelpFn)GetProcAddress(core,"MenuTestPhotoHelp"))(0,0,0);}
+#ifdef PHOTO_EFFECTS_GPU_TEST
+        if(frame>=16){typedef void (*EffectsFn)(const PhotoEffects*,int);EffectsFn effects=(EffectsFn)GetProcAddress(core,"MenuTestEffects");if(!effects)return 1;PhotoEffects look;photo_effects_default(&look);
+            if(frame>=17&&frame<=22)look.preset=frame-16;
+            if(frame==23)look.exposure=2;
+            if(frame==24)look.bars=1;
+            if(frame>=25&&frame<=28){look.watermark=1;look.corner=frame-25;wcscpy(look.name,L"Photo Tester");}
+            if(frame==30)look.vignette=4;
+            if(frame==31)look.grain=4;
+            if(frame==32)look.saturation=0;
+            if(frame==33)look.contrast=8;
+            if(frame==34)look.warmth=4;
+            if(frame==35){look.preset=5;look.strength=0;}
+            if(frame==36){look.watermark=1;look.opacity=1;look.size=0;wcscpy(look.name,L"Photo Tester");}
+            if(frame>=38&&frame<=41)look.preset=5;
+            if(frame>=42&&frame<=57){look.watermark=1;look.mark_style=(frame-42)/4;look.mark_font=(frame-42)%4;wcscpy(look.name,L"Photo Creator");}
+            if(frame>=58&&frame<=60){look.preset=2;look.watermark=1;wcscpy(look.name,L"Photo Creator");}
+            if(frame>=62){look.watermark=1;look.mark_style=0;look.mark_color=frame==70?1:frame-62;wcscpy(look.name,L"Photo Creator");}
+            effects(&look,(frame==38||frame==58||frame==59)?2:frame!=29&&frame!=37&&frame!=61);Sleep(80);
+            if(frame==38){typedef void (*HelpFn)(int,int,int);((HelpFn)GetProcAddress(core,"MenuTestPhotoHelp"))(1,0,0);Sleep(80);screenshot_overlay();}
+            else if(frame>=39&&frame<=41){toggle();Sleep(80);for(int i=0;i<4;++i)press(button,0x40);press(button,0x4000);for(int i=0;i<9;++i)press(button,0x40);press(button,0x4000);Sleep(80);screenshot_overlay();}
+            else if(frame==58||frame==59){typedef int (*PanelFn)(uint32_t,unsigned);PanelFn panel=(PanelFn)GetProcAddress(core,"MenuTestPhotoPanel");if(!panel||panel(8,0)!=frame-57)return 1;Sleep(80);screenshot_overlay();}
+            else screenshot();
+        }
+#endif
         MSG msg;while(PeekMessageW(&msg,NULL,0,0,PM_REMOVE)){TranslateMessage(&msg);DispatchMessageW(&msg);}
         uint32_t index;CHECK(AcquireNextImageKHR(device,swap,UINT64_MAX,acquire,VK_NULL_HANDLE,&index));
         CHECK(ResetCommandBuffer(cmd,0));VkCommandBufferBeginInfo bi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};CHECK(BeginCommandBuffer(cmd,&bi));
@@ -142,13 +173,21 @@ int main(void){
             .dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,.srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,
             .image=images[index],.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1}};
         CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&barrier);
-        VkClearColorValue color={{.04f,.06f,.09f,1.f}};CmdClearColorImage(cmd,images[index],VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,&color,1,&barrier.subresourceRange);
+        VkClearColorValue color={{.04f,.06f,.09f,1.f}};
+#ifdef PHOTO_EFFECTS_GPU_TEST
+        if(frame==70)color=(VkClearColorValue){{.95f,.95f,.95f,1.f}};
+#endif
+        CmdClearColorImage(cmd,images[index],VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,&color,1,&barrier.subresourceRange);
         barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;barrier.dstAccessMask=0;barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;barrier.newLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
         CmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,0,0,NULL,0,NULL,1,&barrier);CHECK(EndCommandBuffer(cmd));
         VkPipelineStageFlags stage=VK_PIPELINE_STAGE_TRANSFER_BIT;
         VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.waitSemaphoreCount=1,.pWaitSemaphores=&acquire,.pWaitDstStageMask=&stage,.commandBufferCount=1,.pCommandBuffers=&cmd,.signalSemaphoreCount=1,.pSignalSemaphores=&ready};CHECK(QueueSubmit(queue,1,&submit,VK_NULL_HANDLE));
         VkPresentInfoKHR present={.sType=VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,.waitSemaphoreCount=1,.pWaitSemaphores=&ready,.swapchainCount=1,.pSwapchains=&swap,.pImageIndices=&index};CHECK(QueuePresentKHR(queue,&present));CHECK(DeviceWaitIdle(device));
         if(frame==12||frame==13||frame==14){typedef void (*PathFn)(wchar_t*,int);PathFn path=(PathFn)GetProcAddress(core,"MenuTestScreenshotPath");wchar_t saved[32768];if(!path)return 1;path(saved,32768);if(!saved[0]||!CopyFileW(saved,frame==12?L"capture-overlay-menu.png":frame==13?L"capture-clean.png":L"capture-overlay-panel.png",FALSE))return 1;}
+
+#ifdef PHOTO_EFFECTS_GPU_TEST
+        if(frame>=16){typedef void (*PathFn)(wchar_t*,int);PathFn path=(PathFn)GetProcAddress(core,"MenuTestScreenshotPath");wchar_t saved[32768],name[64];if(!path)return 1;path(saved,32768);swprintf(name,64,L"effect-%d.png",frame);if(!saved[0]||!CopyFileW(saved,name,FALSE))return 1;}
+#endif
 
     }
     typedef int (*ProbeFramesFn)(void);

@@ -46,7 +46,10 @@ static void test_hud(void){
  reset();update((uintptr_t)o,0);photo_mode_poll(1,0,NULL);
  PhotoSnapshot snap;photo_mode_snapshot(&snap);assert(snap.hud_hidden&&snap.state==2);
  check_hud(0,1);check_hud(1,1);
- photo_mode_poll(1,1,NULL);check_hud(0,0);
+ photo_mode_poll(1,1,NULL);check_hud(0,1);check_hud(1,1);
+ for(int i=0;i<20;++i){photo_mode_poll(1,i&1,NULL);check_hud(i&1,1);photo_mode_snapshot(&snap);assert(snap.hud_hidden&&snap.state==2);}
+ photo_mode_poll(1,1,NULL);photo_mode_command(PHOTO_HUD);update((uintptr_t)o,0);check_hud(0,0);
+ photo_mode_poll(1,0,NULL);check_hud(1,0);photo_mode_command(PHOTO_HUD);update((uintptr_t)o,0);check_hud(0,1);
  photo_mode_poll(1,0,NULL);photo_mode_command(PHOTO_HUD);update((uintptr_t)o,0);photo_mode_snapshot(&snap);assert(!snap.hud_hidden);check_hud(1,0);
  photo_mode_command(PHOTO_HUD);update((uintptr_t)o,0);check_hud(1,1);
  *(uintptr_t*)hal=0;check_hud(0,0);*(uintptr_t*)hal=0x909ba4518ULL;
@@ -106,5 +109,5 @@ int main(void){
  reset();update((uintptr_t)o,0);published_input.right=1;photo_mode_poll(1,1,&published_input);assert(published_input.right==0);commands=PHOTO_STOP;update((uintptr_t)o,0);assert(state==3);
  reset();update((uintptr_t)o,0);fixture_now+=1100;update((uintptr_t)o,0);assert(state==3&&!photo_mode_blocks_input());
  test_hud();test_hud_pages();
- puts("PASS: guarded HUD packet suppression preserves native bookkeeping, real counts and state commands; HUD default/toggle, both draw routes, menu/focus/exit/stale-input restoration, foreign-owner forwarding and six arguments; native camera entry, movement/FOV/reset, frozen real-time movement, focus/timeout/exit restoration, external ownership and invalid identities.");return 0;
+ puts("PASS: guarded HUD packet suppression preserves native bookkeeping, real counts and state commands; HUD default/toggle, both draw routes, menu visibility stability and explicit/focus/exit/stale-input restoration, foreign-owner forwarding and six arguments; native camera entry, movement/FOV/reset, frozen real-time movement, focus/timeout/exit restoration, external ownership and invalid identities.");return 0;
 }

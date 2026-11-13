@@ -1,20 +1,24 @@
-# Planned additions
+# Roadmap
 
 These are investigation targets, not promises of released behavior.
 
-## Next
+## Replay follow-ups
 
-1. **Remove known startup network dialogs directly.** Investigate bypassing the PSN/EA sign-in and roster-download dialogs while preserving the real offline state. Keep the existing auto-confirm fallback.
-2. **Verify the reported invisible-overlay case on the affected PC.** The current release adds legacy-compatible loader paths, automatic loader/elevation evidence and protection against invisible menus capturing input. Local startup/GPU tests pass; the remote user's result is still needed.
-3. **Broaden startup prompt recognition.** Add tested languages/layouts beyond the current English 16:9 screens.
+- **Mid-fight instant replay:** investigate the hidden native pause-menu route and safe restoration of the active fight. Not included in v0.9.36.
+- **Brief replay flashes:** investigate camera-cut flashes during playing or paused replay. The long paused black screen has been fixed; brief flashes remain separate.
+- **Longer recording coverage:** test continuous playback across additional rounds and longer fights. Available recording is limited to retained continuous footage; do not promise whole-fight capture.
+- **Draw testing (lower priority, deferred):** verify unanimous/split draws, including no selected highlights with valid retained clips, repeated entry/exit and rematch cleanup. Decision cases are already verified and this is not a release blocker.
+- **Normal-mode live replay validation:** the new controls are live-tested in Parsec mode; broaden live coverage to normal mode.
 
-## Later candidates
+## Other candidates
 
-- Named appearance and shortcut presets with import/export.
-- Optional automatic save backup before career-changing actions, with retention controls.
-- More useful Photo Mode presentation controls, after verifying reversible native behavior.
-- Clearer cheat availability descriptions and whether changes persist in saves.
+- Implement performance options directly in the overlay instead of relying on PORTHEON settings, with live application and restoration where feasible.
+- Follow up on the affected user's career-code/binding report. Running PORTHEON without administrator rights resolved that user's invisible-overlay issue; this is a client workaround, not a universal diagnosis.
+- Broaden visual startup fallback language/layout coverage. The native title/network-warning bypass does not depend on visual detection.
+- Named appearance/keybind presets and import/export.
+- Optional automatic save backups before career-changing actions, with retention controls.
+- Further inventory/progression unlock investigation; existing PORTHEON fighter/skin unlocks remain launcher features.
 
-## Completed in this release
+## Included in v0.9.36
 
-Photo Mode/free camera, controller movement/look/FOV controls, freeze, HUD hiding, cage visibility, a translucent controls panel, separate overlay-inclusive screenshots, and explicit PORTHEON\games\UFC6 installation wording. Training-point rewards and A-grade sparring actions retain their existing verified release status.
+Photo Mode, HUD/cage controls, filters, styled watermarks, optional overlay-inclusive screenshots, performance settings, native startup bypass, replay pause/steps/speed/available-recording controls, decision replay fallback, Next hit KO and background muting. Decision repeat entry and rematch cleanup are confirmed. See the release notes and Photo Mode guide for limits and controls.

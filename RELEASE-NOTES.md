@@ -1,3 +1,143 @@
+## v0.9.36 - Decision replay selection timing (decision replay locally validated)
+
+- Wait for a consistent selected-clip count and stable replay slots before applying the decision fallback. Ignore incomplete zero-initialized slots.
+- Recover if the native collector overwrites fallback slots later in the same finished fight; do not rewrite slots while playback is active. Preserve the completed native selection for cleanup.
+- In v0.9.36, the automatic fallback enabled replay for a unanimous decision with only two selected clips. The user confirmed two replay visits played and exited normally without manual repair; the trace confirms one automatic activation and preserved slots after both exits. A second unanimous-decision test also passed with zero selected highlights: the fallback found a retained clip and both replay visits worked. Rematch cleanup is live-verified. The distinct draw playback path remains unverified in-game.
+
+## v0.9.35 - Decision replay fallback (local build; integrated live test pending)
+
+- Add **Settings > Game & launcher > Replay after decisions**, Off by default. Enable before starting a fresh supported offline fight. Reuse validated native highlight clips when the selected recap is incomplete, including fallback selection for draws.
+- Keep fallback slots available across repeated View Replay visits, including idle exits. Preserve new-fight resets. Turning the setting Off affects future fights without invalidating the current replay.
+- Keep the Photo Mode Replay page selected through temporary replay unavailability; show its waiting state instead of unexpectedly returning to Camera.
+- This does not create missing footage or guarantee a distinct clip per round. An incomplete decision recap may repeat a clip to satisfy the required slot count. Zero-selected-clip draws and repeat entry in the integrated build still need live validation. The earlier session-specific decision prototype successfully enabled playback; its exit cleanup needed manual correction.
+
+## v0.9.34 - Replay speed and controller shortcuts (locally validated)
+
+- Replay Speed offers Native, 0.1x, 0.25x, 0.5x, 1x and 2x. Native preserves the game-selected slow motion; numbered rates compensate it using bounded consecutive update time. Native speed/hold fields remain untouched, and a native zero-speed hold is respected. The selection lasts for the overlay session and defaults to Native on launch.
+- On the visible Replay panel, Y/Triangle pauses/resumes and LB/RB or L1/R1 steps backward/forward. D-pad selects and adjusts rows; B/Circle returns to Camera. Shoulder shortcuts do not also move the camera vertically.
+- Matching controller artwork appears on the panel. Native speed compensation and controller routing tests pass. User confirms all speeds and controller shortcuts work in-game.
+
+## v0.9.33 - Expanded playback correction (locally validated)
+
+- Correct zero elapsed time supplied by the held finish cinematic during Available recording playback. Use consecutive update ticks only while expanded playback is active, unpaused and focused; discard gaps above 250 ms.
+- Keep native replay speed, normal finish-clip timing, pause/step controls and cinematic ownership unchanged.
+- v0.9.32 live test confirmed earlier footage and both step directions, but automatic playback failed. v0.9.33 is user-confirmed: automatic playback, pause, bidirectional stepping and finish-clip restoration work. The passive trace also confirms advancing playback while the finish cinematic stays held. Arbitrary-length whole-fight retention remains unverified.
+
+## v0.9.32 — Available recording (local build, live validation pending)
+
+- Add **Range → Finish clip / Available recording** to Photo Mode's Replay panel. Available recording selects the continuous stored section containing the finish clip, pauses at its start, and excludes gaps in either recording service.
+- Returning to Finish clip restores its saved position. Exiting Photo Mode or losing focus restores the owned finish range; foreign or changed replay state is preserved.
+- Keep the finish cinematic paused while browsing or playing the expanded recording, and pause recorded playback at the available section's end.
+- Allocate 256 MiB for fresh auxiliary replay recorders on the verified engine, then restore the original settings asset. Existing recorders and files are not resized or edited.
+
+The private allocation, continuous coverage of one two-round fight, early-frame seeking and a short round-boundary scan are user-confirmed. The integrated controls, uninterrupted playback and longer/five-round retention still require live validation. This is **not a guarantee of whole-fight recording**, and nothing has been published to GitHub.
+
+## v0.9.31 — Next hit KO
+
+- Added **Next hit KO** to Cheats, beneath No damage. Confirm to arm for 25 seconds; confirm again to cancel. A clean head strike can knock out Player 1's opponent and generate the normal finish replay.
+- Resolves the opponent from controller ownership, automatically disarms after a KO, and cancels on timeout, focus loss, Photo Mode/replay entry or changed fighter bindings. Starts unarmed each session.
+- Preserves existing nonzero game overrides and rejects ambiguous controller mappings or fighters already finished.
+- The integrated Parsec action is user-confirmed: arm/cancel, opponent-only KO, automatic disarm and normal finish replay all work.
+
+# UFC 6 Actions Overlay v0.9.30 — local replay steps and background audio
+
+- Add Step size to the Photo Mode Replay panel: 10, 25, 50, 100, 250, 500 or 1000 milliseconds, with a finer 10 ms default and a millisecond position display.
+- Save and reload the selected step size. Reset settings restores the default.
+- Add Game & launcher → Mute when unfocused, Off by default. Silence only the verified game PCM feed while minimized or in the background, then forward normal samples on focus or when disabled. Windows mixer preferences and other applications are untouched.
+- Verify both supported engine profiles, the PCM submission call site and dispatch target before enabling the audio hook.
+
+The background-audio prototype is confirmed in Parsec mode. Native fixtures and UI rendering/persistence checks pass; the integrated installation still needs its live check. This build does not add slow replay playback, full-fight recording or new unlock patches. Those are separate investigations. It remains local and unpublished.
+
+# UFC 6 Actions Overlay v0.9.29 — local replay presentation correction
+
+- Pause the native cinematic presentation together with the recorded replay clock, preventing the delayed black screen observed during paused Photo Mode replays.
+- Use the existing P / A / Cross and Replay page controls automatically; no diagnostic function keys are required.
+- Restore the owned native cinematic and script pauses on replay resume, Photo Mode exit, focus loss or stale UI input. Preserve pauses that were already active and reject changed cinematic/entity contexts.
+- Verify the cinematic timer and paired native pause/resume signatures before installing replay hooks.
+
+The full native-pause prototype is visually confirmed in Parsec mode: the picture stays visible and playback resumes. Coupled replay/cinematic fixtures cover a sixty-second hold, bidirectional stepping and restoration. The user confirmed the integrated v0.9.29 pause, both step directions and restoration in Parsec mode. Brief flashes still occur during replay, including while paused; those remain under investigation. This build remains local and unpublished.
+
+# UFC 6 Actions Overlay v0.9.28 — local replay controls build
+
+- Add a Replay page to the translucent Photo Mode panel during the game's View Replay: pause playback and adjust position in 0.1-second steps.
+- Pause the native playback clock, keeping the selected moment held without looping. Native seek changes both the selected frame and the controller clock so playback resumes there.
+- Use the existing P / A / Cross freeze control for replay-clock pause when a replay is active. Camera, effects, watermark and screenshots remain available.
+- Release replay pause on Photo Mode exit, focus loss, changed playback ownership/clip or stale UI updates. Production controls do not have the prototype's fifteen-second test limit.
+- Offer F4 as an alternative Photo Mode page key when F8 is assigned to screenshots, and display the available key.
+
+The private native pause/seek prototype is visually confirmed in Parsec mode, including resume from the selected moment. The integrated panel build still requires its own in-game check. Controls apply within the current recorded replay clip; this does not add full-fight recording or launch the game's replay viewer. This build is local and unpublished. It carries the v0.9.27 career diagnostics; the affected client's code mismatch is still under investigation.
+
+# UFC 6 Actions Overlay v0.9.27 â€” career initialization test build
+
+- Initialize checked career hooks without waiting for the unrelated fight stamina-flag registration. A loaded career can otherwise remain permanently unbound.
+- Recover a temporary unsupported-code state once matching guest functions are available.
+- Log bounded career binding reasons and every requested career action, distinguishing missing user lookups, schema/layout failures, read-only records and hook problems. Keep save-data guards intact.
+- Replace the misleading "Open the career hub first" failure with a verification/support-report message.
+
+The affected client's v0.9.18 report shows a matching installation without elevation and no verified career binding. The removed startup dependency is reproduced in an isolated native fixture; its exact role on the affected PC remains unconfirmed. This is a local test installer, not a published release.
+
+# UFC 6 Actions Overlay v0.9.26 â€” local offline-identifier correction
+
+- Include the native PSN/EA offline warning identifiers TXT_UNABLE_TO_LOGIN and TXT_UNABLE_TO_LOGIN_EA, alongside the separate Blaze connection warning, in the state-entry bypass.
+- Preserve unrelated login-error popups and the original failure notification.
+- Recognize the verified v0.9.25 recipe during updates without replacing the original script backup; unknown backup profiles and edits are still rejected.
+
+The v0.9.25 live test still displayed the online warning, while the roster warning was absent. Native handler inspection found that the filter omitted the actual offline-login identifiers. The user confirmed automatic main-menu entry with both warnings absent in Parsec mode. Visual auto-confirm stayed Off, the session recorded zero injected confirmations and the original backup was unchanged. Normal-mode live validation and the actual overlay enable/restore handoff remain pending.
+
+# UFC 6 Actions Overlay v0.9.25 â€” local correction candidate
+
+- Move the known-offline warning continuation into the active login-failure navigation state, replacing the too-early callback acknowledgement introduced in v0.9.24.
+- Keep the original popup handling for other login errors and retain LOGIN_TRANSITION_FAILURE notification for both paths.
+
+The v0.9.24 refinement failed live verification: the user reported network warnings returning while visual auto-confirm was Off. The corrected state-based version passes recipe/backup/rollback checks; live verification is pending.
+
+# UFC 6 Actions Overlay v0.9.24 â€” local validation build
+
+- Add Game & launcher â†’ Skip title & network warnings, with Enable bypass and Restore startup screens.
+- Use normal profile initialization and native failure acknowledgement transitions instead of screen matching or injected inputs. Limit login suppression to the known offline error; retain other login errors.
+- Back up original script ranges locally, verify hashes, reject changed/unsupported assets, preserve archive sizes and verify rollback on write failure.
+- Reuse the bundled helper and configured launcher for Cancel-first close/patch/relaunch in normal or Parsec mode. Keep the visual auto-confirm fallback separate.
+
+Compatibility: PPSA23566 01.006.000. The broad prototype reached the main menu in Parsec mode with visual confirmation Off and no injected confirmations. The integrated, error-specific login refinement still needs in-game verification. Brief startup transitions can remain. Restore game-script patches before uninstalling the overlay.
+
+# UFC 6 Actions Overlay v0.9.23
+
+- Add Settings â†’ Performance with PORTHEON's existing crowd/animation, particles/sparks, depth-of-field, dynamic-resolution and render-scale options. Display next-launch settings, with no claim of immediate live application.
+- Add Save for next launch, Cancel-first Save & restart game and unsaved-edit discard confirmation. Keep normal and Parsec mode on the same configuration and existing restart handoff.
+- Preserve unrelated launcher values and Unicode data; save via checked temporary replacement, reject detected concurrent changes and avoid writing to a different custom launcher.
+
+Validation: isolated native settings/write-conflict/persistence tests, controller/UI page and Cancel-first restart tests, existing regression checks. The user confirmed the integrated Performance page and discard behavior; PORTHEON crowd-off patches were applied and visually working.
+
+# UFC 6 Actions Overlay v0.9.22 â€” local stability candidate
+
+- Preserve the selected Photo Mode HUD visibility while the overlay tools/settings are open. Remove the automatic HUD show/hide transition previously caused by opening/closing the tools. Explicit HUD toggles, focus-loss and Photo Mode exit still restore visibility normally.
+- Add bounded UTC lifecycle records for capture requests/results, screenshot-policy changes and Photo Mode/tools transitions, without recording player names or image contents.
+
+The repeated PORTHEON texture-cache CPU-dirty assertion is still under investigation. A prior screenshot completed successfully before a crash with Photo Mode active and the tools opening. This candidate removes one unintended visibility transition; it is not yet a confirmed root-cause fix.
+
+# UFC 6 Actions Overlay v0.9.21
+
+- Add watermark text colors: White, Black, Silver, Gold, Coral, Sky, Mint and Violet, selectable live on the translucent Watermark page and in the full menu. Adapt contrast shadow/Glass backdrop for dark lettering and save the color preference.
+- Replace the separate Screenshot + overlay action with an Off-by-default **Settings â†’ Files & support â†’ Include overlay in screenshots** switch. Normal screenshot controls follow it; remove D-pad Left, the default Ctrl+Shift+F12 action, the extra Keybinds entry and Camera-panel hint. Ignore retired overlay-shot bindings without changing normal screenshot assignments.
+
+Validation: native settings/input/persistence, Xbox/PlayStation UI layout, GPU color/screenshot capture and installer checks. In-game verification pending.
+
+# UFC 6 Actions Overlay v0.9.20
+
+- Add Camera, Effects and Watermark pages to the translucent Photo Mode panel. Menu/Options or F8 cycles pages; D-pad or W/S and A/D selects/adjusts effects live while the camera sticks remain available. B/Circle returns to Camera; Esc exits directly. Keep the full tools pages available.
+- Add Clean, Glass, Editorial and Signature watermark styles, four font families, existing size/corner/opacity controls, and cached high-resolution lettering with filtered GPU scaling. Read the automatic PORTHEON name as before; no new text-entry box is needed.
+- Keep editor-page D-pad input separate from HUD, cage, freeze and overlay-shot shortcuts. Clean screenshots remain available on X/Square; assigned user shortcuts retain priority.
+
+Validation: native input routing/persistence/raster tests, Xbox/PlayStation panel font/layout checks, controller regressions and real-GPU screenshot checks. In-game verification pending.
+
+# UFC 6 Actions Overlay v0.9.19
+
+- Add Photo Mode â†’ Filters & effects: six color presets, strength, exposure, contrast, saturation, warmth, vignette, stable film grain and cinematic bars; neutral defaults and Reset effects.
+- Add an optional photo watermark using the PORTHEON player name, with corner, opacity and size controls. Show the detected name before enabling; never fall back to a Windows login. Custom text can be supplied in the overlay INI.
+- Preview effects live on the GPU and preserve them in both screenshot modes, while the tools retain their normal colors. Restore the normal image on Photo Mode exit/focus loss and remember the selected settings for the next session.
+
+Validation: native settings/navigation tests, full controller/UI regression and real-GPU pixel tests on BGRA/RGBA linear and sRGB formats. In-game visual/performance verification is pending.
+
 # UFC 6 Actions Overlay v0.9.18
 
 - Add Photo Mode with controller/keyboard free-camera movement, look, field-of-view zoom, reset and restoration on exit or focus loss. Open it from the main menu or F9 during a running fight/practice.
@@ -83,21 +223,21 @@ Validated installer/update checks, rendered both windows for visual review, and 
 # UFC 6 Actions Overlay v0.9.6
 
 - Replaces the U6 monogram with a full **UFC 6** icon: white UFC lettering and a large red 6.
-- Updates the installer, updater, GitHub branding, and editable vector artwork. Windows ICO sizes cover 16–256 px.
+- Updates the installer, updater, GitHub branding, and editable vector artwork. Windows ICO sizes cover 16â€“256 px.
 
 Icon-only release. Installer and updater validation checks passed; game behavior is unchanged.
 
 # UFC 6 Actions Overlay v0.9.5
 
 - Adds **Settings > Check for updates...** and an installer update button. The desktop checker finds the latest stable release on GitHub, offers newer versions, verifies the installer against release SHA-256 checksums (and the GitHub asset digest when provided), then opens setup with your game folder filled in. Downloads and installation require user actions; there are no silent startup updates.
-- Adds an original U6 icon to the installer and updater, with 16–256 px ICO sizes and editable SVG artwork.
+- Adds an original U6 icon to the installer and updater, with 16â€“256 px ICO sizes and editable SVG artwork.
 - Puts simple installation steps at the top of the README and clarifies that one install supports normal UFC 6 and the verified Parsec engine without extra overlay steps.
 - Smoother text, button symbols, switches and outlines with 2x supersampling at the selected UI scale. Unchanged frames reuse a cached image to keep the extra rendering work off normal frames. Settings scroll markers are drawn as shapes, and text bounds are checked from 50% to 300%.
 - **Cheats > Savegame backups...** creates separate, timestamped ZIPs in **Documents / UFC6 Actions Overlay / SaveBackups**, with an action to open the folder. Save in the game and wait for autosaving to finish first; unsaved progress is not included.
 - Backups include default-user and guest-user UFC 6 saves, preserve their relative `_SaveData` paths, and contain a SHA-256 manifest. Files and archive contents are verified; detected source changes or failures discard the incomplete ZIP while leaving saves and older backups untouched.
 - Backup work runs outside the game-rendering thread using the bundled helper. No separate Python installation is needed, and removing the overlay keeps backups.
 
-Validated with native controller/cheat/power-stub checks, renderer/text bounds at 50–300%, backup round trips and failure cases, two consecutive launches of the packaged helper, a verified backup of the user's 25 save files, installer upgrade/removal/rollback tests, normal/Parsec shared-install coverage, updater rejection fixtures, and an actual verified GitHub download without launching it.
+Validated with native controller/cheat/power-stub checks, renderer/text bounds at 50â€“300%, backup round trips and failure cases, two consecutive launches of the packaged helper, a verified backup of the user's 25 save files, installer upgrade/removal/rollback tests, normal/Parsec shared-install coverage, updater rejection fixtures, and an actual verified GitHub download without launching it.
 
 # UFC 6 Actions Overlay v0.9.3
 
@@ -111,7 +251,7 @@ Adds Player 1 cheats, career additions, integrated controller-icon patching, and
 - Restart PC's auto-launch indication is now inline text and a status dot, keeping it clear of the row borders. The confirmation also states whether auto-launch is enabled and where to change it.
 - Adds updated screenshots, including Cheats and the controller-icon patch page.
 
-Validation: controller ownership and Parsec regressions; native cheat fixtures; confirmed in-game stamina independence and career additions; font bounds at 50–300% scaling; game-icons validation/restore/rollback fixtures; a second packaged-helper launch after temporary-runtime cleanup; installer upgrade/removal/rollback checks. PC power tests use stubs and never power off or reboot the test machine.
+Validation: controller ownership and Parsec regressions; native cheat fixtures; confirmed in-game stamina independence and career additions; font bounds at 50â€“300% scaling; game-icons validation/restore/rollback fixtures; a second packaged-helper launch after temporary-runtime cleanup; installer upgrade/removal/rollback checks. PC power tests use stubs and never power off or reboot the test machine.
 
 Downloads: **UFC6-Actions-Overlay-Setup-0.9.3.exe** (recommended) or **UFC6-Actions-Overlay-0.9.3.zip** (installer, prebuilt components, source and licenses).
 
@@ -208,10 +348,10 @@ The main game-action UI is unchanged from v0.8.1; Settings adds the Guide toggle
 
 ## Downloads
 
-- **UFC6-Actions-Overlay-Setup-0.8.4.exe** — recommended. One file with all overlay components built in. No Python or compiler required.
-- **UFC6-Actions-Overlay-0.8.4.zip** — setup EXE, prebuilt mod files, complete project source, build scripts, tests, and licenses.
-- **Overlay-Screenshots-0.8.1.zip** — gallery from v0.8.1, including the main menu and Settings over the game menu. The current Settings preview is in the README.
-- **SHA256SUMS.txt** — checksums for these download files.
+- **UFC6-Actions-Overlay-Setup-0.8.4.exe** â€” recommended. One file with all overlay components built in. No Python or compiler required.
+- **UFC6-Actions-Overlay-0.8.4.zip** â€” setup EXE, prebuilt mod files, complete project source, build scripts, tests, and licenses.
+- **Overlay-Screenshots-0.8.1.zip** â€” gallery from v0.8.1, including the main menu and Settings over the game menu. The current Settings preview is in the README.
+- **SHA256SUMS.txt** â€” checksums for these download files.
 
 ## Install
 
@@ -222,7 +362,7 @@ Use the same setup's **Remove overlay** button to uninstall. Settings and screen
 ## Features
 
 - Resume, take a clean game screenshot, restart the game, or quit normally.
-- Separate Settings page with Xbox/PlayStation prompts, a configurable controller shortcut, and 50–300% UI scaling.
+- Separate Settings page with Xbox/PlayStation prompts, a configurable controller shortcut, and 50â€“300% UI scaling.
 - Quit game directly below Settings, with a gap before the PC restart/shutdown actions.
 - Confirmed PC shutdown or restart with a 3-second hold and cancellable 10-second countdown.
 - Optional **Launch UFC 6 after PC restart**, On by default. Status is shown beside Restart PC and in its confirmation. Auto-launch happens once at the same user's next Windows sign-in.

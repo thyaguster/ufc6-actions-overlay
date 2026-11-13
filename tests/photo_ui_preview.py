@@ -45,7 +45,7 @@ parser.add_argument("--startup-reload",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
 if args.reset:
-    (folder/"ufc6-quit-menu.test.ini").write_text("[Menu]\nButtonIcons=Xbox\nOpeningShortcut=0xc08\nUIScale=100\n")
+    (folder/"ufc6-quit-menu.test.ini").write_text("[Menu]\nButtonIcons=Xbox\nOpeningShortcut=0xc08\nUIScale=100\n[Photo]\nWatermarkText=Photo Creator\n")
 u=c.WinDLL("user32",use_last_error=True)
 k=c.WinDLL("kernel32",use_last_error=True)
 u.CreateWindowExW.argtypes=[w.DWORD,w.LPCWSTR,w.LPCWSTR,w.DWORD,c.c_int,c.c_int,c.c_int,c.c_int,w.HWND,w.HMENU,w.HINSTANCE,c.c_void_p]
@@ -107,12 +107,19 @@ try:
     for _ in range(4):press(0x40)
     press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==21
     render("photo-mode.png")
-    for _ in range(9):press(0x40)
+    for _ in range(8):press(0x40)
     press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==22
     render("photo-controls.png")
-    for _ in range(12):press(0x40)
+    for _ in range(11):press(0x40)
     render("photo-controls-scrolled.png")
     press(0x2000);assert (dll.MenuTestSnapshot()>>12)&31==21
+    press(0x40);press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==23
+    render("photo-filters.png")
+    for _ in range(8):press(0x40)
+    render("photo-effects.png")
+    press(0x2000);press(0x40);press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==24
+    render("photo-watermark.png")
+    press(0x2000)
     press(0x2000);assert (dll.MenuTestSnapshot()>>12)&31==0
     help_panel=dll.MenuTestPhotoHelp;help_panel.argtypes=[c.c_int,c.c_int,c.c_int]
     dll.Ufc6OverlayBlend.restype=w.BOOL
@@ -126,11 +133,50 @@ try:
         alpha=pixels.raw[3::4];assert min(alpha)==184 and max(alpha)==255
         x,y=w.DWORD(),w.DWORD();dll.Ufc6OverlayPosition(2560,1440,c.byref(x),c.byref(y));assert (x.value,y.value)==(24,259)
         dll.Ufc6MenuExtent(320,240,c.byref(width),c.byref(height));assert width.value<=288 and height.value<=208
+        panel=dll.MenuTestPhotoPanel;panel.argtypes=[w.DWORD,w.DWORD];panel.restype=c.c_int
+        assert panel(8,0)==1;render("photo-live-effects-ps.png" if ps else "photo-live-effects-xbox.png")
+        assert panel(8,0)==2;render("photo-live-watermark-ps.png" if ps else "photo-live-watermark-xbox.png")
+        assert panel(8,0)==0
+
     help_panel(0,0,0);pump(.1);assert not dll.Ufc6OverlayBlend()
+    dll.MenuTestSettingsMode(0);dll.MenuTestInvokeBinding(3);pump(.15)
+    for _ in range(3):press(0x40)
+    press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==20
+    press(0x40);render("screenshot-settings.png")
+    press(0x4000);assert dll.MenuTestScreenshotUI()==1;render("screenshot-settings-on.png")
+    press(0x4000);assert dll.MenuTestScreenshotUI()==0
+    press(0x2000);press(0x2000)
+    dll.MenuTestInvokeBinding(3);pump(.15)
+    for _ in range(4):press(0x40)
+    press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==25
+    render("performance.png")
+    press(0x4000);render("performance-unsaved.png")
+    press(0x2000);assert (dll.MenuTestSnapshot()>>12)&31==27;render("performance-discard.png")
+    press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==25
+    press(0x4000);press(0x40);press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==16
+    assert dll.MenuTestPerformanceSaves()==0
+    press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==25
+    press(0x40);press(0x4000);press(0x40);press(0x4000)
+    for _ in range(3):press(0x40)
+    press(0x4000);assert dll.MenuTestPerformanceSaves()==1;render("performance-saved.png")
+    press(0x40);press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==26
+    render("performance-restart-confirm.png")
+    press(0x4000);assert dll.MenuTestPerformanceRestarts()==0
+    press(0x4000);press(0x40);press(0x4000);assert dll.MenuTestPerformanceRestarts()==1 and dll.MenuTestPerformanceSaves()==2
+    press(0x2000);press(0x2000)
+    dll.MenuTestInvokeBinding(3);pump(.15)
+    press(0x40);press(0x40);press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==19
+    for _ in range(4):press(0x40)
+    pump(5.2);render("startup-settings.png")
+    press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==28;render("startup-screens.png")
+    press(0x40);press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==29;render("startup-bypass-confirm.png")
+    press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==28
+    press(0x2000);assert (dll.MenuTestSnapshot()>>12)&31==19
+    press(0x2000);press(0x2000)
     if args.gallery:
         dll.MenuTestSettingsMode(1);dll.MenuTestInvokeBinding(3);pump(.15)
         for _ in range(13):press(0x40)
         press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==12
-        render("keybinds-overlay-screenshot.png")
+        render("keybinds-photo-mode.png")
     print("PASS: Photo Mode/controls navigation and fonts; Xbox/PS help-panel artwork, frozen/live states, corner position, alpha coverage, small viewport fit and exit cleanup.")
 finally:u.DestroyWindow(window)

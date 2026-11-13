@@ -43,6 +43,10 @@ def state(root, profile):
 
 
 def set_theme(theme, root, profile):
+    if theme in ('startup_on', 'startup_off'):
+        import startup_assets
+        value = startup_assets.run('install' if theme == 'startup_on' else 'restore', root, startup_assets.load_profile(ROOT / 'profiles'))
+        return 'Startup bypass enabled and verified.' if value == 2 else 'Original startup screens restored and verified.'
     before = state(root, profile)
     desired = 2 if theme == 'xbox' else 1
     if before == desired:
@@ -102,7 +106,7 @@ def load_job(path):
         core.check(key in job and Path(job[key]).is_absolute() and '\n' not in job[key] and '\r' not in job[key], 'Invalid job path.')
     core.check(Path(job['gameexe']).name.casefold() in ('ufc 6.exe', 'ufc 6 parsec.exe'), 'Unsupported engine filename.')
     core.check(Path(job['launchexe']).is_file() and Path(job['workdir']).is_dir(), 'The configured launcher is unavailable.')
-    core.check(job['theme'] in ('xbox', 'playstation'), 'Invalid game icon theme.')
+    core.check(job['theme'] in ('xbox', 'playstation', 'startup_on', 'startup_off'), 'Invalid game icon theme.')
     core.check('\n' not in job['launchargs'] and '\r' not in job['launchargs'], 'Invalid launcher arguments.')
     return job
 
@@ -156,9 +160,9 @@ def handoff(path, processes=None, patch=set_theme, launch=None):
         core.check(path.exists(), "The overlay cancelled this icons request; no game files were changed.")
         try:
             message = patch(job['theme'], Path(job['gameroot']), profile)
-            report(job['report'], 2 if job['theme'] == 'xbox' else 1, message)
+            report(job['report'], 2 if job['theme'] in ('xbox','startup_on') else 1, message, section='Startup' if job['theme'].startswith('startup_') else 'Icons')
         except Exception as exc:
-            report(job['report'], 4, exc, False)
+            report(job['report'], 4, exc, False, section='Startup' if job['theme'].startswith('startup_') else 'Icons')
             if 'rollback was incomplete' in str(exc).lower():
                 raise
             # Preflight rejection / verified rollback keeps the previous artwork.
@@ -173,6 +177,7 @@ def handoff(path, processes=None, patch=set_theme, launch=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--status', action='store_true')
+    parser.add_argument('--startup-status', action='store_true')
     parser.add_argument('--backup-saves', action='store_true')
     parser.add_argument('--save-root', type=Path)
     parser.add_argument('--backup-dir', type=Path)
@@ -189,6 +194,10 @@ def main():
             report(args.report, 2, f"Backup saved and verified ({count} files).", section="Backup")
         elif args.apply_job:
             handoff(args.apply_job)
+        elif args.startup_status and args.game_dir and args.report:
+            import startup_assets
+            current = startup_assets.run('status', args.game_dir, startup_assets.load_profile(ROOT / 'profiles'))
+            report(args.report, current, {1:'Original startup screens', 2:'Title and offline-warning bypass enabled', 3:'Mixed verified startup patch; enable or restore to repair.'}[current], section='Startup')
         elif args.status and args.game_dir and args.report:
             current = state(args.game_dir, core.load_profile(ROOT))
             report(args.report, current, {1: 'PlayStation game icons', 2: 'Xbox game icons', 3: 'Mixed verified icons; choose a theme to repair.'}[current])
@@ -197,7 +206,7 @@ def main():
         return 0
     except Exception as exc:
         if args.report:
-            report(args.report, 4, exc, False, section="Backup" if args.backup_saves else "Icons")
+            report(args.report, 4, exc, False, section="Backup" if args.backup_saves else "Startup" if args.startup_status else "Icons")
         return 1
 
 

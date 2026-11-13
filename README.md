@@ -41,17 +41,33 @@ This download contains the overlay, asset-free controller-icon patcher, and inst
 
 **The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Game & launcher → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
 
+## New in v0.9.36
+
+- **Replay editor:** pause, rewind/step forward, 10 ms–1 second steps, Native or 0.1×–2× playback speed, controller shortcuts, free camera and zoom.
+- **Available recording:** browse and play earlier retained footage, then restore the original Finish clip. Retention varies; this is not a guarantee of whole-fight recording.
+- **Replay after decisions:** enable under Settings → Game & launcher before a new offline fight. Uses retained clips when the game did not select a complete recap; repeated replay entry and rematch cleanup are verified.
+- **Next hit KO:** arm a clean head-strike KO against the opponent, cancel it, or let it expire after 25 seconds. The normal finish replay remains available.
+- **Mute when unfocused:** optional game-audio muting while minimized or using another application, with sound restored on return.
+- **Photo effects and watermarks:** live translucent editors, filters, adjustable effects, styled player-name text with font, size and color controls.
+- **Startup and performance:** native title/network-warning bypass, intro skipping, and PORTHEON crowd/effect/render-scale controls.
+
+[Full screenshot gallery](docs/SCREENSHOTS.md) · [Replay and Photo Mode guide](docs/PHOTO-MODE.md) · [Release history](RELEASE-NOTES.md)
+
+![Replay timeline, speed and controller controls](docs/screenshots/photo-panel-replay.png)
+
 ## Parsec / two controllers
 
 PORTHEON's **Parsec mode** uses a separate `UFC 6 Parsec.exe` with its own two-player routing. Version 0.8.4 supports the verified derivative with SHA-256 `ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d`. It preserves the routing wrappers using checked nearby relay padding; unknown engine revisions or occupied padding are rejected. The engine file is not modified or distributed.
 
 Install into the same `bin` folder, then launch with PORTHEON's Parsec option enabled. Either pad can open a new menu; Guide and F10 let the first fresh navigation press claim the menu through XInput or the game's controller input. Xbox opening combinations use the matching XInput pad when available. Other pads cannot navigate an already-owned menu. Both pads are withheld from gameplay while the menu is open, and held digital buttons must be released before gameplay input resumes. Restart and quit recognize both supported engine filenames. This does not add Parsec networking or two-player routing itself; those remain PORTHEON's features.
 
+## Performance
+
+**Settings → Performance** controls crowd rendering/animation, particles and sparks, depth of field, dynamic resolution and 3D render scale through PORTHEON's existing settings. Use **Save for next launch**, or **Save & restart game** with confirmation. These changes require a restart; normal and Parsec mode share the same settings. Other launcher configuration and fixes are preserved. See [Performance settings](docs/PERFORMANCE.md).
+
 ## Photo Mode
 
-The screenshots and controls below describe the current v0.9.26 development preview; see the [complete gallery](docs/SCREENSHOTS.md).
-
-Open **Photo Mode** from the main overlay menu, or press **F9**, during a running fight or practice. Move the free camera, adjust its field of view, freeze the action, hide the game HUD and keep cage panels visible. Closing Photo Mode restores the normal camera and game speed; switching away from the game also exits it.
+Open **Photo Mode** from the main overlay menu, or press **F9**, during a running fight, practice or the game’s View Replay. Move the free camera, adjust its field of view, freeze the action, hide the game HUD and keep cage panels visible. Closing Photo Mode restores the normal camera and game speed; switching away from the game also exits it.
 
 ![Photo Mode tools over a live UFC 6 fight](docs/screenshots/photo-mode-in-game.png)
 
@@ -62,8 +78,7 @@ Open **Photo Mode** from the main overlay menu, or press **F9**, during a runnin
 | Move up / down | LB / RB or L1 / R1 | U / O |
 | Zoom (field of view) | Triggers | Page Up / Page Down |
 | Freeze / unfreeze | A / Cross | P |
-| Take screenshot | X / Square | Your assigned screenshot key |
-| Camera / Effects / Watermark page | Menu / Options | F8 |
+| Clean screenshot | X / Square | Your assigned screenshot key |
 | Reset camera | Y / Triangle | Home |
 | Hide / show game HUD | D-pad Up | H |
 | Toggle cage visibility | D-pad Right | C |
@@ -72,9 +87,9 @@ Open **Photo Mode** from the main overlay menu, or press **F9**, during a runnin
 
 Hold **Shift** for faster keyboard movement. These camera controls apply while the tools menu is closed; **F10** opens the tools. The translucent panel follows the selected Xbox/PlayStation icons, theme, font and UI scale and sits below the fighter HUD. Gameplay input is withheld while the camera is under Photo Mode control.
 
-**Keep cage visible** prevents the normal gameplay camera's fence fading from leaving missing panels in free-camera views. Turn it Off for native fading. If the action is frozen, briefly unfreeze to let a changed cage setting update. The selected Hide HUD state remains active while the tools menu is open.
+**Keep cage visible** prevents the normal gameplay camera's fence fading from leaving missing panels in free-camera views. Turn it Off for native fading. If the action is frozen, briefly unfreeze to let a changed cage setting update. Your selected HUD visibility is preserved while the tools menu is open.
 
-In the current development build, screenshots are clean by default. Enable **Settings → Files & support → Include overlay in screenshots** when you want the displayed tools or translucent panel in the image. The normal screenshot action then follows that switch; there is no separate overlay-shot action. PNGs save to **Pictures\Screenshots**. Configure the screenshot key or controller combination under **Settings → Controls → Keybinds**.
+Screenshots are clean by default. Enable **Settings → Files & support → Include overlay in screenshots** when you want to capture the tools or translucent panel; the normal screenshot button/key follows that switch. No separate controller shortcut or overlay-shot action is installed. Capture mode does not remove photo effects or the optional player-name watermark. PNGs save to **Pictures\Screenshots**.
 
 ![Translucent Photo Mode controls over a live fight](docs/screenshots/photo-controls-in-game.png)
 
@@ -90,44 +105,52 @@ Reports are stored in **Documents\UFC6 Actions Overlay\SupportReports** as uniqu
 
 Windows and network paths are redacted. Saves, screenshots, launcher arguments, account details and game content are excluded. Nothing is uploaded; review the ZIP before sharing it in an issue. The desktop window's **Show report in folder** button selects the saved archive.
 
-[Planned additions](docs/ROADMAP.md) · [Photo Mode guide](docs/PHOTO-MODE.md)
+[Startup screens](docs/STARTUP.md) · [Planned additions](docs/ROADMAP.md) · [Photo Mode guide](docs/PHOTO-MODE.md)
+
+## Next hit KO
+
+In **Cheats**, select **Next hit KO** to arm it for Player 1’s opponent in a supported offline fight, with Photo Mode Off. Select it again to cancel. Resume and land a clean head strike within 25 seconds. It automatically disarms after the KO or timeout; it does not choose a winner without a strike. Cancel, opponent-only KO, automatic disarm and the normal finish replay are live-tested.
+
+![Next hit KO and career cheats](docs/screenshots/next-hit-ko.png)
+
+## Background audio and decision replays
+
+**Settings → Game & launcher → Mute when unfocused** mutes only UFC 6 while it is minimized or unfocused and restores audio on return.
+
+**Replay after decisions** starts Off. Turn it On before a new offline fight to offer View Replay after a decision when valid retained clips exist. An incomplete recap may repeat clips. It does not manufacture missing recordings. Draw-specific playback remains on the roadmap; decision playback, repeat entry and rematch cleanup are confirmed.
+
+![Updated Game & launcher settings](docs/screenshots/decision-replays.png)
 
 ## Screenshots
 
-**Current v0.9.26 development preview:** Amber · Rounded boxes · Xbox icons · 18 px · 125% scale · Tall window. All screenshots have been refreshed together. The downloadable release is still v0.9.18.
-
-[Browse every page, confirmation and full game-window capture](docs/SCREENSHOTS.md).
-
 <table>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/main-menu.png" alt="Actions"><br><strong>Actions</strong></td>
-    <td width="50%"><img src="docs/screenshots/settings.png" alt="Settings"><br><strong>Settings</strong></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/live-cheats.png" alt="Cheats — all eleven rows"><br><strong>Cheats — all eleven rows</strong></td>
-    <td width="50%"><img src="docs/screenshots/appearance.png" alt="Appearance"><br><strong>Appearance</strong></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/photo-panel-camera.png" alt="Translucent Camera page"><br><strong>Translucent Camera page</strong></td>
-    <td width="50%"><img src="docs/screenshots/photo-panel-effects.png" alt="Translucent Effects page"><br><strong>Translucent Effects page</strong></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/photo-panel-watermark.png" alt="Translucent Watermark page"><br><strong>Translucent Watermark page</strong></td>
-    <td width="50%"><img src="docs/screenshots/photo-effects.png" alt="Photo effects"><br><strong>Photo effects</strong></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/startup-screens.png" alt="Skip title & network warnings"><br><strong>Skip title & network warnings</strong></td>
-    <td width="50%"><img src="docs/screenshots/performance.png" alt="Performance"><br><strong>Performance</strong></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/game-button-icons.png" alt="Game button icons"><br><strong>Game button icons</strong></td>
-    <td width="50%"><img src="docs/screenshots/savegame-backups.png" alt="Savegame backups"><br><strong>Savegame backups</strong></td>
-  </tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/photo-panel-replay.png" alt="Replay timeline and speed"><br><strong>Replay timeline and speed</strong></td>
+<td width="50%"><img src="docs/screenshots/decision-replays.png" alt="Decision replays and background audio"><br><strong>Decision replays and background audio</strong></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/next-hit-ko.png" alt="Next hit KO and career cheats"><br><strong>Next hit KO and career cheats</strong></td>
+<td width="50%"><img src="docs/screenshots/photo-panel-camera.png" alt="Photo Mode camera controls"><br><strong>Photo Mode camera controls</strong></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/photo-panel-effects.png" alt="Live filters and effects"><br><strong>Live filters and effects</strong></td>
+<td width="50%"><img src="docs/screenshots/photo-panel-watermark.png" alt="Styled watermark and colors"><br><strong>Styled watermark and colors</strong></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/startup-screens.png" alt="Native startup bypass"><br><strong>Native startup bypass</strong></td>
+<td width="50%"><img src="docs/screenshots/performance.png" alt="PORTHEON performance controls"><br><strong>PORTHEON performance controls</strong></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/appearance.png" alt="Appearance and window sizing"><br><strong>Appearance and window sizing</strong></td>
+<td width="50%"><img src="docs/screenshots/files-support.png" alt="Optional overlay-inclusive screenshots"><br><strong>Optional overlay-inclusive screenshots</strong></td>
+</tr>
 </table>
 
-[Full-window Photo Mode](docs/screenshots/photo-controls-in-game.png) · [Startup bypass](docs/screenshots/startup-in-game.png) · [Installer](docs/screenshots/setup.png) · [Updater](docs/screenshots/updater.png)
+[Browse every current overlay page](docs/SCREENSHOTS.md).
 
-The complete gallery distinguishes real game captures from native-renderer page previews with sample values and test-host status. Windows tools keep their own application styling.
+[Controls](docs/screenshots/controls.png) · [Game & launcher](docs/screenshots/game-launcher.png) · [Files & support](docs/screenshots/files-support.png) · [Screenshot notification](docs/screenshots/notification.png) · [Windows setup](docs/screenshots/setup.png) · [GitHub updater](docs/screenshots/updater.png)
+
+The isolated page images use the current overlay renderer in a test host with power actions disabled. The game-background captures show an earlier overlay release running over the actual game.
 
 ## Change in-game controller icons (included)
 
@@ -275,13 +298,13 @@ The hook waits for initialized named flags, validates its exact code signature, 
 
 PORTHEON launch-time cheats display **PORTHEON On** and remain under launcher control. Disable them in PORTHEON and restart once before using live overlay control. **Game On** means an unmanaged game/practice flag is already enabled; confirming requests Off for Player 1.
 
-Stamina prevention and an unaffected opponent were verified in a fight. Native fixtures cover controller-to-fighter reassignment, stable Off, hook calling convention, relocated tables and failed writes. The final Player 1-only interface is being verified before a public release.
+Stamina prevention and an unaffected opponent were verified in a fight. Native fixtures cover controller-to-fighter reassignment, stable Off, hook calling convention, relocated tables and failed writes. Player 1-only behavior has been confirmed in live testing.
 
 ## Screenshots
 
 Choose **Take screenshot**. A full-resolution PNG is saved in the Windows **Pictures → Screenshots** folder, with a unique timestamped filename. The destination is resolved through the Windows Screenshots known folder, so folder redirection and OneDrive are respected. If that known folder is unavailable, the mod uses the Windows Pictures known folder plus `Screenshots`. The folder is created as needed. Existing screenshots in the old `bin/Screenshots` folder are left in place.
 
-The normal **Take screenshot** action copies the game image before drawing the overlay, so the menu and notifications are excluded. **Screenshot + overlay** saves the same game frame together with the overlay raster used to present that frame, including the translucent Photo Mode controls panel. Use **Ctrl + Shift + F12** by default, **D-pad Left** while Photo Mode is active with the tools closed, or **Photo Mode → Screenshot + overlay**. Its keyboard/controller binding can be changed independently in **Settings → Controls → Keybinds**. Both modes save to Windows **Pictures\Screenshots**. The menu can stay open during capture. Success shows the saved filename and a result page with **Open screenshots folder** and **Back**. The result page starts on Back and appears only if you are still on Take screenshot; a late capture never reopens the overlay or replaces another page. Failures show a notification.
+**Take screenshot** excludes the overlay by default. The optional **Settings → Files & support → Include overlay in screenshots** switch makes the same normal screenshot action save the frame with the currently displayed tools or translucent Photo Mode panel. Turn it Off for clean photos again. No separate controller/default-keyboard shortcut or screenshot action is needed. Both modes retain Photo Mode effects and watermark and save to Windows **Pictures\Screenshots**. The menu can remain open; feedback appears after capture and late results never reopen the overlay.
 
 This captures the game swapchain, not the desktop. Screenshot capture requires a surface that supports transfer-source images; unsupported display modes report that capture is unavailable. The current rendering path supports 8-bit BGRA/RGBA SDR swapchains at least 320×240 pixels, not 10-bit HDR formats.
 

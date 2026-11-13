@@ -13,5 +13,7 @@ void live_cheats_init(LiveCheats *state,uintptr_t guest_base);
 void live_cheats_tick(LiveCheats *state);
 int live_cheats_toggle(LiveCheats *state,int which);
 int live_cheats_fight_ready(void);
+int live_ko_toggle(void);
+int live_ko_poll(int allowed); /* 0 idle, 1 armed/pending, 2 KO, 3 cancelled */
 void live_cheats_stop(LiveCheats *state);
 #endif

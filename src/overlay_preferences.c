@@ -3,8 +3,8 @@
 #include <wchar.h>
 #include <stdio.h>
 #include <string.h>
-const wchar_t *binding_names[BIND_COUNT]={L"Open overlay",L"Take screenshot",L"Cheats",L"Settings",L"Savegame backup",L"Restart game",L"Quit game",L"Restart PC",L"Shut down PC",L"Photo Mode",L"Screenshot + overlay"};
-static const wchar_t *binding_ids[BIND_COUNT]={L"Open",L"Screenshot",L"Cheats",L"Settings",L"Backup",L"RestartGame",L"QuitGame",L"RestartPC",L"ShutdownPC",L"PhotoMode",L"ScreenshotOverlay"};
+const wchar_t *binding_names[BIND_COUNT]={L"Open overlay",L"Take screenshot",L"Cheats",L"Settings",L"Savegame backup",L"Restart game",L"Quit game",L"Restart PC",L"Shut down PC",L"Photo Mode"};
+static const wchar_t *binding_ids[BIND_COUNT]={L"Open",L"Screenshot",L"Cheats",L"Settings",L"Backup",L"RestartGame",L"QuitGame",L"RestartPC",L"ShutdownPC",L"PhotoMode"};
 const wchar_t *theme_choices[7]={L"From config",L"Green",L"Blue",L"Red",L"Purple",L"Amber",L"Back"};
 int binding_key_valid(uint32_t key){
     unsigned vk=key&255;if(!key)return 1;
@@ -53,7 +53,7 @@ void preferences_load(OverlayPreferences *p,const wchar_t *ini,uint32_t open_pad
     p->theme_choice=(int)GetPrivateProfileIntW(L"Menu",L"ThemeChoice",0,ini);if(p->theme_choice<0||p->theme_choice>5)p->theme_choice=0;
     p->window_size=(int)GetPrivateProfileIntW(L"Menu",L"WindowSize",0,ini);if(p->window_size<0||p->window_size>2)p->window_size=0;
     for(int i=0;i<BIND_COUNT;++i){wchar_t name[64],value[64],*end;
-        swprintf(name,64,L"%lsKey",binding_ids[i]);GetPrivateProfileStringW(L"Keybinds",name,i==BIND_PHOTO?L"0x78":i==BIND_SCREENSHOT_OVERLAY?L"0x57b":L"0",value,64,ini);unsigned long v=wcstoul(value,&end,0);if(!*end)binding_set(p,i,1,(uint32_t)v);
+        swprintf(name,64,L"%lsKey",binding_ids[i]);GetPrivateProfileStringW(L"Keybinds",name,i==BIND_PHOTO?L"0x78":L"0",value,64,ini);unsigned long v=wcstoul(value,&end,0);if(!*end)binding_set(p,i,1,(uint32_t)v);
         if(!i)continue;swprintf(name,64,L"%lsPad",binding_ids[i]);GetPrivateProfileStringW(L"Keybinds",name,L"0",value,64,ini);v=wcstoul(value,&end,0);if(!*end)binding_set(p,i,0,(uint32_t)v);
     }
 }

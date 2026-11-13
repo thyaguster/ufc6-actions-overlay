@@ -1,8 +1,6 @@
 # Photo Mode
 
-> Current v0.9.26 development preview. These screenshots are newer than the published v0.9.18 binary release. [Complete screenshot gallery](SCREENSHOTS.md).
-
-Photo Mode is available in the overlay's main menu and through F9 in a running fight or practice. It is enabled only for the verified engine and matching game-code signatures. Unsupported code leaves the normal game camera intact.
+Photo Mode is available in the overlay's main menu and through F9 in a running fight, practice or the game's View Replay. It is enabled only for the verified engine and matching game-code signatures. Unsupported code leaves the normal game camera intact.
 
 ## Controls and tools
 
@@ -20,7 +18,7 @@ Keyboard equivalents are I/J/K/L, arrow keys, U/O, Page Up/Page Down, P, Home, H
 
 ## Translucent editor pages
 
-While Photo Mode is active, press **Menu (Xbox) / Options (PlayStation)** or **F8** to cycle **Camera → Effects → Watermark** without opening the full tools. The panel appears if hidden. The Camera page keeps the original photo controls. On the Effects/Watermark pages, use **D-pad Up/Down** to select a row and **Left/Right** to adjust; **A/Cross** also advances the selected value. Keyboard equivalents are **W/S** and **A/D**. The sticks, bumpers and triggers still move/look/zoom the camera. **B/Circle** returns to the Camera page; a second press exits. **Esc** exits directly. **P** still freezes/unfreezes. **X/Square** takes a screenshot on every panel page and follows the optional Include overlay in screenshots setting. Tab hides/shows the panel. While the panel is hidden, controller buttons use the original Camera mapping. Assigned user keybinds retain priority.
+While Photo Mode is active, press **Menu (Xbox) / Options (PlayStation)** or **F8** to cycle **Camera → Effects → Watermark → Replay** (Replay is available during replay playback) without opening the full tools. The panel appears if hidden. The Camera page keeps the original photo controls. On the Effects/Watermark pages, use **D-pad Up/Down** to select a row and **Left/Right** to adjust; **A/Cross** also advances the selected value. Keyboard equivalents are **W/S** and **A/D**. The sticks, bumpers and triggers still move/look/zoom the camera. **B/Circle** returns to the Camera page; a second press exits. **Esc** exits directly. **P** still freezes/unfreezes. **X/Square** takes a screenshot on every panel page and follows the optional Include overlay in screenshots setting. Tab hides/shows the panel. While the panel is hidden, controller buttons use the original Camera mapping. Assigned user keybinds retain priority.
 
 ## Filters, effects and watermark
 
@@ -38,8 +36,31 @@ Shader sources are in `src/shaders/photo_effects.*`, with committed SPIR-V for n
 - Opening the tools stops camera movement and preserves your selected HUD visibility. It does not automatically show/hide the game HUD when entering or leaving the tools; use the explicit HUD switch, or exit Photo Mode to restore normal behavior.
 - Freezing also stops the game's cage-update graph. Briefly unfreeze after changing the cage option to process the change.
 - The controls panel uses the current theme, controller artwork, font and scale. It can be hidden independently without leaving Photo Mode.
-- Photo Mode is intended for a running fight or practice. It does not add an instant-replay editor or suppress the game's real network/offline state.
+- Photo Mode is intended for a running fight or practice. Mid-fight instant replay is not included; the Replay editor uses the game’s View Replay.
 
 ## Validation
 
 Live testing confirmed camera movement/look, field-of-view zoom, freezing while the camera moves, HUD hiding, cage visibility, controller navigation, smooth panel rendering and exit restoration. The shipped screenshots were captured through the installed overlay. Native tests cover identity and ownership guards, current-state restoration, page-memory checks, screenshot modes and input routing. GPU tests cover BGRA/RGBA linear and sRGB formats, alpha composition and clean startup-recognition frames.
+
+## Replay controls
+
+Open the game's **View Replay**, then enter Photo Mode with **F9**. Cycle the translucent panel using **Menu / Options**, **F8**, or **F4**. Assigned action bindings take priority; if F8 is your screenshot key, use F4.
+
+The fourth **Replay** page offers **Pause replay**, **Position**, **Step size**, **Range** and **Speed**:
+
+- **Y / Triangle** or **P** pauses/resumes. **LB / RB** (L1 / R1) steps backward/forward without moving the camera vertically on this page.
+- **D-pad Up/Down** (W/S) selects a row; **Left/Right** (A/D) adjusts it. Position changes pause automatically. Resume continues from the selected moment.
+- **Step size:** 10, 25, 50, 100, 250, 500 or 1000 milliseconds. The choice is saved.
+- **Range:** Finish clip or Available recording. Available recording selects the continuous retained section containing the finish clip and pauses at its beginning. Pause Off plays that earlier footage. Selecting Finish clip restores its saved position.
+- **Speed:** Native, 0.1×, 0.25×, 0.5×, 1× or 2×. Numbered speeds compensate for the game's cinematic slow motion; Native preserves it. Speed returns to Native on launch.
+- **B / Circle** returns to Camera; **Esc** exits Photo Mode. Exiting or switching apps releases playback control and restores the native finish range.
+
+![Replay controls](screenshots/photo-panel-replay.png)
+
+Free camera, zoom, effects, watermark and screenshots remain usable. Pause holds both the recorded action and native cinematic state. The Replay page stays selected during temporary unavailability rather than resetting to Camera.
+
+### Replay access and limits
+
+Enable **Settings → Game & launcher → Replay after decisions** before a new supported offline fight. It uses valid retained clips to fill incomplete post-fight selections. A recap may repeat a clip. Decision playback, repeated entry, rematch cleanup, earlier playback, speed controls and stepping are live-tested in Parsec mode. Draw-specific testing and normal-mode live replay validation remain pending.
+
+**Available recording does not guarantee an entire fight.** Recording buffers and continuous coverage limit what can be shown. Brief flashes at native camera cuts remain under investigation. Mid-fight instant replay is under investigation and is not included in this release.

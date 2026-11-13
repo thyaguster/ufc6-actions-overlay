@@ -8,6 +8,8 @@ import time
 parser=argparse.ArgumentParser()
 parser.add_argument("folder",type=Path)
 parser.add_argument("--reload",action="store_true")
+parser.add_argument("--decision-replays",action="store_true")
+parser.add_argument("--decision-replays-reload",action="store_true")
 parser.add_argument("--reset",action="store_true")
 parser.add_argument("--power",action="store_true")
 parser.add_argument("--reboot",action="store_true")
@@ -81,7 +83,7 @@ dll.Ufc6RenderMenu.argtypes=[c.c_void_p,w.DWORD];dll.Ufc6RenderMenu.restype=w.BO
 
 
 def press(button):
-    if not (args.startup or args.startup_reload or args.appearance or args.appearance_reload or args.window or args.window_reload) and button==0x4000 and ((dll.MenuTestSnapshot()>>12)&31)==0 and (dll.MenuTestSnapshot()&15)==5:
+    if not (args.decision_replays or args.decision_replays_reload or args.startup or args.startup_reload or args.appearance or args.appearance_reload or args.window or args.window_reload) and button==0x4000 and ((dll.MenuTestSnapshot()>>12)&31)==0 and (dll.MenuTestSnapshot()&15)==5:
         dll.MenuTestLegacySettings();pump(.08);return
     dll.MenuTestButton(button,1);dll.MenuTestButton(button,0);pump(.06)
     # These existing scenarios target pre-Photo actions; navigate past its new row.
@@ -104,7 +106,7 @@ def render(name,viewport=(2560,1440)):
 
 try:
     dll.MenuTestStart(window);pump(.4)
-    dll.MenuTestSettingsMode(0 if (args.startup or args.startup_reload or args.appearance or args.appearance_reload or args.window or args.window_reload) else 1)
+    dll.MenuTestSettingsMode(0 if (args.decision_replays or args.decision_replays_reload or args.startup or args.startup_reload or args.appearance or args.appearance_reload or args.window or args.window_reload) else 1)
     dll.Ufc6VulkanActive() # Match production before opening; no desktop-fit/render extent race.
     assert (dll.MenuTestSnapshot()>>4)&1 == (1 if args.appearance_reload else int(args.reload)),"Stored profile was not loaded"
     assert dll.MenuTestScale()==(175 if args.reload and args.scale else 100)
@@ -115,6 +117,21 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     assert dll.MenuTestSnapshot()&0x100
+    if args.decision_replays or args.decision_replays_reload:
+        k.GetPrivateProfileIntW.argtypes=[w.LPCWSTR,w.LPCWSTR,c.c_int,w.LPCWSTR]
+        def saved_replay():return k.GetPrivateProfileIntW("Menu","OfferDecisionReplays",0,str(folder/"ufc6-quit-menu.test.ini"))
+        for _ in range(4):press(0x40)
+        press(0x4000);press(0x40);press(0x40);press(0x4000)
+        assert (dll.MenuTestSnapshot()>>12)&31==19
+        for _ in range(7):press(0x40)
+        assert dll.MenuTestSnapshot()&15==7
+        assert saved_replay()==int(args.decision_replays_reload)
+        render("decision-replays-loaded.png")
+        press(0x4000)
+        assert saved_replay()==int(not args.decision_replays_reload)
+        render("decision-replays-toggled.png")
+        print("PASS: decision replay switch navigation, persistence and unclipped rendering")
+        raise SystemExit(0)
     if args.startup or args.startup_reload:
         k.GetPrivateProfileIntW.argtypes=[w.LPCWSTR,w.LPCWSTR,c.c_int,w.LPCWSTR]
         def saved(name):return k.GetPrivateProfileIntW("Menu",name,0,str(folder/"ufc6-quit-menu.test.ini"))
@@ -136,7 +153,7 @@ try:
         else:
             press(0x4000)
             assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==1
-            press(0x40);press(0x4000)
+            press(0x40);press(0x40);press(0x4000)
             assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==0
             pump(5.2);render("startup-options.png")
         print("PASS: experimental startup UI settings, font bounds and saved toggles; no game callbacks modified in test host.")
@@ -160,14 +177,14 @@ try:
         for _ in range(4):press(0x40)
         press(0x4000);assert dll.MenuTestWindowSize()==2
         press(0x2000);press(0x2000);press(0x10);press(0x4000)
-        assert dll.MenuTestVisibleRows()==11 and dll.MenuTestFontSize()==18
-        dll.Ufc6MenuExtent(2560,1440,c.byref(width),c.byref(height));assert (width.value,height.value)==(570,532)
+        assert dll.MenuTestVisibleRows()==12 and dll.MenuTestFontSize()==18
+        dll.Ufc6MenuExtent(2560,1440,c.byref(width),c.byref(height));assert (width.value,height.value)==(570,564)
         render("cheats-tall.png")
-        for _ in range(10):press(0x40)
+        for _ in range(11):press(0x40)
         render("cheats-tall-back.png")
         dll.Ufc6MenuExtent(640,360,c.byref(width),c.byref(height));assert width.value<=608 and height.value<=328
         render("cheats-tall-small-viewport.png",(640,360))
-        print("PASS: expanded/tall windows show 9/11 Cheats rows with unchanged font/scale, selection reaches Back, viewport fitting and saved preference.")
+        print("PASS: expanded/tall windows show 9/12 Cheats rows with unchanged font/scale, selection reaches Back, viewport fitting and saved preference.")
         raise SystemExit(0)
     elif args.appearance or args.appearance_reload:
         if args.appearance_reload:
@@ -282,7 +299,7 @@ try:
         assert (dll.MenuTestBackendPreferences()&1)==expected,"Career initialization cleared the saved longevity choice"
         for _ in range(3):press(0x40)
         press(0x4000)
-        for _ in range(6):press(0x40)
+        for _ in range(7):press(0x40)
         if not args.longevity_reload_off:
             press(0x4000);assert dll.MenuTestLongevity()==1-expected
         k.GetPrivateProfileIntW.argtypes=[w.LPCWSTR,w.LPCWSTR,c.c_int,w.LPCWSTR]
@@ -293,8 +310,8 @@ try:
         assert dll.MenuTestBackendPreferences()>>8==(2 if args.training_reload else 1),"Career initialization cleared the saved multiplier"
         for _ in range(3):press(0x40)
         press(0x4000)
-        for _ in range(7):press(0x40)
-        assert dll.MenuTestSnapshot()&15==7
+        for _ in range(8):press(0x40)
+        assert dll.MenuTestSnapshot()&15==8
         press(0x4000)
         k.GetPrivateProfileIntW.argtypes=[w.LPCWSTR,w.LPCWSTR,c.c_int,w.LPCWSTR]
         def saved():return k.GetPrivateProfileIntW("Menu","TrainingRewardMultiplier",0,str(folder/"ufc6-quit-menu.test.ini"))
@@ -355,7 +372,10 @@ try:
         cheat(0,4);press(0x4000);assert cheat(0)==4
         render("cheats-unavailable.png")
         cheat(0,1);press(0x4000);assert cheat(0)==2
-        press(0x40);press(0x40);press(0x20);render("cheats-career-money.png")
+        press(0x40);press(0x40);assert dll.MenuTestSnapshot()&15==2
+        press(0x4000);assert dll.MenuTestKoState()==1;render("cheats-ko-armed.png")
+        press(0x4000);assert dll.MenuTestKoState()==3;render("cheats-ko-idle.png")
+        press(0x40);press(0x20);render("cheats-career-money.png")
         press(0x4000);assert page()==8 and dll.MenuTestSnapshot()&15==0
         render("career-add-money-confirm.png")
         press(0x4000);assert page()==7
@@ -363,7 +383,7 @@ try:
         press(0x40);press(0x20);press(0x20);render("cheats-career-points.png")
         press(0x4000);assert page()==8
         render("career-add-points-confirm.png")
-        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==3
+        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==4
         press(0x40);press(0x4000);assert page()==8
         render("career-fitness-confirm.png")
         press(0x40);press(0x4000);assert page()==7
@@ -372,7 +392,7 @@ try:
         render("career-training-days-confirm.png")
         press(0x40);press(0x4000);assert page()==7
         render("cheats-training-days.png")
-        press(0x40);assert dll.MenuTestSnapshot()&15==6
+        press(0x40);assert dll.MenuTestSnapshot()&15==7
         assert dll.MenuTestLongevity()==0
         press(0x4000);assert dll.MenuTestLongevity()==1 and page()==7
         render("cheats-longevity-on.png")
@@ -388,7 +408,7 @@ try:
         press(0x4000);assert page()==11
         render("savegame-backup-request.png")
         press(0x40);press(0x4000);assert page()==11
-        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==9
+        press(0x2000);assert page()==7 and dll.MenuTestSnapshot()&15==10
         press(0x40);render("cheats-back-scrolled.png");press(0x4000);assert page()==0 and dll.MenuTestSnapshot()&15==3
         press(0x40);press(0x4000)
         for _ in range(9):press(0x40)

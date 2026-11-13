@@ -81,13 +81,37 @@ BOOL launch_config_save(const wchar_t *ini,const LaunchConfig *c){
     WritePrivateProfileStringW(NULL,NULL,NULL,ini);return ok;
 }
 
+/* Preserve unrelated sections, block writers while building the replacement,
+ * recheck source identity/stamp and commit with an atomic rename. */
+BOOL launch_config_update_values(const wchar_t *ini,const wchar_t *section,const wchar_t *const *keys,const wchar_t *const *values,size_t count,const BY_HANDLE_FILE_INFORMATION *expected){
+ SetLastError(ERROR_SUCCESS);
+ if(!ini||!section||!keys||!values||!count||count>16)return FALSE;
+ WritePrivateProfileStringW(NULL,NULL,NULL,ini);
+ DWORD attributes=GetFileAttributesW(ini);if(attributes==INVALID_FILE_ATTRIBUTES||(attributes&(FILE_ATTRIBUTE_READONLY|FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT)))return FALSE;
+ HANDLE source=CreateFileW(ini,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,0,NULL);if(source==INVALID_HANDLE_VALUE)return FALSE;
+ BY_HANDLE_FILE_INFORMATION before={0};if(!GetFileInformationByHandle(source,&before)){CloseHandle(source);return FALSE;}
+ if(expected&&(before.dwVolumeSerialNumber!=expected->dwVolumeSerialNumber||before.nFileIndexHigh!=expected->nFileIndexHigh||before.nFileIndexLow!=expected->nFileIndexLow||before.nFileSizeHigh!=expected->nFileSizeHigh||before.nFileSizeLow!=expected->nFileSizeLow||CompareFileTime(&before.ftLastWriteTime,&expected->ftLastWriteTime))){CloseHandle(source);SetLastError(ERROR_RETRY);return FALSE;}
+ wchar_t temp[LAUNCH_PATH+80];swprintf(temp,LAUNCH_PATH+80,L"%ls.performance-%lu-%llu.tmp",ini,GetCurrentProcessId(),(unsigned long long)GetTickCount64());
+ BOOL ok=copy_ini(ini,temp);
+ for(size_t i=0;ok&&i<count;++i)ok=keys[i]&&values[i]&&WritePrivateProfileStringW(section,keys[i],values[i],temp);
+ if(ok)WritePrivateProfileStringW(NULL,NULL,NULL,temp);
+ CloseHandle(source);
+ /* Windows' replace operation needs the old handle closed. Recheck the source
+    stamp immediately before the atomic rename, and fail if it changed. */
+ WIN32_FILE_ATTRIBUTE_DATA current={0};
+ if(ok&&(!GetFileAttributesExW(ini,GetFileExInfoStandard,&current)||current.nFileSizeHigh!=before.nFileSizeHigh||current.nFileSizeLow!=before.nFileSizeLow||CompareFileTime(&current.ftLastWriteTime,&before.ftLastWriteTime))){ok=FALSE;SetLastError(ERROR_RETRY);}
+ if(ok)ok=MoveFileExW(temp,ini,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
+ DWORD error=ok?ERROR_SUCCESS:GetLastError();if(!ok)DeleteFileW(temp);WritePrivateProfileStringW(NULL,NULL,NULL,ini);SetLastError(error);return ok;
+}
+
 BOOL overlay_settings_reset(const wchar_t *ini){
     wchar_t temp[LAUNCH_PATH+80];swprintf(temp,LAUNCH_PATH+80,L"%ls.reset-%lu-%llu.tmp",ini,GetCurrentProcessId(),(unsigned long long)GetTickCount64());
     if(!copy_ini(ini,temp)){DeleteFileW(temp);return FALSE;}
-    const wchar_t *keys[]={L"ButtonIcons",L"OpeningShortcut",L"UIScale",L"AutoLaunchAfterRestart",L"GuideButtonOpensMenu",L"ControllerAccess",L"LongevityProtection",L"TrainingRewardMultiplier",L"ThemeChoice",L"FontSize",L"BoxStyle",L"WindowSize",L"StartupShortMovie",L"StartupSkipPopups",L"SkipStartupSplashes"};
-    const wchar_t *values[]={L"Xbox",L"0x00000c08",L"100",L"1",L"1",L"Either",L"0",L"1",L"0",L"18",L"0",L"0",L"0",L"0",L"0"};
+    const wchar_t *keys[]={L"ButtonIcons",L"OpeningShortcut",L"UIScale",L"AutoLaunchAfterRestart",L"GuideButtonOpensMenu",L"ControllerAccess",L"LongevityProtection",L"TrainingRewardMultiplier",L"ThemeChoice",L"FontSize",L"BoxStyle",L"WindowSize",L"StartupShortMovie",L"StartupSkipPopups",L"SkipStartupSplashes",L"IncludeOverlayInScreenshots",L"MuteWhenUnfocused",L"ReplayStepIndex",L"OfferDecisionReplays"};
+    const wchar_t *values[]={L"Xbox",L"0x00000c08",L"100",L"1",L"1",L"Either",L"0",L"1",L"0",L"18",L"0",L"0",L"0",L"0",L"0",L"0",L"0",L"0",L"0"};
     _Static_assert(sizeof(keys)==sizeof(values),"Reset keys and values must match");BOOL ok=TRUE;
     for(unsigned i=0;i<sizeof(keys)/sizeof(keys[0]);++i)ok=WritePrivateProfileStringW(L"Menu",keys[i],values[i],temp)&&ok;
+    ok=WritePrivateProfileStringW(L"Photo",NULL,NULL,temp)&&ok;
     ok=WritePrivateProfileStringW(L"Keybinds",NULL,NULL,temp)&&ok;
     ok=WritePrivateProfileStringW(L"Launch",NULL,NULL,temp)&&ok;WritePrivateProfileStringW(NULL,NULL,NULL,temp);
     if(ok)ok=MoveFileExW(temp,ini,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);

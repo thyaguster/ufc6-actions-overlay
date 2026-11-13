@@ -30,7 +30,6 @@ int wmain(int argc,wchar_t **argv){
  assert(WritePrivateProfileStringW(L"Keybinds",L"PhotoModeKey",NULL,ini));preferences_load(&loaded,ini,0xc08);assert(loaded.actions[BIND_PHOTO].key==VK_F9);
  assert(WritePrivateProfileStringW(L"Keybinds",L"PhotoModeKey",L"0",ini));preferences_load(&loaded,ini,0xc08);assert(!loaded.actions[BIND_PHOTO].key);
  assert(WritePrivateProfileStringW(L"Keybinds",L"ScreenshotKey",L"0x78",ini));assert(WritePrivateProfileStringW(L"Keybinds",L"PhotoModeKey",NULL,ini));preferences_load(&loaded,ini,0xc08);assert(loaded.actions[BIND_SCREENSHOT].key==VK_F9&&!loaded.actions[BIND_PHOTO].key);
- assert(WritePrivateProfileStringW(L"Keybinds",L"ScreenshotOverlayKey",NULL,ini));preferences_load(&loaded,ini,0xc08);assert(loaded.actions[BIND_SCREENSHOT_OVERLAY].key==(KEY_CTRL|KEY_SHIFT|VK_F12));
- assert(binding_set(&loaded,BIND_SCREENSHOT_OVERLAY,1,VK_F11));assert(preferences_save(&loaded,ini));preferences_load(&p,ini,0xc08);assert(p.actions[BIND_SCREENSHOT_OVERLAY].key==VK_F11);
+ assert(WritePrivateProfileStringW(L"Keybinds",L"ScreenshotOverlayKey",L"0x57b",ini));preferences_load(&loaded,ini,0xc08);for(int i=0;i<BIND_COUNT;++i)assert(loaded.actions[i].key!=(KEY_CTRL|KEY_SHIFT|VK_F12));
  DeleteFileW(ini);DeleteFileW(cfg);puts("PASS: key/chord conflicts, modifiers, once-per-hold activation, focus loss, persistence/clear, config theme override, preset independence, invalid colors and launcher-file preservation.");return 0;
 }
