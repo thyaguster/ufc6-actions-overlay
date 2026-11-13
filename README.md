@@ -53,7 +53,7 @@ This download contains the overlay, asset-free controller-icon patcher, and inst
 
 [Full screenshot gallery](docs/SCREENSHOTS.md) · [Replay and Photo Mode guide](docs/PHOTO-MODE.md) · [Release history](RELEASE-NOTES.md)
 
-![Replay timeline, speed and controller controls](docs/screenshots/photo-panel-replay.png)
+![Replay timeline, speed and controller controls over UFC 6](docs/screenshots/replay-in-game.png)
 
 ## Parsec / two controllers
 

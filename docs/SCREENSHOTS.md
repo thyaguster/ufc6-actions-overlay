@@ -98,11 +98,25 @@ The page previews below are rendered by the current v0.9.36 overlay. Sample repl
 </tr>
 </table>
 
-## Full-game examples
+## Current full-game captures
 
-These captures were made in v0.9.26 with the same appearance. Fresh v0.9.36 replay captures will be added after a replay is available.
+Actual 2560 × 1440 frames from v0.9.36, captured through the overlay with Include overlay in screenshots enabled.
+
+![replay in game](screenshots/replay-in-game.png)
 
 ![photo controls in game](screenshots/photo-controls-in-game.png)
+
+![cheats in game](screenshots/cheats-in-game.png)
+
+![game launcher in game](screenshots/game-launcher-in-game.png)
+
+![overlay in game](screenshots/overlay-in-game.png)
+
+![settings in game](screenshots/settings-in-game.png)
+
+## Other full-game examples
+
+These v0.9.26 captures illustrate unchanged features with the same appearance.
 
 ![photo effects in game](screenshots/photo-effects-in-game.png)
 

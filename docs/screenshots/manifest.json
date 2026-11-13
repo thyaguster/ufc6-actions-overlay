@@ -8,7 +8,7 @@
     "scale_percent": 125,
     "window_size": "Tall"
   },
-  "notes": "New native-renderer pages use v0.9.36. Retained full-game examples show v0.9.26 with the same appearance; versions are recorded per image. No synthetic game screenshots.",
+  "notes": "Current v0.9.36 page previews and six new actual game-frame captures. Remaining v0.9.26 examples use the same appearance and are identified per image.",
   "images": {
     "appearance.png": {
       "kind": "ui-preview",
@@ -39,12 +39,12 @@
     },
     "cheats-in-game.png": {
       "kind": "game-frame",
-      "version": "0.9.26",
+      "version": "0.9.36",
       "size": [
         2560,
         1440
       ],
-      "sha256": "f619b9d88927a01fb6c181f014aeb5f23c1d82e2e647fba2d67e3022758e482e"
+      "sha256": "5ce6a06ebfd864ffc4ad8cf67d79f7bbb94337aa260911e1aff533fabf3c7962"
     },
     "controls.png": {
       "kind": "ui-preview",
@@ -120,12 +120,12 @@
     },
     "game-launcher-in-game.png": {
       "kind": "game-frame",
-      "version": "0.9.26",
+      "version": "0.9.36",
       "size": [
         2560,
         1440
       ],
-      "sha256": "8dcbf7adbfc13183c0fef0d73c6adb0f684f58e410223826c4824415ebb6d154"
+      "sha256": "3ad683c9aeb561ccced0ae4c5b3e650784331c247cc6098a74c7f780c8f10bc9"
     },
     "game-launcher.png": {
       "kind": "ui-preview",
@@ -183,12 +183,12 @@
     },
     "overlay-in-game.png": {
       "kind": "game-frame",
-      "version": "0.9.26",
+      "version": "0.9.36",
       "size": [
         2560,
         1440
       ],
-      "sha256": "57e59de633fa11ba53b3fb2e1e88d690eaa4ab5985bcd62d72a78975ecd04595"
+      "sha256": "0fea258aa5a647ca8a06aa5475ea2e28dbac7d83fb940f3557d3f8caeb5600c0"
     },
     "performance-discard-confirm.png": {
       "kind": "ui-preview",
@@ -228,12 +228,12 @@
     },
     "photo-controls-in-game.png": {
       "kind": "game-frame",
-      "version": "0.9.26",
+      "version": "0.9.36",
       "size": [
         2560,
         1440
       ],
-      "sha256": "2d67e99266daae2fec3d9b6d054679a2b2be67add31a3e8fd030a2b253fff849"
+      "sha256": "519f3b487407db6c3629411624dfa3c7e68bad6911de3d534f4e4b566afc2e91"
     },
     "photo-controls.png": {
       "kind": "ui-preview",
@@ -390,12 +390,12 @@
     },
     "settings-in-game.png": {
       "kind": "game-frame",
-      "version": "0.9.26",
+      "version": "0.9.36",
       "size": [
         2560,
         1440
       ],
-      "sha256": "961158b82da7800fc90d2df79a95755785f609b02e155782840dc1d8ea3d8fd0"
+      "sha256": "956af1da676125081835dde3605315f377d5ee7d6715aa3d0d898b647e7c2d4a"
     },
     "settings.png": {
       "kind": "ui-preview",
@@ -504,6 +504,15 @@
         470
       ],
       "sha256": "c0e4af8eaffabb798de945cda872d01d3d1968519e94753bd33468de3b2e47a3"
+    },
+    "replay-in-game.png": {
+      "kind": "game-frame",
+      "version": "0.9.36",
+      "size": [
+        2560,
+        1440
+      ],
+      "sha256": "c1caf247c0e7fca6853db8192b80fbaa01614e4cfea24521c559ccadba55c10a"
     }
   }
 }
