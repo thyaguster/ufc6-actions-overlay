@@ -43,6 +43,8 @@ parser.add_argument("--window",action="store_true")
 parser.add_argument("--window-reload",action="store_true")
 parser.add_argument("--startup",action="store_true")
 parser.add_argument("--startup-reload",action="store_true")
+parser.add_argument("--welcome",action="store_true")
+parser.add_argument("--welcome-current",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
 if args.reset:
@@ -117,6 +119,15 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     assert dll.MenuTestSnapshot()&0x100
+    if args.welcome or args.welcome_current:
+        dll.MenuTestWelcome.argtypes=[c.c_int]
+        dll.MenuTestWelcome(int(args.welcome));pump(.1);render("welcome-old-version.png" if args.welcome else "welcome-current.png")
+        press(0x4000)
+        assert (dll.MenuTestSnapshot()>>12)&31==0
+        k.GetPrivateProfileIntW.argtypes=[w.LPCWSTR,w.LPCWSTR,c.c_int,w.LPCWSTR]
+        assert k.GetPrivateProfileIntW("Menu","WelcomeShown",0,str(folder/"ufc6-quit-menu.test.ini"))==1
+        print("PASS: first-run panel, old-version notice, acknowledgement and unclipped rendering.")
+        raise SystemExit(0)
     if args.decision_replays or args.decision_replays_reload:
         k.GetPrivateProfileIntW.argtypes=[w.LPCWSTR,w.LPCWSTR,c.c_int,w.LPCWSTR]
         def saved_replay():return k.GetPrivateProfileIntW("Menu","OfferDecisionReplays",0,str(folder/"ufc6-quit-menu.test.ini"))
@@ -152,6 +163,9 @@ try:
             press(0x4000)
             assert saved("SkipStartupSplashes")==0 and saved("StartupSkipPopups")==0 and saved("SuppressOnlineNotices")==0
         else:
+            # New installations now start with Skip and online suppression On.
+            press(0x4000)
+            assert saved("SkipStartupSplashes")==0 and saved("SuppressOnlineNotices")==0
             press(0x4000)
             assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==1 and saved("SuppressOnlineNotices")==1
             press(0x40);press(0x40);press(0x40);press(0x4000)

@@ -108,7 +108,7 @@ BOOL overlay_settings_reset(const wchar_t *ini){
     wchar_t temp[LAUNCH_PATH+80];swprintf(temp,LAUNCH_PATH+80,L"%ls.reset-%lu-%llu.tmp",ini,GetCurrentProcessId(),(unsigned long long)GetTickCount64());
     if(!copy_ini(ini,temp)){DeleteFileW(temp);return FALSE;}
     const wchar_t *keys[]={L"ButtonIcons",L"OpeningShortcut",L"UIScale",L"AutoLaunchAfterRestart",L"GuideButtonOpensMenu",L"ControllerAccess",L"LongevityProtection",L"TrainingRewardMultiplier",L"ThemeChoice",L"FontSize",L"BoxStyle",L"WindowSize",L"StartupShortMovie",L"StartupSkipPopups",L"SkipStartupSplashes",L"SuppressOnlineNotices",L"IncludeOverlayInScreenshots",L"MuteWhenUnfocused",L"ReplayStepIndex",L"OfferDecisionReplays",L"InstantReplayInFight"};
-    const wchar_t *values[]={L"Xbox",L"0x00000c08",L"100",L"1",L"1",L"Either",L"0",L"1",L"0",L"18",L"0",L"0",L"0",L"0",L"0",L"0",L"0",L"0",L"0",L"0",L"0"};
+    const wchar_t *values[]={L"Xbox",L"0x00000c08",L"100",L"1",L"1",L"Either",L"0",L"1",L"0",L"18",L"0",L"0",L"0",L"0",L"1",L"1",L"0",L"0",L"0",L"0",L"0"};
     _Static_assert(sizeof(keys)==sizeof(values),"Reset keys and values must match");BOOL ok=TRUE;
     for(unsigned i=0;i<sizeof(keys)/sizeof(keys[0]);++i)ok=WritePrivateProfileStringW(L"Menu",keys[i],values[i],temp)&&ok;
     ok=WritePrivateProfileStringW(L"Photo",NULL,NULL,temp)&&ok;

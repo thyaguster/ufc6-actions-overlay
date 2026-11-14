@@ -37,7 +37,7 @@ int wmain(int argc,wchar_t **argv){
     assert(WritePrivateProfileStringW(L"Menu",L"MuteWhenUnfocused",L"1",ini));
     assert(WritePrivateProfileStringW(L"Menu",L"ReplayStepIndex",L"6",ini));
     assert(overlay_settings_reset(ini)&&launch_config_load(bin,&c)&&!c.custom&&c.wait_parent);
-    assert(GetPrivateProfileIntW(L"Menu",L"SkipStartupSplashes",1,ini)==0);
+    assert(GetPrivateProfileIntW(L"Menu",L"SkipStartupSplashes",0,ini)==1 && GetPrivateProfileIntW(L"Menu",L"SuppressOnlineNotices",0,ini)==1);
     assert(GetPrivateProfileIntW(L"Menu",L"MuteWhenUnfocused",1,ini)==0&&GetPrivateProfileIntW(L"Menu",L"ReplayStepIndex",6,ini)==0);
     assert(GetPrivateProfileIntW(L"Menu",L"StartupShortMovie",1,ini)==0&&GetPrivateProfileIntW(L"Menu",L"StartupSkipPopups",1,ini)==0);
     assert(GetPrivateProfileIntW(L"Menu",L"LongevityProtection",1,ini)==0);

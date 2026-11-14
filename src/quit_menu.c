@@ -25,6 +25,7 @@
 #include "game_icons.h"
 #include "save_backups.h"
 #include "overlay_version.h"
+#include "game_version.h"
 #include "overlay_preferences.h"
 #include "controller_artwork.h"
 #include "startup_options.h"
@@ -97,6 +98,9 @@ static XStateFn xstate;
 static wchar_t log_path[MAX_PATH];
 static wchar_t settings_path[MAX_PATH];
 static int settings_save_failed;
+static int welcome_pending;
+static uint64_t welcome_earliest;
+static GameVersion installed_game_version;
 static int guide_was_down, f10_was_down;
 static int test_mode;
 #ifdef QUIT_MENU_TEST
@@ -543,8 +547,8 @@ static void value_chip(HDC dc,RECT row,const wchar_t *label,int selected,int adj
 #include "shortcut_badges.h"
 static void row_geometry(int page,int index,int first,int *top,int *height) {
     int global_index=index;if(menu_scroll_page(page))index-=first;
-    *top=page==PAGE_CHEATS?84+32*index+(first<=3&&global_index>=3?24:0):page==PAGE_MAIN?84+27*index+(index>=MAIN_REBOOT?10:0):(page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?86+32*index:page==PAGE_BACKUPS?104+40*index:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?182+48*index:100+56*index;
-    *height=page==PAGE_BACKUPS?34:page==PAGE_CHEATS?30:page==PAGE_MAIN?25:(page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?30:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?42:50;
+    *top=page==PAGE_WELCOME?355:page==PAGE_CHEATS?84+32*index+(first<=3&&global_index>=3?24:0):page==PAGE_MAIN?84+27*index+(index>=MAIN_REBOOT?10:0):(page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?86+32*index:page==PAGE_BACKUPS?104+40*index:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?182+48*index:100+56*index;
+    *height=page==PAGE_WELCOME?34:page==PAGE_BACKUPS?34:page==PAGE_CHEATS?30:page==PAGE_MAIN?25:(page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?30:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?42:50;
 }
 static void draw_menu(HDC dc, RECT r) {
     EnterCriticalSection(&lock);paint_theme=current_theme;OverlayPreferences bindings=preferences;frame_font_index=(preferences.font_size-16)/2;LeaveCriticalSection(&lock);
@@ -572,13 +576,14 @@ static void draw_menu(HDC dc, RECT r) {
 #endif
     startup_state=startup_assets_status(startup_reason,512);
     RECT title = {36, 10, r.right - 36, 57};
-    text(dc,font_title,state.page==PAGE_STARTUP?L"Startup screens":state.page==PAGE_STARTUP_CONFIRM?(state.startup_patch_enable?L"Enable startup bypass?":L"Restore startup screens?"):state.page==PAGE_PERFORMANCE?L"Performance":state.page==PAGE_PERFORMANCE_RESTART?L"Save and restart?":state.page==PAGE_PERFORMANCE_DISCARD?L"Discard edits?":state.page==PAGE_PHOTO_EFFECTS?L"Filters & effects":state.page==PAGE_PHOTO_WATERMARK?L"Photo watermark":state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_THEME?L"Theme":state.page==PAGE_QUIT?L"Quit game?":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_GAME_ICONS?L"Controller icon patch":state.page==PAGE_GAME_ICONS_CONFIRM?(state.game_icons_xbox?L"Apply Xbox icons?":L"Restore PS icons?"):state.page==PAGE_CAREER_ADD?(state.career_kind==CAREER_GRADES?L"Set all grades to A?":state.career_kind==CAREER_DAYS?L"Refill training days?":state.career_kind==CAREER_FITNESS?L"Restore fitness?":state.career_kind==0?L"Add money?":L"Add skill points?"):state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_SETTINGS_HOME?L"Settings":state.page==PAGE_APPEARANCE?L"Appearance":state.page==PAGE_CONTROLS?L"Controls":state.page==PAGE_GAME_SETTINGS?L"Game & launcher":state.page==PAGE_EXPERIMENTAL?L"Experimental":state.page==PAGE_TOOLS?L"Files & support":state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_SCREENSHOT?L"Screenshot saved":state.page==PAGE_RESET?L"Reset settings?":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
+    text(dc,font_title,state.page==PAGE_WELCOME?L"UFC 6 Actions Overlay":state.page==PAGE_STARTUP?L"Startup screens":state.page==PAGE_STARTUP_CONFIRM?(state.startup_patch_enable?L"Enable startup bypass?":L"Restore startup screens?"):state.page==PAGE_PERFORMANCE?L"Performance":state.page==PAGE_PERFORMANCE_RESTART?L"Save and restart?":state.page==PAGE_PERFORMANCE_DISCARD?L"Discard edits?":state.page==PAGE_PHOTO_EFFECTS?L"Filters & effects":state.page==PAGE_PHOTO_WATERMARK?L"Photo watermark":state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_THEME?L"Theme":state.page==PAGE_QUIT?L"Quit game?":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_GAME_ICONS?L"Controller icon patch":state.page==PAGE_GAME_ICONS_CONFIRM?(state.game_icons_xbox?L"Apply Xbox icons?":L"Restore PS icons?"):state.page==PAGE_CAREER_ADD?(state.career_kind==CAREER_GRADES?L"Set all grades to A?":state.career_kind==CAREER_DAYS?L"Refill training days?":state.career_kind==CAREER_FITNESS?L"Restore fitness?":state.career_kind==0?L"Add money?":L"Add skill points?"):state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_SETTINGS_HOME?L"Settings":state.page==PAGE_APPEARANCE?L"Appearance":state.page==PAGE_CONTROLS?L"Controls":state.page==PAGE_GAME_SETTINGS?L"Game & launcher":state.page==PAGE_EXPERIMENTAL?L"Experimental":state.page==PAGE_TOOLS?L"Files & support":state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_SCREENSHOT?L"Screenshot saved":state.page==PAGE_RESET?L"Reset settings?":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
     wchar_t owner_label[64];
     if(owner_player>0)swprintf(owner_label,64,L"Player %d",owner_player);
     else wcscpy(owner_label,has_owner?L"Controller":state.first_player_only?L"Waiting for Player 1":L"Waiting for controller");
     RECT owner_rect={330,25,r.right-36,48};if(state.page==PAGE_MAIN||state.page==PAGE_CHEATS||state.page==PAGE_SETTINGS_HOME)text(dc,font_small,owner_label,owner_rect,paint_theme.muted,DT_RIGHT|DT_SINGLELINE);
     RECT sub = {38, 57, r.right - 36, 84};
-    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_STARTUP?L"Skip title input and known offline network warnings.":state.page==PAGE_STARTUP_CONFIRM?L"Save progress first. The game will close and relaunch.":state.page==PAGE_PERFORMANCE?L"PORTHEON settings. Restart the game to apply.":state.page==PAGE_PERFORMANCE_RESTART?L"Save these settings and relaunch through PORTHEON.":state.page==PAGE_PERFORMANCE_DISCARD?L"Your performance edits have not been saved.":state.page==PAGE_PHOTO_EFFECTS?L"Live preview in Photo Mode. Left/right adjusts.":state.page==PAGE_PHOTO_WATERMARK?L"Uses your PORTHEON player name. Saved in photos.":state.page==PAGE_PHOTO?L"Free camera, zoom and freeze during a fight.":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera. Esc exits.":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations.":state.page==PAGE_BINDING?L"Choose an input to record or clear.":state.page==PAGE_THEME?L"From config follows the launcher theme file.":state.page==PAGE_QUIT?L"Close UFC 6 normally through your launcher.":state.page==PAGE_BACKUPS?L"Save in UFC 6 first; wait for autosave to finish.":state.page==PAGE_GAME_ICONS?L"Replace in-game button icons with Xbox or PlayStation.":state.page==PAGE_GAME_ICONS_CONFIRM?L"Your game will close and restart through your launcher.":state.page==PAGE_CAREER_ADD?L"Career changes are included in normal game saves.":state.page==PAGE_CHEATS?L"Stamina and health apply to Player 1.":state.page==PAGE_SCREENSHOT?(state.screenshot_overlay?L"Game and overlay saved together.":L"Clean game frame saved. The overlay is excluded."):state.page==PAGE_RESET?L"Restore overlay and launcher defaults?":state.page==PAGE_SETTINGS_HOME?L"Choose a category.":state.page==PAGE_APPEARANCE?L"Theme, size and menu style.":state.page==PAGE_CONTROLS?L"Shortcuts and controller access.":state.page==PAGE_GAME_SETTINGS?L"Launcher, startup screens and game controller icons.":state.page==PAGE_EXPERIMENTAL?L"Optional startup fallback and in-fight replay.":state.page==PAGE_TOOLS?L"Screenshots, updates, support and reset.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):paint_theme.muted,DT_LEFT);
+    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_WELCOME?L"Welcome. Review your settings and compatibility.":state.page==PAGE_STARTUP?L"Skip title input and known offline network warnings.":state.page==PAGE_STARTUP_CONFIRM?L"Save progress first. The game will close and relaunch.":state.page==PAGE_PERFORMANCE?L"PORTHEON settings. Restart the game to apply.":state.page==PAGE_PERFORMANCE_RESTART?L"Save these settings and relaunch through PORTHEON.":state.page==PAGE_PERFORMANCE_DISCARD?L"Your performance edits have not been saved.":state.page==PAGE_PHOTO_EFFECTS?L"Live preview in Photo Mode. Left/right adjusts.":state.page==PAGE_PHOTO_WATERMARK?L"Uses your PORTHEON player name. Saved in photos.":state.page==PAGE_PHOTO?L"Free camera, zoom and freeze during a fight.":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera. Esc exits.":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations.":state.page==PAGE_BINDING?L"Choose an input to record or clear.":state.page==PAGE_THEME?L"From config follows the launcher theme file.":state.page==PAGE_QUIT?L"Close UFC 6 normally through your launcher.":state.page==PAGE_BACKUPS?L"Save in UFC 6 first; wait for autosave to finish.":state.page==PAGE_GAME_ICONS?L"Replace in-game button icons with Xbox or PlayStation.":state.page==PAGE_GAME_ICONS_CONFIRM?L"Your game will close and restart through your launcher.":state.page==PAGE_CAREER_ADD?L"Career changes are included in normal game saves.":state.page==PAGE_CHEATS?L"Stamina and health apply to Player 1.":state.page==PAGE_SCREENSHOT?(state.screenshot_overlay?L"Game and overlay saved together.":L"Clean game frame saved. The overlay is excluded."):state.page==PAGE_RESET?L"Restore overlay and launcher defaults?":state.page==PAGE_SETTINGS_HOME?L"Choose a category.":state.page==PAGE_APPEARANCE?L"Theme, size and menu style.":state.page==PAGE_CONTROLS?L"Shortcuts and controller access.":state.page==PAGE_GAME_SETTINGS?L"Launcher, startup screens and game controller icons.":state.page==PAGE_EXPERIMENTAL?L"Optional startup fallback and in-fight replay.":state.page==PAGE_TOOLS?L"Screenshots, updates, support and reset.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):paint_theme.muted,DT_LEFT);
+    const wchar_t *welcome_labels[]={L"Continue to overlay"};
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Cheats",L"Photo Mode",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
     const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size",L"Visual auto-confirm fallback",L"Skip intros",L"Suppress online notices",L"Include overlay in screenshots",L"Skip title & network warnings...",L"Mute when unfocused",L"Replay after decisions",L"Experimental...",L"Instant Replay in fights"};
     const wchar_t *photo_labels[]={state.photo_active?L"Continue camera":L"Enter Photo Mode",L"Freeze action",L"Hide HUD",L"Keep cage visible",L"Show controls panel",L"Reset camera",L"Take screenshot",L"Exit Photo Mode",L"Controls...",L"Filters & effects...",L"Watermark...",L"Back"};
@@ -634,7 +639,7 @@ static void draw_menu(HDC dc, RECT r) {
         if(state.page==PAGE_PERFORMANCE&&i<PERF_SAVE)label_row.right=i==PERF_SCALE?300:410;
         if(has_binding)label_row.right=300;
         if(state.page==PAGE_MAIN&&bindings.font_size==20){--label_row.top;++label_row.bottom;}
-        text(dc,font_main,state.page==PAGE_PERFORMANCE?performance_labels[i]:state.page==PAGE_PERFORMANCE_RESTART?performance_restart[i]:state.page==PAGE_PERFORMANCE_DISCARD?performance_discard[i]:state.page==PAGE_PHOTO_EFFECTS?effect_labels[i]:state.page==PAGE_PHOTO_WATERMARK?mark_labels[i]:state.page==PAGE_PHOTO?photo_labels[i]:state.page==PAGE_PHOTO_CONTROLS?photo_control_labels[i]:state.page==PAGE_SETTINGS_HOME?category_labels[i]:state.page==PAGE_KEYBINDS?(i==BIND_COUNT?L"Back":binding_names[i]):state.page==PAGE_BINDING?binding_labels[i]:state.page==PAGE_THEME?theme_choices[i]:state.page==PAGE_QUIT?quit_labels[i]:state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_STARTUP?startup_labels[i]:state.page==PAGE_STARTUP_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_GAME_ICONS_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_MAIN?main_labels[i]:menu_setting_page(state.page)?setting_labels[gi]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:state.page==PAGE_CAREER_ADD?career_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],label_row,color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+        text(dc,font_main,state.page==PAGE_WELCOME?welcome_labels[i]:state.page==PAGE_PERFORMANCE?performance_labels[i]:state.page==PAGE_PERFORMANCE_RESTART?performance_restart[i]:state.page==PAGE_PERFORMANCE_DISCARD?performance_discard[i]:state.page==PAGE_PHOTO_EFFECTS?effect_labels[i]:state.page==PAGE_PHOTO_WATERMARK?mark_labels[i]:state.page==PAGE_PHOTO?photo_labels[i]:state.page==PAGE_PHOTO_CONTROLS?photo_control_labels[i]:state.page==PAGE_SETTINGS_HOME?category_labels[i]:state.page==PAGE_KEYBINDS?(i==BIND_COUNT?L"Back":binding_names[i]):state.page==PAGE_BINDING?binding_labels[i]:state.page==PAGE_THEME?theme_choices[i]:state.page==PAGE_QUIT?quit_labels[i]:state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_STARTUP?startup_labels[i]:state.page==PAGE_STARTUP_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_GAME_ICONS_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_MAIN?main_labels[i]:menu_setting_page(state.page)?setting_labels[gi]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:state.page==PAGE_CAREER_ADD?career_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],label_row,color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         if(has_binding)binding_chip(dc,control,&bindings.actions[bound],focused,ps,0,bound==BIND_REBOOT?(menu_auto_launch(&state)?L"Auto: On":L"Auto: Off"):NULL);
         if(state.page==PAGE_PERFORMANCE&&i<PERF_SAVE){
             if(!state.performance_available)value_chip(dc,control,L"Unavailable",focused,0);
@@ -703,6 +708,30 @@ static void draw_menu(HDC dc, RECT r) {
         if(state.page==PAGE_GAME_ICONS&&((i==0&&icon_state==GAME_ICONS_XBOX)||(i==1&&icon_state==GAME_ICONS_PS)))value_chip(dc,control,L"Active",focused,0);
         int simple=(state.page==PAGE_PERFORMANCE&&i>=PERF_SAVE)||(state.page==PAGE_MAIN&&i!=MAIN_REBOOT&&!has_binding)||(menu_setting_page(state.page)&&(gi==SETTING_LAUNCHER||gi==SETTING_SCREENSHOTS||gi==SETTING_RESET||gi==SETTING_GAME_ICONS||gi==SETTING_STARTUP_PATCH||gi==SETTING_UPDATE||gi==SETTING_DIAGNOSTICS||gi==SETTING_KEYBINDS||gi==SETTING_THEME||gi==SETTING_BACK))||(state.page==PAGE_CHEATS&&i>=5&&i!=7&&i!=8)||state.page==PAGE_BACKUPS;
         if(simple&&!has_binding)arrow_mark(dc,control.right-21,(control.top+control.bottom)/2,1,focused?paint_theme.accent:RGB(112,132,155));
+    }
+    if(state.page==PAGE_WELCOME){
+        RECT heading={38,83,r.right-38,110};
+        text(dc,font_small,L"CURRENT SETTINGS",heading,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
+        const wchar_t *names[]={L"Skip intros",L"Suppress online notices",L"Guide button opens overlay",L"Launch UFC 6 after PC restart"};
+        const int enabled[]={state.skip_splashes,state.suppress_online_notices,menu_guide_enabled(&state),menu_auto_launch(&state)};
+        for(int i=0;i<4;++i){
+            int y=110+i*35;RECT box={36,y,r.right-36,y+31};
+            row_surface(dc,box,bindings.box_style,bindings.box_style==3?30:8,paint_theme.surface,paint_theme.border);
+            RECT label={53,y+3,r.right-112,y+28},value={r.right-105,y+3,r.right-53,y+28};
+            text(dc,font_body,names[i],label,paint_theme.text,DT_LEFT|DT_SINGLELINE|DT_VCENTER);
+            text(dc,font_small,enabled[i]?L"On":L"Off",value,enabled[i]?paint_theme.accent:paint_theme.muted,DT_RIGHT|DT_SINGLELINE|DT_VCENTER);
+        }
+        RECT section={38,248,r.right-38,275};
+        text(dc,font_small,L"GAME & CHEAT COMPATIBILITY",section,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
+        RECT version_box={36,275,r.right-36,308};
+        row_surface(dc,version_box,bindings.box_style,bindings.box_style==3?30:8,paint_theme.surface,paint_theme.border);
+        RECT version_label={53,279,r.right-180,304},version_value={r.right-170,279,r.right-53,304};
+        text(dc,font_body,L"Installed UFC 6",version_label,paint_theme.text,DT_LEFT|DT_SINGLELINE|DT_VCENTER);
+        text(dc,font_small,installed_game_version.known?installed_game_version.label:L"Unknown",version_value,installed_game_version.older_than_01006?RGB(255,196,94):paint_theme.accent,DT_RIGHT|DT_SINGLELINE|DT_VCENTER);
+        RECT advice_box={36,314,r.right-36,347},advice={51,317,r.right-51,344};
+        row_surface(dc,advice_box,bindings.box_style,bindings.box_style==3?30:8,RGB(45,39,25),RGB(158,121,53));
+        const wchar_t *advice_text=installed_game_version.older_than_01006?L"Cheats may fail. Update UFC 6 to v01.006 or newer.":installed_game_version.known?L"Cheats target v01.006; older versions may not work.":L"Cheat support unknown. UFC 6 v01.006 is recommended.";
+        text(dc,font_small,advice_text,advice,RGB(255,207,105),DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS);
     }
     if(state.page==PAGE_CHEATS&&first<=3){RECT heading={38,180-32*first,r.right-36,204-32*first};text(dc,font_small,L"Career cheats",heading,paint_theme.muted,DT_LEFT|DT_SINGLELINE);}
     if(state.page==PAGE_PERFORMANCE_RESTART||state.page==PAGE_PERFORMANCE_DISCARD){
@@ -1079,7 +1108,9 @@ static void toggle_menu(void) {
     if (menu.visible) {
         action(menu_close(&menu,MENU_RESUME));
     } else if (!menu.draining) {
-        menu_show(&menu);if(photo_mode_blocks_input())menu.page=PAGE_PHOTO;menu_device=-1;wait_guide_release=0;
+        menu_show(&menu);if(photo_mode_blocks_input())menu.page=PAGE_PHOTO;
+        else if(welcome_pending&&!test_mode){menu.page=PAGE_WELCOME;welcome_pending=0;}
+        menu_device=-1;wait_guide_release=0;
         raw_owner=-1;raw_previous=0;raw_navigation=0;
         for(int slot=0;slot<4;++slot){raw_idle_previous[slot]=raw_connected[slot]?raw_menu_buttons(slot):0;if(raw_connected[slot])raw_navigation=1;}
         neutralize(); action(MENU_OPEN);
@@ -1493,6 +1524,8 @@ static DWORD WINAPI worker(void *unused) {
     slash=wcsrchr(settings_path,L'\\');
     if(slash)lstrcpyW(slash+1,test_mode?L"ufc6-quit-menu.test.ini":L"ufc6-quit-menu.ini");
     GetModuleFileNameW(instance,performance_bin,LAUNCH_PATH);wchar_t *performance_slash=wcsrchr(performance_bin,L'\\');if(performance_slash)*performance_slash=0;
+    welcome_pending=GetPrivateProfileIntW(L"Menu",L"WelcomeShown",0,settings_path)==0;
+    installed_game_version=game_version_detect();
     preferences_seed_appearance(settings_path);
     menu.decision_replays=GetPrivateProfileIntW(L"Menu",L"OfferDecisionReplays",0,settings_path)!=0;
     menu.instant_replay=GetPrivateProfileIntW(L"Menu",L"InstantReplayInFight",0,settings_path)!=0;
@@ -1509,8 +1542,8 @@ static DWORD WINAPI worker(void *unused) {
     int scale=(int)GetPrivateProfileIntW(L"Menu",L"UIScale",MENU_SCALE_DEFAULT,settings_path);
     EnterCriticalSection(&lock);menu.ui_scale_percent=overlay_valid_scale(scale)?scale:MENU_SCALE_DEFAULT;LeaveCriticalSection(&lock);
     menu.screenshot_include_ui=GetPrivateProfileIntW(L"Menu",L"IncludeOverlayInScreenshots",0,settings_path)!=0;
-    menu.skip_splashes=GetPrivateProfileIntW(L"Menu",L"SkipStartupSplashes",0,settings_path)!=0;
-    menu.suppress_online_notices=GetPrivateProfileIntW(L"Menu",L"SuppressOnlineNotices",menu.skip_splashes?1:0,settings_path)!=0;
+    menu.skip_splashes=GetPrivateProfileIntW(L"Menu",L"SkipStartupSplashes",1,settings_path)!=0;
+    menu.suppress_online_notices=GetPrivateProfileIntW(L"Menu",L"SuppressOnlineNotices",1,settings_path)!=0;
     menu.startup_popups=GetPrivateProfileIntW(L"Menu",L"StartupSkipPopups",0,settings_path)!=0;
     int auto_launch=(int)GetPrivateProfileIntW(L"Menu",L"AutoLaunchAfterRestart",1,settings_path);
     EnterCriticalSection(&lock);menu.disable_auto_launch=auto_launch==0;LeaveCriticalSection(&lock);
@@ -1570,6 +1603,7 @@ static DWORD WINAPI worker(void *unused) {
 #endif
     refresh_live_cheats();
     if(!test_mode)gamebar_monitor_start();
+    welcome_earliest=GetTickCount64()+30000;
     startup_probe_deadline=GetTickCount64()+300000;
     SetTimer(NULL, 1, 16, NULL);
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {
@@ -1578,6 +1612,11 @@ static DWORD WINAPI worker(void *unused) {
             if(GetTickCount64()>=next_live_check){next_live_check=GetTickCount64()+250;refresh_live_cheats();}
             if(!test_mode){EnterCriticalSection(&lock);int skip=menu.skip_splashes,suppress_online=menu.suppress_online_notices,instant_replay=menu.instant_replay;LeaveCriticalSection(&lock);int before=startup_options.state;int result=startup_options_tick(&startup_options,0x900000000ULL,skip,skip);if(progression_notice_state()==0&&GetTickCount64()>=progression_notice_retry_tick){progression_notice_retry_tick=GetTickCount64()+1000;progression_notice_prepare();}progression_notice_set(suppress_online);int replay_before=instant_replay_gate.state,replay_after=instant_replay_gate_tick(&instant_replay_gate,0x900000000ULL,instant_replay);if(replay_after!=replay_before)log_line(replay_after<0?"Instant Replay gate waiting for verified callback (or conflict).":replay_after?"Instant Replay enabled for newly loaded fights.":"Instant Replay restored to game default.");if(result!=before)log_line(result<0?"Startup options waiting for verified game callbacks (or conflict).":result?"Experimental startup options applied in memory.":"Startup options restored to game defaults.");}
             EnterCriticalSection(&lock);if(startup_probe_press_until&&GetTickCount64()>=startup_probe_press_until)startup_release_confirm();LeaveCriticalSection(&lock);
+            if(welcome_pending&&GetTickCount64()>=welcome_earliest&&(test_mode||InterlockedCompareExchange(&vulkan_active,0,0))&&(test_mode||foreground())&&!IsIconic(game_window)&&!input_redirected()){
+                EnterCriticalSection(&lock);
+                if(!menu.visible&&!menu.draining&&!menu.photo_active){menu_show(&menu);menu.page=PAGE_WELCOME;welcome_pending=0;reset_menu_owner();neutralize();action(MENU_OPEN);}
+                LeaveCriticalSection(&lock);
+            }
             tick();
         } else if (msg.message == WM_MENU_ACTION) {
             if (msg.wParam == MENU_OPEN) { position_overlay(); log_line("Menu opened.");log_timeline("tools_opened"); }
@@ -1586,6 +1625,7 @@ static DWORD WINAPI worker(void *unused) {
                 photo_mode_command(PHOTO_STOP);ShowWindow(overlay, SW_HIDE); log_line("Quit selected: posting WM_CLOSE to game window.");
                 PostMessageW(game_window, WM_CLOSE, 0, 0);
             }
+            else if(msg.wParam==MENU_WELCOME_DONE){WritePrivateProfileStringW(L"Menu",L"WelcomeShown",L"1",settings_path);}
             else if(msg.wParam==MENU_SHORTCUT_CHANGED)save_binding(BIND_OPEN,0,menu_shortcut(&menu));
             else if(msg.wParam==MENU_STYLE_CHANGED||msg.wParam==MENU_SCALE_CHANGED||msg.wParam==MENU_AUTO_LAUNCH_CHANGED||msg.wParam==MENU_GUIDE_CHANGED||msg.wParam==MENU_ACCESS_CHANGED)save_settings();
             else if(msg.wParam==MENU_LAUNCHER_SETTINGS){
@@ -1769,6 +1809,7 @@ __declspec(dllexport) void MenuTestScreenshotName(wchar_t *out,int count){EnterC
 __declspec(dllexport) void MenuTestSettingsMode(int legacy){EnterCriticalSection(&lock);menu.settings_legacy=legacy!=0;LeaveCriticalSection(&lock);}
 __declspec(dllexport) void MenuTestLegacySettings(void){EnterCriticalSection(&lock);menu.settings_legacy=1;menu.page=PAGE_SETTINGS;menu.selection=0;menu.visible=1;menu.armed=0;LeaveCriticalSection(&lock);}
 __declspec(dllexport) void MenuTestRendererGate(int required){test_require_renderer=required;InterlockedExchange(&vulkan_active,0);}
+__declspec(dllexport) void MenuTestWelcome(int older){EnterCriticalSection(&lock);menu_show(&menu);menu.page=PAGE_WELCOME;installed_game_version.known=1;installed_game_version.older_than_01006=older;wcscpy(installed_game_version.label,older?L"01.005.000":L"01.006.000");LeaveCriticalSection(&lock);}
 __declspec(dllexport) int MenuTestWindowSize(void){return preferences.window_size;}
 __declspec(dllexport) void MenuTestPhotoHelp(int active,int ps,int frozen){EnterCriticalSection(&lock);test_photo_help_override=active;menu.photo_active=active;menu.photo_frozen=frozen;menu.photo_hud=1;menu.photo_cage=1;menu.photo_fov=55;menu.visible=0;menu.draining=0;menu.playstation_icons=ps;toast_until=0;LeaveCriticalSection(&lock);}
 __declspec(dllexport) int MenuTestVisibleRows(void){return menu_visible_rows(&menu);}

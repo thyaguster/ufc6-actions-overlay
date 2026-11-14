@@ -15,7 +15,7 @@ if (-not $Test -and (Test-Path -LiteralPath 'dist/release.json')) {
 }
 python src/generate_controller_artwork.py --check
 if ($LASTEXITCODE) { throw 'Controller artwork data verification failed' }
-$sources = @('src/quit_menu.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/save_backups.c','src/overlay_preferences.c','src/startup_options.c','src/startup_prompts.c','src/progression_notice.c','src/instant_replay_gate.c','src/photo_mode.c','src/replay_controls.c','src/audio_focus.c','src/performance_settings.c')
+$sources = @('src/quit_menu.c','src/version_proxy.c','src/exact_hooks.c','src/restart_client.c','src/gamebar_shortcut.c','src/gamebar_monitor.c','src/launch_config.c','src/launcher_dialog.c','src/screenshot_folder.c','src/live_cheats.c','src/cheat_bindings.c','src/career_cheats.c','src/game_icons.c','src/game_version.c','src/save_backups.c','src/overlay_preferences.c','src/startup_options.c','src/startup_prompts.c','src/progression_notice.c','src/instant_replay_gate.c','src/photo_mode.c','src/replay_controls.c','src/audio_focus.c','src/performance_settings.c')
 $flags = @('cc','-target','x86_64-windows-gnu','-O2','-Wall','-Wextra','-Werror','-shared','-Isrc','-luser32','-lgdi32','-lkernel32','-ladvapi32','-lcomdlg32','-lshell32','-lole32','-luuid')
 if ($Test) { $flags += '-DQUIT_MENU_TEST'; $output = 'dist/quit_menu_test.dll' }
 else { $output = 'dist/version.dll' }
@@ -34,7 +34,7 @@ if (-not $Test) {
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     $manifest = [ordered]@{
-        version = '0.9.45'
+        version = '0.9.46'
         parsec_engine_sha256 = 'ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d'
         engine_revision = '3309ab23f'
         engine_sha256 = 'f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2'
@@ -208,6 +208,10 @@ if ($Test) {
     if ($LASTEXITCODE) { throw 'Launch configuration fixture compilation failed' }
     & ./.build/launch_config_test.exe (Join-Path $root ('.build/launch-config-' + [guid]::NewGuid().ToString('N')))
     if ($LASTEXITCODE) { throw 'Launch configuration tests failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror tests/game_version_test.c src/game_version.c -lshell32 -o .build/game_version_test.exe
+    if ($LASTEXITCODE) { throw 'Game version test compilation failed' }
+    & ./.build/game_version_test.exe
+    if ($LASTEXITCODE) { throw 'Game version tests failed' }
     & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -municode tests/launcher_dialog_test.c src/launch_config.c -luser32 -lgdi32 -lcomdlg32 -o .build/launcher_dialog_test.exe
     if ($LASTEXITCODE) { throw 'Native launcher dialog fixture compilation failed' }
     & ./.build/launcher_dialog_test.exe (Join-Path $root ('.build/launcher-dialog-' + [guid]::NewGuid().ToString('N')))
@@ -314,6 +318,14 @@ if ($Test) {
 }
 Get-FileHash -LiteralPath $output -Algorithm SHA256 | Format-List
 
+
+if ($Test) {
+    $welcomeFixture = Join-Path $root ('.build/welcome-ui-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $welcomeFixture | Out-Null
+    Copy-Item -LiteralPath 'dist/quit_menu_test.dll' -Destination $welcomeFixture
+    python tests/icon_preview.py $welcomeFixture --welcome --reset
+    if ($LASTEXITCODE) { throw 'First-run welcome UI failed' }
+}
 
 if ($Test) {
     $startupFixture = Join-Path $root ('.build/startup-ui-' + [guid]::NewGuid().ToString('N'))

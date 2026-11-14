@@ -41,6 +41,11 @@ This download contains the overlay, asset-free controller-icon patcher, and inst
 
 **The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Game & launcher → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
 
+## New in v0.9.46
+
+- New installs start with **Skip intros** and **Suppress online notices** enabled. Existing settings are preserved; each switch can still be changed independently under **Settings → Game & launcher**.
+- A one-time in-game welcome panel explains the enabled defaults and shows the installed UFC 6 `contentVersion`. For versions older than **01.006**, it recommends updating because some cheats may not work properly. An unreadable or absent version file is shown as unknown.
+
 ## New in v0.9.45
 
 - **PS5 Pro / DLSS engine:** the overlay now starts and draws in PORTHEON's verified `novo` engine. F10, controller navigation, screenshots, Photo Mode and replay controls were verified in the game. The installer has a **Switch engine: PS5 Pro** button and keeps each engine's installation separate.
