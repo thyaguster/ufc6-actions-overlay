@@ -547,7 +547,7 @@ static void value_chip(HDC dc,RECT row,const wchar_t *label,int selected,int adj
 #include "shortcut_badges.h"
 static void row_geometry(int page,int index,int first,int *top,int *height) {
     int global_index=index;if(menu_scroll_page(page))index-=first;
-    *top=page==PAGE_WELCOME?355:page==PAGE_CHEATS?84+32*index+(first<=3&&global_index>=3?24:0):page==PAGE_MAIN?84+27*index+(index>=MAIN_REBOOT?10:0):(page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?86+32*index:page==PAGE_BACKUPS?104+40*index:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?182+48*index:100+56*index;
+    *top=page==PAGE_WELCOME?379:page==PAGE_CHEATS?84+32*index+(first<=3&&global_index>=3?24:0):page==PAGE_MAIN?84+27*index+(index>=MAIN_REBOOT?10:0):(page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?86+32*index:page==PAGE_BACKUPS?104+40*index:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?182+48*index:100+56*index;
     *height=page==PAGE_WELCOME?34:page==PAGE_BACKUPS?34:page==PAGE_CHEATS?30:page==PAGE_MAIN?25:(page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?30:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?42:50;
 }
 static void draw_menu(HDC dc, RECT r) {
@@ -721,14 +721,14 @@ static void draw_menu(HDC dc, RECT r) {
             text(dc,font_body,names[i],label,paint_theme.text,DT_LEFT|DT_SINGLELINE|DT_VCENTER);
             text(dc,font_small,enabled[i]?L"On":L"Off",value,enabled[i]?paint_theme.accent:paint_theme.muted,DT_RIGHT|DT_SINGLELINE|DT_VCENTER);
         }
-        RECT section={38,248,r.right-38,275};
+        RECT section={38,260,r.right-38,287};
         text(dc,font_small,L"GAME & CHEAT COMPATIBILITY",section,paint_theme.accent,DT_LEFT|DT_SINGLELINE);
-        RECT version_box={36,275,r.right-36,308};
+        RECT version_box={36,289,r.right-36,322};
         row_surface(dc,version_box,bindings.box_style,bindings.box_style==3?30:8,paint_theme.surface,paint_theme.border);
-        RECT version_label={53,279,r.right-180,304},version_value={r.right-170,279,r.right-53,304};
+        RECT version_label={53,293,r.right-180,318},version_value={r.right-170,293,r.right-53,318};
         text(dc,font_body,L"Installed UFC 6",version_label,paint_theme.text,DT_LEFT|DT_SINGLELINE|DT_VCENTER);
         text(dc,font_small,installed_game_version.known?installed_game_version.label:L"Unknown",version_value,installed_game_version.older_than_01006?RGB(255,196,94):paint_theme.accent,DT_RIGHT|DT_SINGLELINE|DT_VCENTER);
-        RECT advice_box={36,314,r.right-36,347},advice={51,317,r.right-51,344};
+        RECT advice_box={36,328,r.right-36,361},advice={51,331,r.right-51,358};
         row_surface(dc,advice_box,bindings.box_style,bindings.box_style==3?30:8,RGB(45,39,25),RGB(158,121,53));
         const wchar_t *advice_text=installed_game_version.older_than_01006?L"Cheats may fail. Update UFC 6 to v01.006 or newer.":installed_game_version.known?L"Cheats target v01.006; older versions may not work.":L"Cheat support unknown. UFC 6 v01.006 is recommended.";
         text(dc,font_small,advice_text,advice,RGB(255,207,105),DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS);

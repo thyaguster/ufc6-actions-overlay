@@ -41,6 +41,10 @@ This download contains the overlay, asset-free controller-icon patcher, and inst
 
 **The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Game & launcher → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
 
+## New in v0.9.47
+
+- The first-run welcome layout has more space between settings, game compatibility, and Continue.
+
 ## New in v0.9.46
 
 - New installs start with **Skip intros** and **Suppress online notices** enabled. Existing settings are preserved; each switch can still be changed independently under **Settings → Game & launcher**.
