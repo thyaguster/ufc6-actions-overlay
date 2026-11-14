@@ -41,6 +41,11 @@ This download contains the overlay, asset-free controller-icon patcher, and inst
 
 **The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Game & launcher → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
 
+## New in v0.9.49
+
+- **Fix career avatar:** Settings → Game & launcher → Experimental explains the repair sequence. Start restarts UFC 6 with GPU image readback enabled. Open the affected career, enter Edit Appearance and save without changing anything, check Saved Careers, then choose Finish to restore the prior launcher setting and restart. The repair keeps existing save files; make a savegame backup before saving appearance.
+- **Image readback always on:** A separate Experimental switch applies to both PORTHEON engines and requires a restart. It is untested for extended gameplay and may reduce performance. Turning it Off restores the previous launcher setting.
+
 ## New in v0.9.48
 
 - **Mute when unfocused** now works with the verified PORTHEON PS5 Pro / DLSS engine by controlling only UFC 6’s Windows audio session. It restores the previous unmuted state on focus return or when the setting is turned Off.

@@ -43,6 +43,7 @@ parser.add_argument("--window",action="store_true")
 parser.add_argument("--window-reload",action="store_true")
 parser.add_argument("--startup",action="store_true")
 parser.add_argument("--startup-reload",action="store_true")
+parser.add_argument("--avatar",action="store_true")
 parser.add_argument("--welcome",action="store_true")
 parser.add_argument("--welcome-current",action="store_true")
 args=parser.parse_args()
@@ -85,7 +86,7 @@ dll.Ufc6RenderMenu.argtypes=[c.c_void_p,w.DWORD];dll.Ufc6RenderMenu.restype=w.BO
 
 
 def press(button):
-    if not (args.decision_replays or args.decision_replays_reload or args.startup or args.startup_reload or args.appearance or args.appearance_reload or args.window or args.window_reload) and button==0x4000 and ((dll.MenuTestSnapshot()>>12)&31)==0 and (dll.MenuTestSnapshot()&15)==5:
+    if not (args.decision_replays or args.decision_replays_reload or args.startup or args.startup_reload or args.avatar or args.appearance or args.appearance_reload or args.window or args.window_reload) and button==0x4000 and ((dll.MenuTestSnapshot()>>12)&31)==0 and (dll.MenuTestSnapshot()&15)==5:
         dll.MenuTestLegacySettings();pump(.08);return
     dll.MenuTestButton(button,1);dll.MenuTestButton(button,0);pump(.06)
     # These existing scenarios target pre-Photo actions; navigate past its new row.
@@ -108,7 +109,7 @@ def render(name,viewport=(2560,1440)):
 
 try:
     dll.MenuTestStart(window);pump(.4)
-    dll.MenuTestSettingsMode(0 if (args.decision_replays or args.decision_replays_reload or args.startup or args.startup_reload or args.appearance or args.appearance_reload or args.window or args.window_reload) else 1)
+    dll.MenuTestSettingsMode(0 if (args.decision_replays or args.decision_replays_reload or args.startup or args.startup_reload or args.avatar or args.appearance or args.appearance_reload or args.window or args.window_reload) else 1)
     dll.Ufc6VulkanActive() # Match production before opening; no desktop-fit/render extent race.
     assert (dll.MenuTestSnapshot()>>4)&1 == (1 if args.appearance_reload else int(args.reload)),"Stored profile was not loaded"
     assert dll.MenuTestScale()==(175 if args.reload and args.scale else 100)
@@ -127,6 +128,20 @@ try:
         k.GetPrivateProfileIntW.argtypes=[w.LPCWSTR,w.LPCWSTR,c.c_int,w.LPCWSTR]
         assert k.GetPrivateProfileIntW("Menu","WelcomeShown",0,str(folder/"ufc6-quit-menu.test.ini"))==1
         print("PASS: first-run panel, old-version notice, acknowledgement and unclipped rendering.")
+        raise SystemExit(0)
+    if args.avatar:
+        for _ in range(4):press(0x40)
+        press(0x4000);press(0x40);press(0x40);press(0x4000)
+        for _ in range(6):press(0x40)
+        press(0x4000);press(0x40);press(0x40);press(0x4000)
+        render("avatar-repair-start.png")
+        press(0x4000)
+        render("avatar-repair-active.png")
+        press(0x2000);press(0x40);press(0x4000)
+        render("avatar-always-off.png")
+        press(0x40);press(0x4000)
+        render("avatar-always-on.png")
+        print("PASS: avatar repair steps and permanent-readback warning render without clipped text; test host touched no game settings.")
         raise SystemExit(0)
     if args.decision_replays or args.decision_replays_reload:
         k.GetPrivateProfileIntW.argtypes=[w.LPCWSTR,w.LPCWSTR,c.c_int,w.LPCWSTR]
