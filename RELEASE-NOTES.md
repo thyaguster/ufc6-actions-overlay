@@ -1,3 +1,8 @@
+## v0.9.48 — Background audio muting on PS5 Pro / DLSS
+
+- Make **Mute when unfocused** available on PORTHEON's PS5 Pro / DLSS engine. It mutes UFC 6's own Windows audio session while the game is minimized or another application has focus, then restores sound on return or when the switch is turned Off.
+- Preserve the existing native audio hook for the original and Parsec engines. Shared audio sessions belonging to multiple processes are excluded from the new path.
+
 ## v0.9.45 — PORTHEON PS5 Pro / DLSS engine support
 
 - Add a checked startup bridge for PORTHEON's `novo/UFC 6 novo.exe` engine (`09eaab2`). It forwards the engine's imported Windows timing calls and loads the existing Vulkan overlay locally. The original/Parsec `bin` install keeps its own bridge.

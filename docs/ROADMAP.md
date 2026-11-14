@@ -15,7 +15,6 @@ These are investigation targets, not promises of released behavior.
 ## Other candidates
 
 - Verify the PS5 Pro / DLSS engine's career bindings in a loaded career before advertising career cheats as live-tested on that host. The checked guest-code signatures match; the save schema still needs a real career check.
-- Port background audio muting to the PS5 Pro / DLSS host engine. Its original/Parsec native audio dispatch address does not apply to `novo`; the setting reports unavailable there for now.
 - Implement performance options directly in the overlay instead of relying on PORTHEON settings, with live application and restoration where feasible.
 - Follow up on the affected user's career-code/binding report. Running PORTHEON without administrator rights resolved that user's invisible-overlay issue; this is a client workaround, not a universal diagnosis.
 - Broaden visual startup fallback language/layout coverage. The native title/network-warning bypass does not depend on visual detection.

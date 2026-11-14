@@ -35,6 +35,7 @@
 #include "photo_mode.h"
 #include "replay_controls.h"
 #include "audio_focus.h"
+#include "audio_session_mute.h"
 #include "photo_effects_settings.h"
 #include "photo_panel_controls.h"
 #include <math.h>
@@ -809,7 +810,7 @@ static void draw_menu(HDC dc, RECT r) {
             swprintf(line,130,L"Open: %ls  |  F10",chord);
             if(selection==SETTING_DECISION_REPLAY)wcscpy(line,L"Enable before a new offline fight. Requires recorded clips.");
             if(selection==SETTING_INSTANT_REPLAY)wcscpy(line,L"Appears in the game pause menu for new offline fights.");
-            if(selection==SETTING_AUDIO_FOCUS)wcscpy(line,engine_profile==3?L"Pending verification for the PS5 Pro engine.":L"Silence only UFC 6 while minimized or in the background.");
+            if(selection==SETTING_AUDIO_FOCUS)wcscpy(line,engine_profile==3?L"Mute only UFC 6 through its Windows audio session.":L"Silence only UFC 6 while minimized or in the background.");
             if(selection==SETTING_GAME_ICONS)wcscpy(line,L"Patch the game controller icons. Restart required.");
             if(selection==SETTING_ICONS)wcscpy(line,L"Changes this overlay only. Game icons have a separate setting.");
             if(selection==SETTING_SCALE)wcscpy(line,L"Left/right: resize   |   Confirm: reset to 100%");
@@ -1322,7 +1323,7 @@ static void tick(void) {
     if(GetTickCount64()>=next_theme_read){apply_theme();next_theme_read=GetTickCount64()+1000;}
     int active = test_mode||foreground();
     EnterCriticalSection(&lock);int mute_background=menu.mute_background;LeaveCriticalSection(&lock);
-    if(!test_mode)audio_focus_poll(mute_background,active&&!IsIconic(game_window));
+    if(!test_mode){if(engine_profile==3)audio_session_mute_poll(mute_background,active&&!IsIconic(game_window));else audio_focus_poll(mute_background,active&&!IsIconic(game_window));}
     int controller_active=active&&!input_redirected();
     if(GetTickCount64()>=next_gamebar_read){refresh_gamebar();next_gamebar_read=GetTickCount64()+1000;}
     int f10 = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
@@ -1687,7 +1688,7 @@ static DWORD WINAPI worker(void *unused) {
             }
             else if(msg.wParam==MENU_INSTANT_REPLAY_CHANGED){save_settings();status(menu.instant_replay?L"Instant Replay On for new offline fights.":L"Instant Replay Off for new fights.");}
             else if(msg.wParam==MENU_DECISION_REPLAY_CHANGED){save_settings();status(menu.decision_replays?L"Decision replays On for new offline fights.":L"Off for new fights; the current replay remains available.");}
-            else if(msg.wParam==MENU_AUDIO_FOCUS_CHANGED){if(!test_mode&&engine_profile==3){EnterCriticalSection(&lock);menu.mute_background=0;LeaveCriticalSection(&lock);status(L"Background audio muting needs a verified hook for this engine.");}else{save_settings();status(menu.mute_background?L"Background audio muting On.":L"Background audio muting Off.");}}
+            else if(msg.wParam==MENU_AUDIO_FOCUS_CHANGED){save_settings();status(menu.mute_background?L"Background audio muting On.":L"Background audio muting Off.");}
             else if(msg.wParam==MENU_STARTUP_CHANGED){save_settings();EnterCriticalSection(&lock);if(menu.startup_popups){startup_probe_deadline=GetTickCount64()+300000;startup_probe_seen=0;}else startup_release_confirm();LeaveCriticalSection(&lock);status(L"Startup options saved. Online notice suppression updates immediately.");}
             else if(msg.wParam==MENU_ONLINE_NOTICES_CHANGED){save_settings();EnterCriticalSection(&lock);int enabled=menu.suppress_online_notices;LeaveCriticalSection(&lock);progression_notice_set(enabled);status(enabled?L"Offline post-fight notices suppressed.":L"Offline post-fight notices restored.");}
             else if(msg.wParam==MENU_OPEN_SCREENSHOTS)open_screenshots_folder();
@@ -1782,6 +1783,7 @@ static DWORD WINAPI worker(void *unused) {
         else { TranslateMessage(&msg); DispatchMessageW(&msg); }
     }
     stop_live_cheats();
+    if(!test_mode)audio_session_mute_close();
     gamebar_monitor_stop();
     DestroyWindow(overlay);
     /* Keep hooks and their code mapped until the engine exits. Never unload this DLL live. */

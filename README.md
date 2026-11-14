@@ -41,6 +41,10 @@ This download contains the overlay, asset-free controller-icon patcher, and inst
 
 **The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Game & launcher → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
 
+## New in v0.9.48
+
+- **Mute when unfocused** now works with the verified PORTHEON PS5 Pro / DLSS engine by controlling only UFC 6’s Windows audio session. It restores the previous unmuted state on focus return or when the setting is turned Off.
+
 ## New in v0.9.47
 
 - The first-run welcome layout has more space between settings, game compatibility, and Continue.
@@ -54,7 +58,7 @@ This download contains the overlay, asset-free controller-icon patcher, and inst
 
 - **PS5 Pro / DLSS engine:** the overlay now starts and draws in PORTHEON's verified `novo` engine. F10, controller navigation, screenshots, Photo Mode and replay controls were verified in the game. The installer has a **Switch engine: PS5 Pro** button and keeps each engine's installation separate.
 - **New-engine bridge:** `winmm.dll` forwards the engine's timing calls to Windows and starts the per-game Vulkan layer. The installer verifies the exact engine hash and backs up recognized overlay files; it does not change the game executable or system Vulkan settings.
-- **Career and startup controls:** the shared game-code hooks verify their signatures before use on the new engine. Career edits still require a loaded career and a save backup. Background audio muting remains unavailable on the new host engine until its native audio hook is verified.
+- **Career and startup controls:** the shared game-code hooks verify their signatures before use on the new engine. Career edits still require a loaded career and a save backup. Background audio muting is supported on the new host through its own Windows audio session.
 
 ## New in v0.9.44
 
