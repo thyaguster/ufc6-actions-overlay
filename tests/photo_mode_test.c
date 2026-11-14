@@ -91,13 +91,14 @@ int main(void){
  installed=1;original=fake_original;set_mode=fake_mode;set_pose=fake_pose;
  reset();ULONGLONG before=PHOTO_NOW();update((uintptr_t)o,.016f);assert(state==2&&*(unsigned*)(o+8)==1&&mode_calls==1&&seen_dt==.016f);assert(deadline>=before+1800000&&deadline<=PHOTO_NOW()+1800000);assert(((float*)(c+0x180))[12]==10.f);
  published_input.right=1;published_input.zoom=1;update((uintptr_t)o,.04f);assert(((float*)(c+0x180))[12]>10.f&&*(float*)(c+0xac)>55);
+ published_input.zoom=0;photo_mode_set_fov(70);update((uintptr_t)o,.01f);assert(*(float*)(c+0xac)==70.f);photo_mode_set_fov(200);update((uintptr_t)o,.01f);assert(*(float*)(c+0xac)==70.f);
  memset(&published_input,0,sizeof(published_input));commands=PHOTO_RESET;update((uintptr_t)o,.01f);assert(((float*)(c+0x180))[12]==10.f&&*(float*)(c+0xac)==55);
  deadline=PHOTO_NOW();update((uintptr_t)o,.02f);assert(state==3&&owner==0&&*(unsigned*)(o+8)==0&&mode_calls==2);assert(memcmp(c+0x180,seed,64)==0&&o[0xd9]==0&&*(float*)(c+0xac)==55);
  reset();update((uintptr_t)o,.01f);focused=0;update((uintptr_t)o,.01f);assert(state==3&&owner==0&&*(unsigned*)(o+8)==0);
  reset();*(uintptr_t*)c=0;update((uintptr_t)o,0);assert(state==-1&&!owner&&mode_calls==0);
  reset();o[0xd9]=1;update((uintptr_t)o,0);assert(state==-2&&!owner&&mode_calls==0);
  reset();update((uintptr_t)o,0);*(unsigned*)(o+8)=2;update((uintptr_t)o,0);assert(state==-4&&!owner&&*(unsigned*)(o+8)==2&&mode_calls==1);
- assert(original_calls==10);
+ assert(original_calls==12);
  unsigned char *time_mem=VirtualAlloc(NULL,4096,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);assert(time_mem);*(uintptr_t*)time_mem=0x9098fe7d8ULL;*(uintptr_t*)(time_mem+8)=0x90a1d9c00ULL;*(float*)(time_mem+0x28)=1.25f;fixture_time_object=(uintptr_t)time_mem;
  reset();update((uintptr_t)o,.01f);freeze_toggle();assert(frozen&&*(float*)(time_mem+0x28)==0);
  published_input.right=1;float x=((float*)(c+0x180))[12];update((uintptr_t)o,0);assert(((float*)(c+0x180))[12]>x);focused=0;update((uintptr_t)o,0);assert(*(float*)(time_mem+0x28)==1.25f&&!frozen);
@@ -105,6 +106,9 @@ int main(void){
 
  reset();requested=0;assert(!photo_mode_start(0));assert(!photo_mode_blocks_input());
  reset();requested=0;assert(photo_mode_start(1)&&photo_mode_blocks_input());photo_mode_poll(0,0,NULL);assert(!photo_mode_blocks_input());
+ reset();update((uintptr_t)o,0);assert(photo_mode_blocks_input());photo_mode_command(PHOTO_STOP);
+ assert(photo_mode_stop_pending()&&!photo_mode_blocks_input()&&state==2&&owner==(uintptr_t)o);
+ assert(!photo_mode_start(1));update((uintptr_t)o,0);assert(state==3&&!photo_mode_stop_pending()&&owner==0);
  reset();update((uintptr_t)o,0);freeze_toggle();assert(frozen);photo_mode_poll(0,0,NULL);assert(!frozen&&*(float*)(time_mem+0x28)==1.25f);update((uintptr_t)o,0);assert(state==3);
  reset();update((uintptr_t)o,0);published_input.right=1;photo_mode_poll(1,1,&published_input);assert(published_input.right==0);commands=PHOTO_STOP;update((uintptr_t)o,0);assert(state==3);
  reset();update((uintptr_t)o,0);fixture_now+=1100;update((uintptr_t)o,0);assert(state==3&&!photo_mode_blocks_input());

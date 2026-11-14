@@ -7,13 +7,19 @@ static ULONGLONG fixture_now=1000;
 #undef NDEBUG
 #include <assert.h>
 #include <stdio.h>
-static unsigned char object[0x128],other[0x128];static unsigned seeks,loops;static float seen;
+static unsigned char object[0x128],other[0x128];static unsigned seeks,loops;static float seen;static int coverage_failures;
 static void set_double(unsigned char *p,int off,double v){memcpy(p+off,&v,8);}
 static double get_double(unsigned char *p,int off){double v;memcpy(&v,p+off,8);return v;}
 static void __attribute__((sysv_abi)) fake_original(uintptr_t p,float dt){unsigned char *o=(void*)p;seen=dt;double t=get_double(o,0xe0)+dt;if(t>=129){t=127;++loops;}set_double(o,0xe0,t);set_double(o,0xe8,t);}
 static void __attribute__((sysv_abi)) fake_seek(uintptr_t p,double t){assert(p==(uintptr_t)object);assert(t>=127&&t<129);set_double(object,0xe0,t);++seeks;}
-static void seed(void){memset(object,0,sizeof(object));uintptr_t vt=0x909c247c0ULL;memcpy(object,&vt,8);unsigned mode=3;memcpy(object+0xb0,&mode,4);memcpy(object+0xb4,&mode,4);set_double(object,0xd0,.017);set_double(object,0xd8,131);set_double(object,0xe0,128);set_double(object,0xe8,128);set_double(object,0xf8,127);set_double(object,0x100,129);paused=valid=enabled=0;pending=0;fixture_now=1000;original=fake_original;seek_native=fake_seek;loops=seeks=0;}
+static void seed(void){memset(object,0,sizeof(object));uintptr_t vt=0x909c247c0ULL;memcpy(object,&vt,8);unsigned mode=3;memcpy(object+0xb0,&mode,4);memcpy(object+0xb4,&mode,4);set_double(object,0xd0,.017);set_double(object,0xd8,131);set_double(object,0xe0,128);set_double(object,0xe8,128);set_double(object,0xf8,127);set_double(object,0x100,129);paused=valid=enabled=0;pending=0;fixture_now=1000;original=fake_original;seek_native=fake_seek;loops=seeks=coverage_failures=0;}
+static int fake_coverage(double time,const double range[2],ReplayRange *out){assert(time>=range[0]&&time<=range[1]);if(coverage_failures>0){--coverage_failures;return 0;}*out=(ReplayRange){120,130};return 1;}
 int main(void){ReplaySnapshot r;seed();update((uintptr_t)object,.02f);replay_snapshot(&r);assert(r.available&&!r.paused&&r.position_ms==1020&&r.duration_ms==2000);assert(!replay_toggle_pause());
+ coverage_query=fake_coverage;replay_poll(1,1);replay_request_coverage();update((uintptr_t)object,.02f);replay_snapshot(&r);assert(r.coverage_known&&r.coverage_ms==10000);
+ /* A transient recorder read must recover on the same owner after a short delay. */
+ set_double(object,0xf8,126);set_double(object,0x100,130);replay_request_coverage();update((uintptr_t)object,.02f);replay_snapshot(&r);assert(!r.coverage_known);
+ coverage_failures=1;replay_request_coverage();update((uintptr_t)object,.02f);assert(coverage_attempted==1&&!coverage_known);
+ fixture_now+=1100;replay_poll(1,1);replay_request_coverage();update((uintptr_t)object,.02f);replay_snapshot(&r);assert(r.coverage_known&&r.coverage_ms==10000&&coverage_attempted==2);
  replay_poll(1,1);assert(replay_toggle_pause());double held=get_double(object,0xe0);
  /* A normal pause persists across many natural loop lengths while UI heartbeat lives. */
  for(unsigned i=0;i<3000;++i){fixture_now+=20;replay_poll(1,1);update((uintptr_t)object,.02f);assert(seen==0&&get_double(object,0xe0)==held&&!loops);}

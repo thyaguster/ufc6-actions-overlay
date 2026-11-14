@@ -14,6 +14,7 @@ int binding_set(OverlayPreferences *p,int action,int keyboard,uint32_t value);
 int binding_key_valid(uint32_t key);
 int binding_poll_pad(BindingLatch *l,uint32_t chord,uint32_t buttons,uint64_t now,int enabled);
 int binding_poll_key(BindingLatch *l,uint32_t key,const unsigned char down[256],int enabled);
+int binding_poll_photo_key(BindingLatch *l,uint32_t key,const unsigned char down[256],int pressed,int enabled,int photo_active);
 void binding_key_label(uint32_t key,wchar_t *out,size_t count);
 void preferences_seed_appearance(const wchar_t *ini);
 void preferences_load(OverlayPreferences *p,const wchar_t *ini,uint32_t open_pad);

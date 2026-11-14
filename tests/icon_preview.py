@@ -123,8 +123,8 @@ try:
         for _ in range(4):press(0x40)
         press(0x4000);press(0x40);press(0x40);press(0x4000)
         assert (dll.MenuTestSnapshot()>>12)&31==19
-        for _ in range(7):press(0x40)
-        assert dll.MenuTestSnapshot()&15==7
+        for _ in range(8):press(0x40)
+        assert dll.MenuTestSnapshot()&15==8
         assert saved_replay()==int(args.decision_replays_reload)
         render("decision-replays-loaded.png")
         press(0x4000)
@@ -140,21 +140,26 @@ try:
         assert (dll.MenuTestSnapshot()>>12)&31==19
         for _ in range(3):press(0x40)
         if args.startup_reload:
-            assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==0
+            assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==0 and saved("SuppressOnlineNotices")==1
+            assert saved("InstantReplayInFight")==1
             # Turning Skip Off keeps the independent override Off.
             press(0x4000)
-            assert saved("SkipStartupSplashes")==0 and saved("StartupSkipPopups")==0
+            assert saved("SkipStartupSplashes")==0 and saved("StartupSkipPopups")==0 and saved("SuppressOnlineNotices")==0
             # A fresh On transition enables all three again and persists them.
             press(0x4000)
-            assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==1
+            assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==1 and saved("SuppressOnlineNotices")==1
             # An Off transition also disables an enabled auto-continue setting.
             press(0x4000)
-            assert saved("SkipStartupSplashes")==0 and saved("StartupSkipPopups")==0
+            assert saved("SkipStartupSplashes")==0 and saved("StartupSkipPopups")==0 and saved("SuppressOnlineNotices")==0
         else:
             press(0x4000)
-            assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==1
-            press(0x40);press(0x40);press(0x4000)
-            assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==0
+            assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==1 and saved("SuppressOnlineNotices")==1
+            press(0x40);press(0x40);press(0x40);press(0x4000)
+            assert (dll.MenuTestSnapshot()>>12)&31==30
+            press(0x4000)
+            assert saved("SkipStartupSplashes")==1 and saved("StartupSkipPopups")==0 and saved("SuppressOnlineNotices")==1
+            press(0x40);press(0x4000)
+            assert saved("InstantReplayInFight")==1
             pump(5.2);render("startup-options.png")
         print("PASS: experimental startup UI settings, font bounds and saved toggles; no game callbacks modified in test host.")
         raise SystemExit(0)

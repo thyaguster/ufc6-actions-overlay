@@ -24,7 +24,7 @@ try:
  assert core.MenuTestScreenshotUI()==0
  core.MenuTestInvokeBinding(1);pump();assert core.Ufc6ScreenshotRequest()==1;core.Ufc6ScreenshotResult(0);pump()
  core.MenuTestLegacySettings();pump()
- for _ in range(21):press(0x40)
+ for _ in range(22):press(0x40)
  press(0x4000);assert core.MenuTestScreenshotUI()==1
  core.MenuTestScreenshot();assert core.Ufc6ScreenshotRequest()==2;core.Ufc6ScreenshotResult(0);pump()
  k.GetPrivateProfileIntW.argtypes=[w.LPCWSTR,w.LPCWSTR,c.c_int,w.LPCWSTR]

@@ -1,3 +1,43 @@
+## v0.9.44 — Instant Replay duration correction
+
+- Fix a case where in-fight Instant Replay reported “Continuous length unavailable.” The live recorder snapshot showed a 96.8-second selected replay and a continuous auxiliary span, while the other recorder still held older intervals. Ignore intervals that cannot be converted into the current replay and retry transient reads up to five times at one-second intervals.
+- Show “Checking continuous footage” until measurement succeeds or the bounded retries finish. Native replay regression tests cover both an unmappable old interval and a transient failed read. The user confirmed the duration appears in a fresh in-fight Instant Replay with v0.9.44 running in Parsec mode.
+
+## v0.9.43 — Replay length and Photo Mode presets
+
+- Show the measured continuous recording length on Photo Mode's Replay page. It can be shorter than the fight because older footage may be trimmed; the Position row still shows the selected playback range.
+- Add three Photo Mode preset slots on a new translucent Presets page. Save or apply filters, watermark styling, FOV, HUD and cage choices without leaving the camera. Presets retain the current PORTHEON player name and do not copy camera position between fights.
+- Presets persist in the overlay INI and are cleared by Reset overlay settings. The user confirmed saving and restoring a preset in a live Parsec fight. The first in-fight Instant Replay duration check reported “unavailable”; v0.9.44 addresses that reader path.
+
+## v0.9.42 — Photo Mode exit handoff
+
+- Apply the Photo Mode shortcut's exit immediately during the input tick, so the native Instant Replay UI cannot return while an older queued toggle still owns the panel.
+- Draw the translucent controls panel only while Photo Mode still owns input. Keep the camera restoration on the game's camera thread.
+- Native, replay, menu and installer checks pass. In a live Parsec fight, the user repeated quick F9 entry/exit from Instant Replay's Replay page and confirmed the panel cleared every time without B/Circle.
+
+## v0.9.41 — Quick Photo Mode shortcut presses
+
+- Recognize a fresh Photo Mode key press even if a fast release and repress happened between 16 ms input polls. This improves shortcut detection, but a live Parsec retest still reproduced the intermittent F9 exit with the translucent panel remaining until B was pressed; see the roadmap.
+- While Photo Mode is active, a plain F9 binding also exits with Shift held for faster camera movement. A held key still fires only once. The local native/menu and installer checks pass.
+
+## v0.9.40 — Photo Mode exit during Instant Replay
+
+- Release the translucent panel and game input as soon as Photo Mode exit is requested. The camera still restores on the game's camera thread. A later live retest found the panel can still remain after F9 in native Instant Replay; see the roadmap.
+- Prevent a new Photo Mode entry while the previous camera exit is pending. The isolated camera and menu checks pass; the mid-fight Instant Replay exit still needs an in-game retest.
+
+## v0.9.39 — Experimental Instant Replay (locally validated in Parsec mode)
+
+- Add **Game & launcher → Experimental → Instant Replay in fights**, Off by default. Enable it before loading a new offline fight. It exposes the game's native pause-menu replay entry.
+- Verify the exact game registration and callback bytes before changing the in-memory setting. Turning it Off restores the original callback; no game archives are edited. The isolated gate test rejects unknown code and restores the original bytes.
+- In the integrated v0.9.39 build, the user enabled the setting, started a fresh Parsec fight, played Instant Replay, and returned to the same fight. Turning the switch Off removed the entry on reopening the pause menu in that same fight; a read-only check found the original callback bytes restored. The On preference was saved in the local INI. Normal-mode coverage and a relaunch with the preference On remain to be checked.
+- A later v0.9.41 Parsec check found the post-fight menu also exposes Instant Replay when the switch is On. The native seek-bar viewer used the full retained range in a short fight and returned to results; this does not establish whole-fight retention in longer fights.
+
+## v0.9.38 — Settings cleanup and Next hit KO timing
+
+- Move Visual auto-confirm fallback into **Game & launcher → Experimental**, leaving the regular startup settings together.
+- Keep Next hit KO arm requests pending until a verified fighter update arrives, and retain a valid arm while the fight is paused instead of cancelling it after one second without updates. The menu now reports the current arm state.
+- The user confirmed Experimental navigation and a pause-time Next hit KO that stayed armed and triggered in a fresh Parsec fight.
+
 ## v0.9.36 - Decision replay selection timing (decision replay locally validated)
 
 - Wait for a consistent selected-clip count and stable replay slots before applying the decision fallback. Ignore incomplete zero-initialized slots.

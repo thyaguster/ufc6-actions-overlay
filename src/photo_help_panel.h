@@ -2,6 +2,7 @@
 #define UFC6_PHOTO_HELP_PANEL_H
 #define PHOTO_HELP_WIDTH 440
 #define PHOTO_HELP_HEIGHT 552
+static void photo_duration_label(int ms,wchar_t *out,size_t count){int seconds=ms/1000;if(seconds>=3600)swprintf(out,count,L"%d:%02d:%02d",seconds/3600,seconds/60%60,seconds%60);else swprintf(out,count,L"%d:%02d",seconds/60,seconds%60);}
 /* Uses the same font selection, theme and vector button artwork as the menu. */
 static void photo_help_row(HDC dc,int y,const wchar_t *label,uint32_t a,uint32_t b,const wchar_t *keyboard,const wchar_t *pad_text,int ps){
  RECT name={18,y,168,y+28};text(dc,font_main,label,name,paint_theme.text,DT_LEFT|DT_VCENTER);
@@ -14,8 +15,8 @@ static void draw_photo_help(HDC dc,RECT r){
  EnterCriticalSection(&lock);MenuState s=menu;OverlayPreferences prefs=preferences;paint_theme=current_theme;frame_font_index=(prefs.font_size-16)/2;wchar_t message[120];message[0]=0;if(GetTickCount64()<toast_until)lstrcpynW(message,status_text,120);LeaveCriticalSection(&lock);
  HBRUSH bg=CreateSolidBrush(paint_theme.background);FillRect(dc,&r,bg);DeleteObject(bg);SetBkMode(dc,TRANSPARENT);
  RECT bar={0,0,4,r.bottom};bg=CreateSolidBrush(paint_theme.accent);FillRect(dc,&bar,bg);DeleteObject(bg);
- RECT heading={18,12,r.right-70,42};text(dc,font_main,s.photo_panel_page==3?L"PHOTO MODE / REPLAY":s.photo_panel_page==1?L"PHOTO MODE / EFFECTS":s.photo_panel_page==2?L"PHOTO MODE / WATERMARK":L"PHOTO MODE",heading,paint_theme.text,DT_LEFT|DT_VCENTER);
- wchar_t page[20];swprintf(page,20,L"%d / %d",s.photo_panel_page+1,(s.replay_ready||s.photo_panel_page==3)?4:3);RECT pager={r.right-66,12,r.right-16,42};text(dc,font_small,page,pager,paint_theme.muted,DT_RIGHT|DT_VCENTER);
+ RECT heading={18,12,r.right-70,42};text(dc,font_main,s.photo_panel_page==4?L"PHOTO MODE / PRESETS":s.photo_panel_page==3?L"PHOTO MODE / REPLAY":s.photo_panel_page==1?L"PHOTO MODE / EFFECTS":s.photo_panel_page==2?L"PHOTO MODE / WATERMARK":L"PHOTO MODE",heading,paint_theme.text,DT_LEFT|DT_VCENTER);
+ wchar_t page[20];swprintf(page,20,L"%d / %d",s.photo_panel_page==4&&!s.replay_ready?4:s.photo_panel_page+1,s.replay_ready?5:4);RECT pager={r.right-66,12,r.right-16,42};text(dc,font_small,page,pager,paint_theme.muted,DT_RIGHT|DT_VCENTER);
  wchar_t info[100];swprintf(info,100,L"%ls  |  FOV %d%lc  |  Cage %ls",s.photo_frozen?L"Frozen":L"Live",s.photo_fov,0x00b0,s.photo_cage?L"visible":L"native");
  RECT state_line={18,43,r.right-16,71};text(dc,font_small,info,state_line,paint_theme.accent,DT_LEFT|DT_VCENTER);
  RECT hud_line={18,71,r.right-16,99};text(dc,font_small,s.screenshot_include_ui?(s.photo_hud?L"HUD hidden  |  Screenshots include overlay":L"HUD visible  |  Screenshots include overlay"):(s.photo_hud?L"HUD hidden  |  Clean screenshots":L"HUD visible  |  Clean screenshots"),hud_line,paint_theme.muted,DT_LEFT|DT_VCENTER);
@@ -30,7 +31,11 @@ static void draw_photo_help(HDC dc,RECT r){
    else if(!i)toggle_switch(dc,control,s.replay_paused,focused);
    else {wchar_t value[64];if(i==4){static const wchar_t *rates[]={L"Native",L"0.1x",L"0.25x",L"0.5x",L"1x",L"2x"};swprintf(value,64,L"%ls",rates[s.replay_speed_index]);}else if(i==3)swprintf(value,64,L"%ls",s.replay_extended?L"Available recording":L"Finish clip");else if(i==2)swprintf(value,64,L"%d ms",menu_replay_step_ms(&s));else swprintf(value,64,L"%.3f / %.3f s",s.replay_position_ms/1000.,s.replay_duration_ms/1000.);value_chip(dc,control,value,focused,1);}
   }
-  RECT detail={18,300,r.right-18,347};text(dc,font_small,!s.replay_ready?L"Waiting for replay. Controls resume when it returns.":s.replay_range_failed?L"No larger continuous recording is available here.":L"Range changes pause; Finish clip restores.",detail,paint_theme.muted,DT_LEFT|DT_WORDBREAK);
+  wchar_t detail_text[160]=L"";
+  if(!s.replay_ready)lstrcpyW(detail_text,L"Waiting for replay. Controls resume when it returns.");
+  else {wchar_t length[32];if(s.replay_coverage_known){photo_duration_label(s.replay_coverage_ms,length,32);swprintf(detail_text,160,L"Continuous footage: %ls (start may be trimmed).\n%ls",length,s.replay_range_failed?L"No larger range is available here.":L"Range changes pause; Finish clip restores.");}
+   else lstrcpyW(detail_text,s.replay_coverage_pending?L"Checking continuous footage...":s.replay_range_failed?L"Continuous length unavailable. No larger range here.":L"Continuous length unavailable for this replay.");}
+  RECT detail={18,300,r.right-18,347};text(dc,font_small,detail_text,detail,paint_theme.muted,DT_LEFT|DT_WORDBREAK);
   photo_help_row(dc,348,L"Select / adjust",PAD_UP,PAD_RIGHT,L"W S / A D",NULL,ps);
   photo_help_row(dc,378,L"Pause / resume",0x1000,0,L"P",NULL,ps);
   photo_help_row(dc,408,L"Step back / next",PAD_LB,PAD_RB,L"Position row",NULL,ps);
@@ -38,6 +43,22 @@ static void draw_photo_help(HDC dc,RECT r){
   wchar_t key[80];binding_key_label(prefs.actions[BIND_SCREENSHOT].key,key,80);photo_help_row(dc,468,L"Screenshot",0x8000,0,key,NULL,ps);
   photo_help_row(dc,498,L"Next page",PAD_MENU,0,page_key,NULL,ps);
   return;
+ }
+ if(s.photo_panel_page==4){
+  const PhotoPreset *preset=&s.photo_presets[s.photo_preset_slot];
+  for(int i=0;i<3;++i){int y=110+i*42,focused=s.photo_preset_row==i;wchar_t value[80];
+   if(focused){RECT row={12,y,r.right-12,y+36};rounded_box(dc,row,7,paint_theme.focus,paint_theme.focus_border);}
+   RECT label={18,y,214,y+36},control={210,y,r.right-4,y+36};text(dc,font_main,i==0?L"Preset slot":i==1?L"Apply preset":L"Save current look",label,paint_theme.text,DT_LEFT|DT_VCENTER);
+   if(i==0){swprintf(value,80,L"%d / %d  %ls",s.photo_preset_slot+1,PHOTO_PRESET_COUNT,preset->filled?L"Saved":L"Empty");value_chip(dc,control,value,focused,1);}
+   else value_chip(dc,control,i==1?(preset->filled?L"Apply":L"Empty"):L"Save",focused,0);
+  }
+  RECT detail={18,252,r.right-18,344};text(dc,font_small,L"Presets keep filters, watermark style, FOV, HUD and cage choices. The current player's name is used. Camera position stays in this fight.",detail,paint_theme.muted,DT_LEFT|DT_WORDBREAK);
+  photo_help_row(dc,348,L"Select / adjust",PAD_UP,PAD_RIGHT,L"W S / A D",NULL,ps);
+  photo_help_row(dc,378,L"Apply / save",PAD_A,0,L"A or Right",NULL,ps);
+  photo_help_row(dc,408,L"Camera page",PAD_B,0,L"Esc exits",NULL,ps);
+  wchar_t key[80];binding_key_label(prefs.actions[BIND_SCREENSHOT].key,key,80);photo_help_row(dc,438,L"Screenshot",0x8000,0,key,NULL,ps);
+  photo_help_row(dc,468,L"Next page",PAD_MENU,0,page_key,NULL,ps);
+  RECT tip={18,511,r.right-16,539};text(dc,font_small,message[0]?message:L"Save overwrites the selected slot.",tip,message[0]?paint_theme.accent:paint_theme.muted,DT_LEFT|DT_VCENTER|DT_END_ELLIPSIS);return;
  }
  if(s.photo_panel_page){
   int mark=s.photo_panel_page==2,count=mark?MARK_BACK:FX_BACK,selected=mark?s.photo_mark_row:s.photo_effect_row;

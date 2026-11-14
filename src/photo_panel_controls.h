@@ -1,13 +1,22 @@
 #ifndef UFC6_PHOTO_PANEL_CONTROLS_H
 #define UFC6_PHOTO_PANEL_CONTROLS_H
 /* Edge-triggered controls. Camera sticks/zoom remain independent on editor pages. */
-enum { PHOTO_PANEL_EFFECTS_CHANGED=1,PHOTO_PANEL_REPLAY_TOGGLE,PHOTO_PANEL_REPLAY_BACK,PHOTO_PANEL_REPLAY_FORWARD,PHOTO_PANEL_REPLAY_STEP_CHANGED,PHOTO_PANEL_REPLAY_RANGE,PHOTO_PANEL_REPLAY_SPEED };
+enum { PHOTO_PANEL_EFFECTS_CHANGED=1,PHOTO_PANEL_REPLAY_TOGGLE,PHOTO_PANEL_REPLAY_BACK,PHOTO_PANEL_REPLAY_FORWARD,PHOTO_PANEL_REPLAY_STEP_CHANGED,PHOTO_PANEL_REPLAY_RANGE,PHOTO_PANEL_REPLAY_SPEED,PHOTO_PANEL_PRESET_LOAD,PHOTO_PANEL_PRESET_SAVE };
 enum { PHOTO_PANEL_PAGE_KEY=64,PHOTO_PANEL_UP_KEY=128,PHOTO_PANEL_DOWN_KEY=256,PHOTO_PANEL_LEFT_KEY=512,PHOTO_PANEL_RIGHT_KEY=1024 };
 static int photo_panel_editing(const MenuState *s){return !s->photo_help_hidden&&s->photo_panel_page>0;}
 static int photo_panel_controls(MenuState *s,uint32_t *pad,unsigned keys){
- if((*pad&PAD_MENU)||(keys&PHOTO_PANEL_PAGE_KEY)){s->photo_panel_page=s->photo_help_hidden?1:(s->photo_panel_page+1)%(s->replay_ready?4:3);s->photo_help_hidden=0;*pad=0;return 0;}
+ if((*pad&PAD_MENU)||(keys&PHOTO_PANEL_PAGE_KEY)){s->photo_panel_page=s->photo_help_hidden?1:s->photo_panel_page==0?1:s->photo_panel_page==1?2:s->photo_panel_page==2?(s->replay_ready?3:4):s->photo_panel_page==3?4:0;s->photo_help_hidden=0;*pad=0;return 0;}
  if(!photo_panel_editing(s))return 0;
  if(*pad&PAD_B){s->photo_panel_page=0;*pad&=~PAD_B;return 0;}
+ if(s->photo_panel_page==4){
+  if((*pad&PAD_UP)||(keys&PHOTO_PANEL_UP_KEY))s->photo_preset_row=(s->photo_preset_row+2)%3;
+  if((*pad&PAD_DOWN)||(keys&PHOTO_PANEL_DOWN_KEY))s->photo_preset_row=(s->photo_preset_row+1)%3;
+  int left=!!((*pad&PAD_LEFT)||(keys&PHOTO_PANEL_LEFT_KEY)),right=!!((*pad&(PAD_RIGHT|PAD_A))||(keys&PHOTO_PANEL_RIGHT_KEY));
+  *pad&=~(PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A);
+  if(left==right)return 0;
+  if(!s->photo_preset_row){s->photo_preset_slot=(s->photo_preset_slot+(left?PHOTO_PRESET_COUNT-1:1))%PHOTO_PRESET_COUNT;return 0;}
+  return left?0:s->photo_preset_row==1?PHOTO_PANEL_PRESET_LOAD:PHOTO_PANEL_PRESET_SAVE;
+ }
  if(s->photo_panel_page==3){
   if(!s->replay_ready){*pad&=~(PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A|PAD_LB|PAD_RB|0x1000);return 0;}
   if(*pad&0x1000){*pad&=~0x1000;return PHOTO_PANEL_REPLAY_TOGGLE;}

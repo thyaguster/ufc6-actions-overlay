@@ -13,6 +13,14 @@ int wmain(int argc,wchar_t **argv){
  assert(!binding_poll_pad(&latch,0x806,0,5100,1));assert(!binding_poll_pad(&latch,0x806,0x806,5200,0));assert(!binding_poll_pad(&latch,0x806,0x806,9000,1));assert(!binding_poll_pad(&latch,0x806,0,9100,1));
  unsigned char down[256]={0};BindingLatch key={0};down[VK_F12]=1;assert(!binding_poll_key(&key,KEY_CTRL|VK_F12,down,1));down[VK_CONTROL]=1;assert(binding_poll_key(&key,KEY_CTRL|VK_F12,down,1));assert(!binding_poll_key(&key,KEY_CTRL|VK_F12,down,1));
  down[VK_F12]=0;assert(!binding_poll_key(&key,KEY_CTRL|VK_F12,down,1));down[VK_F12]=1;assert(!binding_poll_key(&key,KEY_CTRL|VK_F12,down,0));assert(!binding_poll_key(&key,KEY_CTRL|VK_F12,down,1));
+ unsigned char photo_down[256]={0};BindingLatch photo_key={0};photo_down[VK_F9]=1;
+ assert(binding_poll_photo_key(&photo_key,VK_F9,photo_down,1,1,0));
+ assert(!binding_poll_photo_key(&photo_key,VK_F9,photo_down,0,1,1));
+ assert(binding_poll_photo_key(&photo_key,VK_F9,photo_down,1,1,1)); /* quick repress, no sampled release */
+ photo_down[VK_F9]=0;assert(binding_poll_photo_key(&photo_key,VK_F9,photo_down,1,1,1)); /* tap between polls */
+ photo_down[VK_SHIFT]=1;photo_down[VK_F9]=1;assert(binding_poll_photo_key(&photo_key,VK_F9,photo_down,1,1,1));
+ assert(!binding_poll_photo_key(&photo_key,VK_F9,photo_down,0,1,1));
+ photo_down[VK_SHIFT]=0;assert(!binding_poll_photo_key(&photo_key,VK_F9,photo_down,0,1,1));
  wchar_t ini[1024],cfg[1024];swprintf(ini,1024,L"%ls.settings.ini",argv[1]);swprintf(cfg,1024,L"%ls.theme.cfg",argv[1]);p.theme_choice=3;
  assert(WritePrivateProfileStringW(L"Other",L"Keep",L"yes",ini));assert(preferences_save(&p,ini));preferences_load(&loaded,ini,0xc08);assert(loaded.actions[1].key==p.actions[1].key&&loaded.actions[1].pad==p.actions[1].pad&&loaded.theme_choice==3);
  assert(GetPrivateProfileIntW(L"Keybinds",L"ScreenshotPad",0,ini)==0x806);assert(binding_set(&loaded,1,1,0)&&preferences_save(&loaded,ini));preferences_load(&loaded,ini,0xc08);assert(!loaded.actions[1].key);

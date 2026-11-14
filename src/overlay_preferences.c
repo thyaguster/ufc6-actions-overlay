@@ -29,6 +29,16 @@ int binding_poll_key(BindingLatch *l,uint32_t key,const unsigned char down[256],
     unsigned mods=(down[VK_CONTROL]?KEY_CTRL:0)|(down[VK_MENU]?KEY_ALT:0)|(down[VK_SHIFT]?KEY_SHIFT:0);
     int held=key&&down[key&255]&&mods==(key&0x700);int fire=enabled&&held&&!l->latched;l->latched=held;return fire;
 }
+int binding_poll_photo_key(BindingLatch *l,uint32_t key,const unsigned char down[256],int pressed,int enabled,int photo_active){
+ if(photo_active&&key&&!(key&0x700)){
+  int held=down[key&255]!=0,fire=enabled&&(pressed||(held&&!l->latched));l->latched=held;return fire;
+ }
+ int fired=binding_poll_key(l,key,down,enabled);
+ if(!enabled||!key||!pressed)return fired;
+ unsigned mods=(down[VK_CONTROL]?KEY_CTRL:0)|(down[VK_MENU]?KEY_ALT:0)|(down[VK_SHIFT]?KEY_SHIFT:0);
+ if(mods==(key&0x700)){if(down[key&255])l->latched=1;return 1;}
+ return fired;
+}
 void binding_key_label(uint32_t key,wchar_t *out,size_t count){
     if(!count)return;out[0]=0;if(!key){lstrcpynW(out,L"Not assigned",(int)count);return;}
     wchar_t name[80]=L"",full[128];UINT vk=key&255,scan=MapVirtualKeyW(vk,MAPVK_VK_TO_VSC);LONG code=(LONG)(scan<<16);

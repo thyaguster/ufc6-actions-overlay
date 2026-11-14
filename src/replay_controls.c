@@ -25,6 +25,10 @@ static int engine_verified;
 static uintptr_t last_owner,pause_owner;
 static ULONGLONG poll_tick,last_tick;
 static double clip_low,clip_high,pause_low,pause_high,current,pending;
+static uintptr_t coverage_owner;
+static int coverage_requested,coverage_attempted,coverage_known,coverage_ms;
+static double coverage_clip_low,coverage_clip_high;
+static ULONGLONG coverage_next_tick;
 static int read_memory(uintptr_t p,void *out,size_t n){SIZE_T got=0;return p>=0x10000&&ReadProcessMemory(GetCurrentProcess(),(void*)p,out,n,&got)&&got==n;}
 static int capture(uintptr_t owner,double *time,double *range,double *clip){
  unsigned char b[0x128];uintptr_t vt;unsigned requested_mode,mode;
@@ -50,7 +54,13 @@ static void restore_range(uintptr_t owner,int ready,const double clip[2]){
 static void __attribute__((sysv_abi)) update(uintptr_t owner,float delta){
  double before=0,range[2]={0},clip[2]={0},target=0;int ready=capture(owner,&before,range,clip);ULONGLONG now=REPLAY_NOW();
  AcquireSRWLockExclusive(&guard);
+ if(ready&&(owner!=coverage_owner||clip[0]!=coverage_clip_low||clip[1]!=coverage_clip_high)){
+  coverage_owner=owner;coverage_clip_low=clip[0];coverage_clip_high=clip[1];
+  coverage_requested=coverage_attempted=coverage_known=coverage_ms=0;coverage_next_tick=0;
+ }
  int fresh=enabled&&now-poll_tick<1000&&isfinite(delta)&&delta>=0&&delta<=.25f;
+ int check_coverage=ready&&fresh&&coverage_requested&&!coverage_known&&coverage_attempted<5&&now>=coverage_next_tick;
+ if(check_coverage){coverage_requested=0;++coverage_attempted;coverage_next_tick=now+1000;}
  if(extended&&(!fresh||!ready||owner!=range_owner||clip[0]!=extended_low||clip[1]!=extended_high||range[0]>extended_low||range[1]<extended_high)){
   restore_range(owner,ready,clip);ready=capture(owner,&before,range,clip);
  }
@@ -91,8 +101,11 @@ static void __attribute__((sysv_abi)) update(uintptr_t owner,float delta){
  if(apply)seek_native(owner,target);
  original(owner,passed);
  post_update(owner);
+ ReplayRange coverage={0};int has_coverage=check_coverage&&coverage_query(before,range,&coverage);
  double after=before;read_memory(owner+0xe0,&after,8);
- AcquireSRWLockExclusive(&guard);last_owner=owner;last_tick=now;valid=ready;clip_low=clip[0];clip_high=clip[1];current=after;ReleaseSRWLockExclusive(&guard);
+ AcquireSRWLockExclusive(&guard);last_owner=owner;last_tick=now;valid=ready;clip_low=clip[0];clip_high=clip[1];current=after;
+ if(check_coverage&&owner==coverage_owner&&has_coverage&&coverage.high>coverage.low){coverage_known=1;coverage_ms=(int)((coverage.high-coverage.low)*1000+.5);}
+ ReleaseSRWLockExclusive(&guard);
 }
 int replay_prepare(void){
  if(installed)return installed>0;
@@ -122,9 +135,10 @@ void replay_poll(int focus,int photo_active){AcquireSRWLockExclusive(&guard);ena
 static int recent(void){return valid&&REPLAY_NOW()-last_tick<250;}
 void replay_snapshot(ReplaySnapshot *out){
  memset(out,0,sizeof(*out));AcquireSRWLockShared(&guard);
- if(recent()&&isfinite(current)&&clip_high>clip_low&&clip_high-clip_low<=14400){out->available=1;out->paused=paused;out->extended=extended;out->range_failed=range_failed;out->position_ms=(int)(fmax(0,fmin(current-clip_low,clip_high-clip_low))*1000+.5);out->duration_ms=(int)((clip_high-clip_low)*1000+.5);}
+ if(recent()&&isfinite(current)&&clip_high>clip_low&&clip_high-clip_low<=14400){out->available=1;out->paused=paused;out->extended=extended;out->range_failed=range_failed;out->position_ms=(int)(fmax(0,fmin(current-clip_low,clip_high-clip_low))*1000+.5);out->duration_ms=(int)((clip_high-clip_low)*1000+.5);out->coverage_known=coverage_known;out->coverage_ms=coverage_ms;out->coverage_pending=!coverage_known&&coverage_attempted<5;}
  ReleaseSRWLockShared(&guard);
 }
+void replay_request_coverage(void){AcquireSRWLockExclusive(&guard);if(enabled&&!coverage_known&&coverage_attempted<5)coverage_requested=1;ReleaseSRWLockExclusive(&guard);}
 int replay_toggle_pause(void){AcquireSRWLockExclusive(&guard);int ok=enabled&&recent();if(ok){paused=!paused;pending=0;pause_owner=last_owner;pause_low=clip_low;pause_high=clip_high;}ReleaseSRWLockExclusive(&guard);return ok;}
 int replay_step_ms(int direction,int milliseconds){AcquireSRWLockExclusive(&guard);int ok=enabled&&recent()&&(direction==-1||direction==1)&&milliseconds>=1&&milliseconds<=1000;if(ok){if(!paused){paused=1;pause_owner=last_owner;pause_low=clip_low;pause_high=clip_high;}pending=fmax(-1,fmin(1,pending+(milliseconds/1000.)*direction));}ReleaseSRWLockExclusive(&guard);return ok;}
 

@@ -136,7 +136,12 @@ try:
         panel=dll.MenuTestPhotoPanel;panel.argtypes=[w.DWORD,w.DWORD];panel.restype=c.c_int
         assert panel(8,0)==1;render("photo-live-effects-ps.png" if ps else "photo-live-effects-xbox.png")
         assert panel(8,0)==2;render("photo-live-watermark-ps.png" if ps else "photo-live-watermark-xbox.png")
+        assert panel(8,0)==4;render("photo-live-presets-ps.png" if ps else "photo-live-presets-xbox.png")
         assert panel(8,0)==0
+
+    replay_help=dll.MenuTestReplayHelp;replay_help.argtypes=[c.c_int,c.c_int]
+    replay_coverage=dll.MenuTestReplayCoverage;replay_coverage.argtypes=[c.c_int]
+    replay_help(3,1);replay_coverage(289000);render("photo-live-replay-coverage.png")
 
     help_panel(0,0,0);pump(.1);assert not dll.Ufc6OverlayBlend()
     dll.MenuTestSettingsMode(0);dll.MenuTestInvokeBinding(3);pump(.15)
@@ -166,7 +171,7 @@ try:
     press(0x2000);press(0x2000)
     dll.MenuTestInvokeBinding(3);pump(.15)
     press(0x40);press(0x40);press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==19
-    for _ in range(4):press(0x40)
+    for _ in range(5):press(0x40)
     pump(5.2);render("startup-settings.png")
     press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==28;render("startup-screens.png")
     press(0x40);press(0x4000);assert (dll.MenuTestSnapshot()>>12)&31==29;render("startup-bypass-confirm.png")

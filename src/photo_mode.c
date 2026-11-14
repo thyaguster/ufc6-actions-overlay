@@ -32,6 +32,7 @@ static ULONGLONG deadline;
 static SRWLOCK photo_guard=SRWLOCK_INIT;
 static PhotoInput published_input;
 static volatile LONG commands,installed;
+static volatile LONG target_fov;
 static ULONGLONG input_tick;
 static float initial_pose[16],saved_fov,current_fov;
 
@@ -130,6 +131,7 @@ static void camera_update(uintptr_t o,float dt){
   InterlockedExchange64(&hud_camera_tick,(LONG64)PHOTO_NOW());
   unsigned command=(unsigned)InterlockedExchange(&commands,0);
   if(command&PHOTO_RESET){memcpy(test_pose,initial_pose,64);current_fov=saved_fov;}
+  if(command&PHOTO_FOV){int fov=(int)InterlockedCompareExchange(&target_fov,0,0);if(fov>=20&&fov<=120)current_fov=(float)fov;}
   if(command&PHOTO_FREEZE)freeze_toggle();
   if(command&PHOTO_HUD)InterlockedExchange(&hud_requested,!InterlockedCompareExchange(&hud_requested,0,0));
   if(command&PHOTO_CAGE)InterlockedExchange(&cage_requested,!InterlockedCompareExchange(&cage_requested,0,0));
@@ -157,7 +159,8 @@ static void __attribute__((sysv_abi)) update(uintptr_t o,float dt){
  original(o,dt);
  if(TryAcquireSRWLockExclusive(&photo_guard)){camera_update(o,dt);cage_apply(cage_active());ReleaseSRWLockExclusive(&photo_guard);}
 }
-int photo_mode_blocks_input(void){return InterlockedCompareExchange(&state,0,0)==2||InterlockedCompareExchange(&requested,0,0)!=0;}
+int photo_mode_stop_pending(void){return InterlockedCompareExchange(&state,0,0)==2&&(InterlockedCompareExchange(&commands,0,0)&PHOTO_STOP)!=0;}
+int photo_mode_blocks_input(void){return (InterlockedCompareExchange(&state,0,0)==2&&!photo_mode_stop_pending())||InterlockedCompareExchange(&requested,0,0)!=0;}
 void photo_mode_command(unsigned command){
  InterlockedOr(&commands,(LONG)command);
  if(command&PHOTO_STOP){
@@ -167,6 +170,7 @@ void photo_mode_command(unsigned command){
   ReleaseSRWLockExclusive(&photo_guard);
  }
 }
+void photo_mode_set_fov(int degrees){if(degrees<20||degrees>120)return;InterlockedExchange(&target_fov,degrees);InterlockedOr(&commands,PHOTO_FOV);}
 void photo_mode_snapshot(PhotoSnapshot *out){
  out->cage_count=0;out->cage_writes=InterlockedCompareExchange(&cage_writes,0,0);out->cage_restores=InterlockedCompareExchange(&cage_restores,0,0);
  if(TryAcquireSRWLockShared(&cage_guard)){for(int i=0;i<CAGE_PANEL_CAPACITY;++i)if(cage_panels[i].object)out->cage_count++;ReleaseSRWLockShared(&cage_guard);}
@@ -187,6 +191,7 @@ void photo_mode_poll(int focus,int menu_open,const PhotoInput *input){
  }
 }
 int photo_mode_start(int fight_ready){
+ if(photo_mode_stop_pending())return 0;
  if(photo_mode_blocks_input()){photo_mode_command(PHOTO_STOP);return 1;}
  if(!fight_ready)return 0;
 #ifndef NATIVE_CAMERA_TEST

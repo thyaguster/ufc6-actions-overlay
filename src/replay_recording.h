@@ -11,6 +11,15 @@ static int recording_intervals(uintptr_t store,ReplayRange*out,int capacity){
  }
  return range_merge(out,n);
 }
+typedef unsigned char (__attribute__((sysv_abi)) *RecordingConvert)(double*,double);
+static int recording_map_intervals(ReplayRange*items,int n,RecordingConvert convert){
+ int mapped=0;
+ for(int i=0;i<n;++i){double lo=0,hi=0;
+  if(!convert(&lo,items[i].low)||!convert(&hi,items[i].high)||!isfinite(lo)||!isfinite(hi)||hi<=lo)continue;
+  items[mapped++]=(ReplayRange){lo,hi};
+ }
+ return range_merge(items,mapped);
+}
 static int recording_coverage(double time,const double retained[2],ReplayRange*out){
  enum{MAX_INTERVALS=8192};ReplayRange*items=HeapAlloc(GetProcessHeap(),0,MAX_INTERVALS*sizeof(*items));if(!items)return 0;
  int ok=0;ReplayRange aux={0},main={0};uintptr_t aux_root=recording_pointer(0x90a07af78ULL),aux_store=recording_pointer(recording_pointer(aux_root+0x20)+8);
@@ -18,12 +27,9 @@ static int recording_coverage(double time,const double retained[2],ReplayRange*o
  uintptr_t root=recording_pointer(0x90b1a49b8ULL),provider=recording_pointer(recording_pointer(root)+0x2e0),store=recording_pointer(recording_pointer(provider+8)+8);
  n=recording_intervals(store,items,MAX_INTERVALS);if(!n)goto done;
  #if defined(REPLAY_NATIVE_TEST) || defined(QUIT_MENU_TEST)
- (void)main;(void)retained;(void)out;goto done;
+ (void)main;(void)retained;(void)out;(void)recording_map_intervals;goto done;
  #else
- typedef unsigned char (__attribute__((sysv_abi)) *Convert)(double*,double);
- Convert convert=(Convert)0x903f122c0ULL;
- for(int i=0;i<n;++i){double lo=0,hi=0;if(!convert(&lo,items[i].low)||!convert(&hi,items[i].high))goto done;items[i]=(ReplayRange){lo,hi};}
- n=range_merge(items,n);if(!range_containing(items,n,time,&main))goto done;
+ n=recording_map_intervals(items,n,(RecordingConvert)0x903f122c0ULL);if(!range_containing(items,n,time,&main))goto done;
  out->low=fmax(.05,fmax(retained[0],fmax(aux.low,main.low))+.001);out->high=fmin(retained[1],fmin(aux.high,main.high))-.001;
  ok=isfinite(out->low)&&isfinite(out->high)&&out->high-out->low>.01&&time>=out->low&&time<out->high;
  #endif

@@ -18,7 +18,7 @@ Keyboard equivalents are I/J/K/L, arrow keys, U/O, Page Up/Page Down, P, Home, H
 
 ## Translucent editor pages
 
-While Photo Mode is active, press **Menu (Xbox) / Options (PlayStation)** or **F8** to cycle **Camera → Effects → Watermark → Replay** (Replay is available during replay playback) without opening the full tools. The panel appears if hidden. The Camera page keeps the original photo controls. On the Effects/Watermark pages, use **D-pad Up/Down** to select a row and **Left/Right** to adjust; **A/Cross** also advances the selected value. Keyboard equivalents are **W/S** and **A/D**. The sticks, bumpers and triggers still move/look/zoom the camera. **B/Circle** returns to the Camera page; a second press exits. **Esc** exits directly. **P** still freezes/unfreezes. **X/Square** takes a screenshot on every panel page and follows the optional Include overlay in screenshots setting. Tab hides/shows the panel. While the panel is hidden, controller buttons use the original Camera mapping. Assigned user keybinds retain priority.
+While Photo Mode is active, press **Menu (Xbox) / Options (PlayStation)** or **F8** to cycle **Camera → Effects → Watermark → Replay → Presets** without opening the full tools. Replay appears only during replay playback; Presets follows Watermark otherwise. The panel appears if hidden. The Camera page keeps the original photo controls. On editor pages, use **D-pad Up/Down** to select a row and **Left/Right** to adjust; **A/Cross** also advances or activates the selected value. Keyboard equivalents are **W/S** and **A/D**. The sticks, bumpers and triggers still move/look/zoom the camera. **B/Circle** returns to the Camera page; a second press exits. **Esc** exits directly. **P** still freezes/unfreezes. **X/Square** takes a screenshot on every panel page and follows the optional Include overlay in screenshots setting. Tab hides/shows the panel. While the panel is hidden, controller buttons use the original Camera mapping. Assigned user keybinds retain priority.
 
 ## Filters, effects and watermark
 
@@ -30,13 +30,15 @@ Screenshots retain the photo effects and watermark in both capture modes. With I
 
 Shader sources are in `src/shaders/photo_effects.*`, with committed SPIR-V for normal builds. To regenerate, run `python scripts/generate_photo_effects_shaders.py --compiler path/to/glslang.exe` using [Khronos glslang](https://github.com/KhronosGroup/glslang).
 
+On the **Presets** page, choose one of three slots and select **Save current look** or **Apply preset**. Presets store filters, watermark styling, field of view, HUD and cage choices in `bin/ufc6-quit-menu.ini`. Applying a preset uses the current PORTHEON player name. Camera position is specific to the current fight and is not stored. **Reset overlay settings** clears the slots.
+
 ## Restoration and limitations
 
 - Exiting or switching away from the game restores normal camera, field of view, game speed and HUD behavior. The original native cage-fade values continue to update and are restored when the override ends.
 - Opening the tools stops camera movement and preserves your selected HUD visibility. It does not automatically show/hide the game HUD when entering or leaving the tools; use the explicit HUD switch, or exit Photo Mode to restore normal behavior.
 - Freezing also stops the game's cage-update graph. Briefly unfreeze after changing the cage option to process the change.
 - The controls panel uses the current theme, controller artwork, font and scale. It can be hidden independently without leaving Photo Mode.
-- Photo Mode is intended for a running fight or practice. Mid-fight instant replay is not included; the Replay editor uses the game’s View Replay.
+- Photo Mode works in a running fight or practice and in the native replay viewer when a recorded moment is available. The Replay page shows measured continuous retained footage separately from the selected clip; earlier fight footage may have been trimmed.
 
 ## Validation
 

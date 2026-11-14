@@ -41,6 +41,33 @@ This download contains the overlay, asset-free controller-icon patcher, and inst
 
 **The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Game & launcher → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
 
+## New in v0.9.44
+
+- **Instant Replay duration:** the Photo Mode Replay page retries transient recorder reads and ignores older intervals that cannot be mapped into the current replay. It shows “Checking continuous footage” while measuring. The duration was verified in a live Parsec fight.
+
+## New in v0.9.43
+
+- **Replay duration:** the Photo Mode Replay page shows the available continuous footage length separately from the selected clip. Older footage may have been trimmed.
+- **Photo Mode presets:** cycle to the new Presets page, choose one of three slots, and save or apply the current filters, watermark style, FOV, HUD and cage settings. Slots persist across launches and use the current PORTHEON player name. Camera position stays with the current fight.
+
+## New in v0.9.42
+
+- **Photo Mode exit:** the F9 shortcut now requests exit immediately, and the translucent panel follows the camera/input state. Quick entry/exit from Instant Replay's Replay page was verified in Parsec mode; the panel cleared every time.
+
+## New in v0.9.41
+
+- **Photo Mode exit:** quick F9 presses are detected more reliably, including while Shift is held for faster camera movement. The remaining panel issue in this version was addressed in v0.9.42.
+
+## New in v0.9.40
+
+- **Instant Replay Photo Mode:** the camera and replay-step controls work in the game's mid-fight Instant Replay when playback is inside the recorded clip. Photo Mode now releases its panel and controller lock immediately when exiting; the native camera restores on its game callback.
+
+## New in v0.9.39
+
+- **Experimental Instant Replay:** enable it before a new offline fight to expose the game's own Instant Replay entry in its pause menu. Starts Off.
+- **Simpler startup settings:** the optional visual auto-confirm fallback is under Experimental; Skip intros and Suppress online notices remain in Game & launcher.
+- **Next hit KO timing:** arming waits for a verified fighter update and remains armed while a fight is paused.
+
 ## New in v0.9.36
 
 - **Replay editor:** pause, rewind/step forward, 10 ms–1 second steps, Native or 0.1×–2× playback speed, controller shortcuts, free camera and zoom.
@@ -109,7 +136,7 @@ Windows and network paths are redacted. Saves, screenshots, launcher arguments, 
 
 ## Next hit KO
 
-In **Cheats**, select **Next hit KO** to arm it for Player 1’s opponent in a supported offline fight, with Photo Mode Off. Select it again to cancel. Resume and land a clean head strike within 25 seconds. It automatically disarms after the KO or timeout; it does not choose a winner without a strike. Cancel, opponent-only KO, automatic disarm and the normal finish replay are live-tested.
+In **Cheats**, select **Next hit KO** to arm it for Player 1’s opponent in a supported offline fight, with Photo Mode Off. Select it again to cancel. Resume and land a clean head strike within 25 seconds. If the fight is paused while you arm it, the request waits for the next verified fighter update. It automatically disarms after the KO or timeout; it does not choose a winner without a strike. Cancel, opponent-only KO, automatic disarm and the normal finish replay are live-tested.
 
 ![Next hit KO and career cheats](docs/screenshots/next-hit-ko.png)
 
@@ -221,9 +248,11 @@ On/Off choices use labeled pill switches. Adjustable values use compact arrow co
 
 Under **Settings → Game & launcher**, **Skip intros** skips the Zuffa and EA SPORTS splashes using the checked short-boot route and its supporting timer settings. Both splashes are confirmed completely absent in a live Parsec launch. Turning it Off restores the normal intro callbacks. The older separate shortening preference is ignored.
 
-Switching **Skip intros** On also enables **Auto-continue startup**. You can then turn auto-continue Off independently, and that choice survives a restart. Switching Skip intros Off also disables auto-continue. Both options default Off.
+Switching **Skip intros** On also enables **Suppress online notices** and the optional **Visual auto-confirm fallback**. Each can then be turned Off independently. Switching Skip intros Off turns both Off. **Suppress online notices** prevents the later offline-progression popup, including after a fight; the change takes effect immediately.
 
-**Auto-continue startup** confirms the English **Press any button** title screen and the two known PSN/EA and roster-download warnings once each. It checks every 100 ms during startup, requires the game to be focused and the overlay closed, and stops after both warnings. It recognizes the 16:9 layout at 720p or higher; other layouts remain manual. The title screen can use a targeted Enter key if a primary controller is not assigned yet. Recognition stays in memory and creates no screenshot files. Hands-free arrival at the main menu is confirmed in a live Parsec launch.
+**Skip title & network warnings** uses the game's native startup flow to bypass title input and the known offline warnings after a restart. **Visual auto-confirm fallback** is under **Game & launcher → Experimental** for configurations where the native bypass cannot be used. It recognizes the English 16:9 startup prompts at 720p or higher while the game is focused. It is optional because different graphics drivers or layouts can change the prompt image.
+
+**Instant Replay in fights** is also under **Game & launcher → Experimental** and starts Off. Turn it On before loading a new offline fight; the game's own pause menu can then offer Instant Replay. In a tested Parsec fight, the post-fight menu also offered **Instant Replay** alongside **View Replay**: Instant Replay opened the native seek-bar viewer over the retained recording, while View Replay used the game's selected finish clip. The user could seek to the start, play and exit the post-fight Instant Replay. Longer fights may have earlier footage trimmed, so whole-fight playback is not guaranteed. If the current fight's menu was already built, enabling the switch may need a new fight. Turning it Off restores the verified in-memory game callback; in the Parsec test, the entry disappeared from the same fight's pause menu. No game files are edited.
 
 ## Keybinds and themes
 

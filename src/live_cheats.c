@@ -111,10 +111,11 @@ int live_cheats_fight_ready(void){
 
 int live_ko_toggle(void){int ok=0;AcquireSRWLockExclusive(&binding_guard);
  uint64_t now=GetTickCount64();
- if(ko.requested||ko.armed||ko.cancel){ko.requested=0;ko.cancel=1;ko.result=3;ok=1;}
- else if(hooked_base&&ko.candidate.valid&&now-ko.candidate.seen<1000&&ko_identity(&ko.candidate)&&ko_values(&ko.candidate)){
+ if(ko.cancel){ok=0;}
+ else if(ko.requested||ko.armed){ko.requested=0;ko.cancel=1;ko.result=3;ok=1;}
+ else if(hooked_base&&ko.candidate.valid&&ko_identity(&ko.candidate)&&ko_values(&ko.candidate)){
   int32_t value=-1;if(ko_read(ko.candidate.field[0][1-ko.candidate.player],&value,4)&&value==0){ko.requested=1;ko.result=1;ko.deadline=now+25000;ok=1;}
  }ReleaseSRWLockExclusive(&binding_guard);return ok;}
 int live_ko_poll(int allowed){AcquireSRWLockExclusive(&binding_guard);uint64_t now=GetTickCount64();
- if((ko.armed||ko.requested)&&(!allowed||now>=ko.deadline||now-ko.candidate.seen>1000)){ko.requested=0;ko.cancel=1;ko.result=3;}
+ if((ko.armed||ko.requested)&&(!allowed||now>=ko.deadline)){ko.requested=0;ko.cancel=1;ko.result=3;}
  int result=ko.result;ReleaseSRWLockExclusive(&binding_guard);return result;}

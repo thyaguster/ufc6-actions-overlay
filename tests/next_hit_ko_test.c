@@ -29,5 +29,17 @@ int main(void){
  ko.last_probe=0;ko.requested=1;ko.deadline=GetTickCount64()+25000;ko_observe((uintptr_t)binder,1,GetTickCount64());assert(ko.armed&&value[0][1]==7);
  assert(live_ko_poll(0)==3&&ko.cancel&&value[0][1]==7); /* UI publishes; never writes the fighter. */
  original_binding_sync=sync_noop;hooked_binding_sync(binder,0,4);assert(!ko.armed&&!ko.cancel&&value[0][1]==0);
+ /* Pausing in the overlay can leave a valid binding older than one second.
+    Arming must wait for the next synchronization instead of rejecting it. */
+ ko.last_probe=0;ko_observe((uintptr_t)binder,1,GetTickCount64()-2000);
+ hooked_base=1;assert(live_ko_toggle()==1&&ko.requested&&!ko.armed);
+ assert(live_ko_poll(1)==1&&ko.requested);
+ ko.last_probe=0;ko_observe((uintptr_t)binder,1,GetTickCount64());
+ assert(ko.armed&&value[0][1]==7);
+ ko.candidate.seen=GetTickCount64()-2000;
+ assert(live_ko_poll(1)==1&&ko.armed); /* Pausing must not silently cancel an arm. */
+ assert(live_ko_toggle()==1&&ko.cancel);
+ assert(live_ko_toggle()==0&&ko.cancel); /* No rearm before the game restores its field. */
+ hooked_binding_sync(binder,0,4);assert(!ko.armed&&!ko.cancel&&value[0][1]==0);
  puts("PASS: opponent mapping both ways, KO consumption, timeout/cancel, ambiguous/dead fighters rejected, foreign values and changed identities preserved.");return 0;
 }
