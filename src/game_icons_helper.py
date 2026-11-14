@@ -104,7 +104,7 @@ def load_job(path):
     job = dict(ini['Job'])
     for key in ('gameexe', 'launchexe', 'workdir', 'gameroot', 'report'):
         core.check(key in job and Path(job[key]).is_absolute() and '\n' not in job[key] and '\r' not in job[key], 'Invalid job path.')
-    core.check(Path(job['gameexe']).name.casefold() in ('ufc 6.exe', 'ufc 6 parsec.exe'), 'Unsupported engine filename.')
+    core.check(Path(job['gameexe']).name.casefold() in ('ufc 6.exe', 'ufc 6 parsec.exe', 'ufc 6 novo.exe'), 'Unsupported engine filename.')
     core.check(Path(job['launchexe']).is_file() and Path(job['workdir']).is_dir(), 'The configured launcher is unavailable.')
     core.check(job['theme'] in ('xbox', 'playstation', 'startup_on', 'startup_off'), 'Invalid game icon theme.')
     core.check('\n' not in job['launchargs'] and '\r' not in job['launchargs'], 'Invalid launcher arguments.')

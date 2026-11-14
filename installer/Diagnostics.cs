@@ -12,7 +12,7 @@ using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 namespace UFC6OverlaySetup {
  public static class Diagnostics {
-  public static readonly string[] Files={"UFC 6.exe","UFC 6 Parsec.exe","version.dll","libwinpthread-1.dll","ufc6_pthread_original.dll","ufc6_menu_layer.dll","ufc6_menu_layer.json","ufc6_menu_restart.exe","ufc6_menu_icons.exe","ufc6_menu_update.exe"};
+  public static readonly string[] Files={"UFC 6.exe","UFC 6 Parsec.exe","UFC 6 novo.exe","version.dll","libwinpthread-1.dll","winmm.dll","ufc6_pthread_original.dll","ufc6_menu_layer.dll","ufc6_menu_layer.json","ufc6_menu_restart.exe","ufc6_menu_icons.exe","ufc6_menu_update.exe"};
   static readonly string[] Logs={"ufc6-quit-menu.log","ufc6-quit-menu-vulkan.log"};
   const int MaxLog=512*1024;
   static Dictionary<string,string> Expected(){using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("diagnostics-components.json")){if(stream==null)return new Dictionary<string,string>();using(var reader=new StreamReader(stream))return new JavaScriptSerializer().Deserialize<Dictionary<string,string>>(reader.ReadToEnd().TrimStart('\ufeff'));}}
@@ -21,7 +21,7 @@ namespace UFC6OverlaySetup {
   public static string Folder(string path){
    path=Path.GetFullPath(path);
    if(!File.Exists(Path.Combine(path,"UFC 6.exe"))&&File.Exists(Path.Combine(path,"bin","UFC 6.exe")))path=Path.Combine(path,"bin");
-   if(!Directory.Exists(path)||Linked(path)||!File.Exists(Path.Combine(path,"UFC 6.exe")))throw new IOException("Choose the UFC6 game folder or its bin folder.");
+   if(!Directory.Exists(path)||Linked(path)||(!File.Exists(Path.Combine(path,"UFC 6.exe"))&&!File.Exists(Path.Combine(path,"UFC 6 novo.exe"))))throw new IOException("Choose PORTHEON's UFC6, bin, or novo game folder.");
    return path;
   }
   public static string Redact(string value){
@@ -61,7 +61,7 @@ namespace UFC6OverlaySetup {
   }
   static List<object> Processes(string folder,int requestedPid){
    var found=new List<object>();
-   foreach(string name in new[]{"UFC 6","UFC 6 Parsec"})foreach(var process in Process.GetProcessesByName(name))using(process){
+   foreach(string name in new[]{"UFC 6","UFC 6 Parsec","UFC 6 novo"})foreach(var process in Process.GetProcessesByName(name))using(process){
     try{
      if(!string.Equals(Path.GetDirectoryName(process.MainModule.FileName),folder,StringComparison.OrdinalIgnoreCase))continue;
      var modules=new List<string>();

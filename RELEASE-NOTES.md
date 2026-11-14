@@ -1,3 +1,10 @@
+## v0.9.45 — PORTHEON PS5 Pro / DLSS engine support
+
+- Add a checked startup bridge for PORTHEON's `novo/UFC 6 novo.exe` engine (`09eaab2`). It forwards the engine's imported Windows timing calls and loads the existing Vulkan overlay locally. The original/Parsec `bin` install keeps its own bridge.
+- Add **Switch engine: PS5 Pro** to setup. Select `PORTHEON/games/UFC6`, then switch to `novo` and install there; install `bin` separately if you use the original or Parsec engine. Setup verifies each executable and bundled component, backs up recognized earlier overlay builds, and rolls back failed installs. Removal preserves settings and screenshots.
+- Verify F10/controller opening and navigation, in-frame drawing, screenshots, Photo Mode camera/zoom/HUD restoration, and Player 1 stamina/health toggles in the running PS5 Pro engine. Replay, cage, career and startup game-code hooks retain their byte checks; career edits still need an in-career live check on this engine.
+- Extend the bundled game-icons helper, restart helper and support report to recognize the `novo` executable. Background audio muting is unavailable on this host engine until its native audio hook is mapped.
+
 ## v0.9.44 — Instant Replay duration correction
 
 - Fix a case where in-fight Instant Replay reported “Continuous length unavailable.” The live recorder snapshot showed a 96.8-second selected replay and a continuous auxiliary span, while the other recorder still held older intervals. Ignore intervals that cannot be converted into the current replay and retry transient reads up to five times at one-second intervals.

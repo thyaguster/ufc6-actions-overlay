@@ -23,23 +23,29 @@
 ## Quick installation
 
 1. [Download the latest installer](https://github.com/thyaguster/ufc6-actions-overlay/releases/latest) — choose **UFC6-Actions-Overlay-Setup-*.exe**.
-2. Close UFC 6 and PORTHEON, run the installer, and choose **PORTHEON\games\UFC6** (or its **bin** folder). This is the launcher folder containing `UFC6.exe`, not your extracted game-data folder.
-3. Click **Check folder**, then **Install / Update**. The installer checks compatibility before enabling installation.
+2. Close UFC 6 and PORTHEON, run the installer, and choose **PORTHEON\games\UFC6**. This is the launcher folder containing `UFC6.exe`, not your extracted game-data folder.
+3. Click **Check folder**, then **Install / Update** for the original and Parsec engine. If you use **PS5 Pro / DLSS**, click **Switch engine: PS5 Pro**, check its **novo** folder, and install there too. The installer verifies each engine before enabling installation.
 4. Launch UFC 6 normally. Hold **LB + RB + Menu/Start** for about one second, then release; **F10** also opens the overlay.
 
-**Install once for both normal UFC 6 and PORTHEON's supported Parsec/two-player mode. No extra overlay steps are needed for Parsec.** The Xbox game button-icons mod is included; no separate Python or button-mod installation is required.
+**One `bin` install covers both the original and Parsec/two-player mode. PS5 Pro / DLSS uses a separate `novo` install.** The Xbox game button-icons mod is included; no separate Python or button-mod installation is required.
 
 **PORTHEON 6.2:** v0.9.8 recognizes and upgrades its bundled older overlay. Close the game and launcher and use **Install / Update**; do not manually delete DLLs. The standalone overlay works with the launcher's bundled-menu switch On or Off, including supported Parsec mode. Keep `ufc6_pthread_original.dll`: it is your original threading runtime, required by the startup bridge.
 
 ![Actions overlay over the actual UFC 6 menu](docs/screenshots/overlay-in-game.png)
 
-An in-process extension for the **PORTHEON UFC 6 `3309ab23f` Windows engine**. It draws its menu directly into the game's Vulkan frames and keeps focus on the game. The main menu contains **Resume, Take screenshot, Restart game, Cheats, Photo Mode, Settings, and Quit game**, followed by a gap separating **Restart PC and Shut down PC**.
+An in-process extension for the verified **PORTHEON UFC 6 `3309ab23f` original/Parsec engine** and **`09eaab2` PS5 Pro / DLSS engine**. It draws its menu directly into the game's Vulkan frames and keeps focus on the game. The main menu contains **Resume, Take screenshot, Restart game, Cheats, Photo Mode, Settings, and Quit game**, followed by a gap separating **Restart PC and Shut down PC**.
 
-The engine executable is not modified on disk. The optional controller-icon patch changes verified game-asset ranges and keeps a local restore backup. A startup bridge forwards calls to your verified original threading runtime, preserved byte-for-byte as `ufc6_pthread_original.dll` and restored by the uninstaller. A short-lived helper handles restart or confirmed shutdown after the old game has exited and, when configured, after launcher cleanup.
+The engine executable is not modified on disk. The optional controller-icon patch changes verified game-asset ranges and keeps a local restore backup. The original/Parsec startup bridge forwards calls to your verified original threading runtime, preserved byte-for-byte as `ufc6_pthread_original.dll` and restored by the uninstaller. The PS5 Pro / DLSS bridge forwards timing calls to the Windows system library. A short-lived helper handles restart or confirmed shutdown after the game has exited and, when configured, after launcher cleanup.
 
-This download contains the overlay, asset-free controller-icon patcher, and installer. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. It supports the **PORTHEON `3309ab23f` Windows engine**, including its verified Parsec/two-player derivative, rather than every KytyPS5 build. The installer checks the executable hash before installing.
+This download contains the overlay, asset-free controller-icon patcher, and installer. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. The installer checks the executable hash before installing; other KytyPS5 builds are not automatically supported.
 
 **The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Game & launcher → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
+
+## New in v0.9.45
+
+- **PS5 Pro / DLSS engine:** the overlay now starts and draws in PORTHEON's verified `novo` engine. F10, controller navigation, screenshots, Photo Mode and replay controls were verified in the game. The installer has a **Switch engine: PS5 Pro** button and keeps each engine's installation separate.
+- **New-engine bridge:** `winmm.dll` forwards the engine's timing calls to Windows and starts the per-game Vulkan layer. The installer verifies the exact engine hash and backs up recognized overlay files; it does not change the game executable or system Vulkan settings.
+- **Career and startup controls:** the shared game-code hooks verify their signatures before use on the new engine. Career edits still require a loaded career and a save backup. Background audio muting remains unavailable on the new host engine until its native audio hook is verified.
 
 ## New in v0.9.44
 
@@ -363,10 +369,10 @@ Verification uses the test helper with power APIs compiled out and a file in pla
 
 ## Install, upgrade, and remove
 
-Download **`UFC6-Actions-Overlay-Setup-0.9.11.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
+Download the latest **`UFC6-Actions-Overlay-Setup-*.exe`** and double-click it. The setup EXE contains all overlay components; it can run by itself without extracting the source ZIP, installing Python, or compiling anything. It uses the Windows .NET Framework 4.x already present on standard Windows 10/11 installations.
 
 1. Close UFC 6 and its launcher.
-2. Click **Browse** and select the UFC 6 game folder or its **bin** folder containing **`UFC 6.exe`**.
+2. Click **Browse** and select **PORTHEON\games\UFC6**. The installer starts with its **bin** engine. For PS5 Pro / DLSS, click **Switch engine: PS5 Pro** to select **novo**. Install in both folders if you play with both engines.
 3. Click **Check folder** if you typed the path manually. Choosing a folder with Browse checks it automatically.
 4. Click **Install / Update**. The setup verifies the engine and bundled files, backs up recognized older versions, and installs the overlay.
 5. Start UFC 6 normally. Hold **LB + RB + Menu** for about one second, then release, or press **F10**.
@@ -375,9 +381,9 @@ To uninstall, run the same setup EXE, choose the same folder, and click **Remove
 
 Version 0.8.2 fixes startup when Windows prefers system DLLs, which can bypass an app-local `version.dll`. The bridge uses the engine's existing non-system runtime import and enables the Vulkan layer only inside the game process. It preserves the Windows security policy, checks all required overlay files before enabling the layer, and does not register a system-wide Vulkan layer. Production rendering is in-frame only; a desktop popup cannot appear behind the game. The installer accepts the verified original runtime and recognized overlay bridges, including PORTHEON 6.2's rebuild; it rejects unknown replacements. The original runtime must still be available in `libwinpthread-1.dll` or its preserved `ufc6_pthread_original.dll` copy.
 
-The full **`UFC6-Actions-Overlay-0.9.11.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
+The full **`UFC6-Actions-Overlay-*.zip`** also contains `UFC6ActionsOverlaySetup.exe`, the prebuilt files in `dist`, all source, build scripts, and licenses.
 
-The Python command-line manager remains available for development and scripting:
+The Python command-line manager remains available for development and scripting with the original **bin** engine:
 
 ```powershell
 python manage_menu.py status --bin-dir "D:\Games\UFC6\bin"
@@ -386,7 +392,7 @@ python manage_menu.py install --bin-dir "D:\Games\UFC6\bin"
 
 Restart UFC 6 once after installing an update. Already loaded DLLs remain active until the game exits. Replace the example path with your own game's bin folder. If omitted, `--bin-dir` defaults to `bin` under the current working directory.
 
-The installer manages `version.dll`, `ufc6_menu_layer.dll`, `ufc6_menu_layer.json`, `ufc6_menu_restart.exe`, `ufc6_menu_icons.exe`, `ufc6_menu_update.exe`, and the `libwinpthread-1.dll` startup bridge. It verifies the original threading runtime before preserving it as `ufc6_pthread_original.dll`; that original is never downloaded or bundled. Uninstall restores it byte-for-byte. Keep this original-runtime copy and use the current setup to remove the overlay. It verifies all hashes, backs up recognized older versions, installs the core last, and rolls back changes if a commit fails. The bundled game-icons helper includes Python, so users do not need to install Python. Its source, recipe and runtime notices are under `vendor/xbox-icons` and `src/game_icons_helper.py`. Unknown files, including unrelated mods using `version.dll`, are left untouched. Settings, screenshots, diagnostic logs, and backups are preserved.
+The installer manages `version.dll`, `ufc6_menu_layer.dll`, `ufc6_menu_layer.json`, `ufc6_menu_restart.exe`, `ufc6_menu_icons.exe`, and `ufc6_menu_update.exe` in the selected engine folder. In **bin**, it also manages the `libwinpthread-1.dll` startup bridge, preserving the verified original as `ufc6_pthread_original.dll`; uninstall restores it byte-for-byte. In **novo**, it manages a `winmm.dll` timing bridge that forwards calls to Windows. It verifies all hashes, backs up recognized older versions, installs the core last, and rolls back changes if a commit fails. Unknown files, including unrelated mods using `version.dll`, are left untouched. Settings, screenshots, diagnostic logs, and backups are preserved.
 
 Close the game before uninstalling:
 
@@ -396,10 +402,11 @@ python manage_menu.py remove --bin-dir "D:\Games\UFC6\bin"
 
 Vulkan layer settings apply only to the game process; there is no system-wide layer registration. Restarting through the helper does not duplicate the layer settings. The old `attach_menu.py` development helper cannot enable the Vulkan layer in an already initialized graphics instance. Never unload an active menu DLL.
 
-The installer accepts this engine SHA-256 only:
+The installer accepts these exact engine SHA-256 hashes:
 
 ```text
 f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2
+ace7a59392b47a776d469768f4ed1aef2c3395c26ac4ed57fd67661c2d6abe48
 ```
 
 The DLL separately verifies the image size, timestamp, and hook bytes. The exact engine source is unavailable; the installed `licenses/UFC6/ENGINE.txt` identifies this revision. The public [two-player patch](https://github.com/Danteh3-lab/kytyps5-2player-patch) independently documents the same engine and controller functions.

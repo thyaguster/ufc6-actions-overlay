@@ -52,6 +52,12 @@ static ULONGLONG progression_notice_retry_tick;
 #define AXIS_RVA 0x126f270
 #define DISCONNECT_RVA 0x126ef60
 #define CONTROLLER_RVA 0x3937c90
+#define NEW_BUTTON_RVA 0xe0a930
+#define NEW_AXIS_RVA 0xe0aac0
+#define NEW_DISCONNECT_RVA 0xe0a5b0
+#define NEW_CONTROLLER_RVA 0x2cc1780
+#define NEW_SECOND_CONTROLLER_RVA 0x2cc1788
+#define NEW_SECOND_ID_RVA 0x1a7a198
 
 typedef void (*ButtonFn)(void *, int, uint32_t, bool);
 typedef void (*AxisFn)(void *, int, int, int);
@@ -123,6 +129,7 @@ static int test_live_status[LIVE_COUNT]={LIVE_OFF,LIVE_OFF};
 static int test_live_requested[LIVE_COUNT];
 #endif
 static uint32_t render_width=MENU_BASE_WIDTH,render_height=MENU_BASE_HEIGHT;
+static int engine_profile;
 
 static void status(const wchar_t *message) {
     EnterCriticalSection(&lock);lstrcpynW(status_text,message,120);status_until=GetTickCount64()+5000;toast_until=GetTickCount64()+3000;LeaveCriticalSection(&lock);
@@ -218,6 +225,7 @@ static int launcher_setup_active;
 static uintptr_t engine_base;
 static int engine_parsec;
 static void *native_manager;
+static void *native_secondary_manager;
 static int native_primary_id=-1,native_secondary_id=-1;
 static int input_redirected(void){
 #ifdef QUIT_MENU_TEST
@@ -285,15 +293,24 @@ static void refresh_native_players(void){
 #ifdef QUIT_MENU_TEST
     if(test_mode){native_manager=(void*)1;native_primary_id=test_primary_id;native_secondary_id=test_secondary_id;return;}
 #endif
-    native_primary_id=-1;native_secondary_id=-1;native_manager=NULL;
+    native_primary_id=-1;native_secondary_id=-1;native_manager=NULL;native_secondary_manager=NULL;
     if(!engine_base)return;
     HANDLE self=GetCurrentProcess();void *manager=NULL;int primary=-1;
-    if(!ReadProcessMemory(self,(void*)(engine_base+CONTROLLER_RVA),&manager,sizeof(manager),NULL)||!manager)return;
-    if(!ReadProcessMemory(self,(BYTE*)manager+0x28,&primary,sizeof(primary),NULL))return;
+    uintptr_t controller_rva=engine_profile==3?NEW_CONTROLLER_RVA:CONTROLLER_RVA;
+    if(!ReadProcessMemory(self,(void*)(engine_base+controller_rva),&manager,sizeof(manager),NULL)||!manager)return;
+    if(!ReadProcessMemory(self,(BYTE*)manager+(engine_profile==3?0x30:0x28),&primary,sizeof(primary),NULL))return;
     native_manager=manager;native_primary_id=primary;
     if(engine_parsec){int state[2];if(ReadProcessMemory(self,(void*)(engine_base+0x3c04008),state,sizeof(state),NULL)&&state[1])native_secondary_id=state[0];}
+    if(engine_profile==3){
+        void *second=NULL;int id=-1;
+        if(ReadProcessMemory(self,(void*)(engine_base+NEW_SECOND_CONTROLLER_RVA),&second,sizeof(second),NULL)&&second&&
+           ReadProcessMemory(self,(void*)(engine_base+NEW_SECOND_ID_RVA),&id,sizeof(id),NULL)){
+            native_secondary_manager=second;native_secondary_id=id;
+        }
+    }
 }
 static int native_player(const InputDevice *d){
+    if(d->controller==native_secondary_manager&&native_secondary_manager&&d->id==native_secondary_id)return 2;
     if(d->controller!=native_manager||d->id<0)return 0;
     return d->id==native_primary_id?1:d->id==native_secondary_id?2:0;
 }
@@ -763,7 +780,7 @@ static void draw_menu(HDC dc, RECT r) {
             swprintf(line,130,L"Open: %ls  |  F10",chord);
             if(selection==SETTING_DECISION_REPLAY)wcscpy(line,L"Enable before a new offline fight. Requires recorded clips.");
             if(selection==SETTING_INSTANT_REPLAY)wcscpy(line,L"Appears in the game pause menu for new offline fights.");
-            if(selection==SETTING_AUDIO_FOCUS)wcscpy(line,L"Silence only UFC 6 while minimized or in the background.");
+            if(selection==SETTING_AUDIO_FOCUS)wcscpy(line,engine_profile==3?L"Pending verification for the PS5 Pro engine.":L"Silence only UFC 6 while minimized or in the background.");
             if(selection==SETTING_GAME_ICONS)wcscpy(line,L"Patch the game controller icons. Restart required.");
             if(selection==SETTING_ICONS)wcscpy(line,L"Changes this overlay only. Game icons have a separate setting.");
             if(selection==SETTING_SCALE)wcscpy(line,L"Left/right: resize   |   Confirm: reset to 100%");
@@ -1415,7 +1432,20 @@ static int install_hooks(void) {
     static const unsigned char disconnect_bytes[] = {0x55,0x56,0x57,0x48,0x83,0xec,0x30,0x48,0x8d,0x6c,0x24,0x30,0x48,0xc7,0x45,0xf8,0xfe,0xff,0xff,0xff};
 #ifndef QUIT_MENU_TEST
     int profile=engine_fingerprint();
-    engine_base=(uintptr_t)base;engine_parsec=profile==2;
+    engine_base=(uintptr_t)base;engine_parsec=profile==2;engine_profile=profile;
+    if(profile==3&&nt->OptionalHeader.SizeOfImage==0x3c1c000&&nt->FileHeader.TimeDateStamp==0x6af7a2f1){
+        static const unsigned char nb[]={0x55,0x41,0x57,0x41,0x56,0x56,0x57,0x53,0x48,0x81,0xec,0xc8,0,0,0};
+        static const unsigned char na[]={0x55,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x56,0x57,0x53,0x48,0x81,0xec,0xc8,0,0,0};
+        static const unsigned char nd[]={0x55,0x41,0x56,0x56,0x57,0x53,0x48,0x83,0xec,0x20,0x48,0x8d,0x6c,0x24,0x20};
+        ExactHook hooks[]={
+            {base+NEW_BUTTON_RVA,hooked_button,(void**)&original_button,nb,sizeof(nb)},
+            {base+NEW_AXIS_RVA,hooked_axis,(void**)&original_axis,na,sizeof(na)},
+            {base+NEW_DISCONNECT_RVA,hooked_disconnect,(void**)&original_disconnect,nd,sizeof(nd)}
+        };
+        const char *error;
+        if(!install_exact_hooks(hooks,3,&error)){log_line(error);return 0;}
+        log_line("Controller hooks installed for verified PORTHEON new engine.");return 1;
+    }
     if(profile==2&&nt->OptionalHeader.SizeOfImage==0x3c05000&&nt->FileHeader.TimeDateStamp==0x6adf7fd0){
         static const unsigned char pb[]={0xe9,0x56,0x40,0x99,0x02},pa[]={0xe9,0x17,0x3e,0x99,0x02},pd[]={0xe9,0xb0,0x41,0x99,0x02};
         ExactHook hooks[]={
@@ -1617,7 +1647,7 @@ static DWORD WINAPI worker(void *unused) {
             }
             else if(msg.wParam==MENU_INSTANT_REPLAY_CHANGED){save_settings();status(menu.instant_replay?L"Instant Replay On for new offline fights.":L"Instant Replay Off for new fights.");}
             else if(msg.wParam==MENU_DECISION_REPLAY_CHANGED){save_settings();status(menu.decision_replays?L"Decision replays On for new offline fights.":L"Off for new fights; the current replay remains available.");}
-            else if(msg.wParam==MENU_AUDIO_FOCUS_CHANGED){save_settings();status(menu.mute_background?L"Background audio muting On.":L"Background audio muting Off.");}
+            else if(msg.wParam==MENU_AUDIO_FOCUS_CHANGED){if(!test_mode&&engine_profile==3){EnterCriticalSection(&lock);menu.mute_background=0;LeaveCriticalSection(&lock);status(L"Background audio muting needs a verified hook for this engine.");}else{save_settings();status(menu.mute_background?L"Background audio muting On.":L"Background audio muting Off.");}}
             else if(msg.wParam==MENU_STARTUP_CHANGED){save_settings();EnterCriticalSection(&lock);if(menu.startup_popups){startup_probe_deadline=GetTickCount64()+300000;startup_probe_seen=0;}else startup_release_confirm();LeaveCriticalSection(&lock);status(L"Startup options saved. Online notice suppression updates immediately.");}
             else if(msg.wParam==MENU_ONLINE_NOTICES_CHANGED){save_settings();EnterCriticalSection(&lock);int enabled=menu.suppress_online_notices;LeaveCriticalSection(&lock);progression_notice_set(enabled);status(enabled?L"Offline post-fight notices suppressed.":L"Offline post-fight notices restored.");}
             else if(msg.wParam==MENU_OPEN_SCREENSHOTS)open_screenshots_folder();

@@ -35,7 +35,7 @@ static void __attribute__((sysv_abi)) progression_status(uintptr_t service,uintp
 int progression_notice_prepare(void){
     if(InterlockedCompareExchange(&progression_state,0,0)<0)return 0;
     if(InterlockedCompareExchange(&progression_state,0,0)>0)return 1;
-    if(!engine_fingerprint()){InterlockedExchange(&progression_state,-1);return 0;}
+    int profile=engine_fingerprint();if(profile!=1&&profile!=2&&profile!=3){InterlockedExchange(&progression_state,-1);return 0;}
     static const unsigned char head[]={0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x54,0x53,0x48,0x83,0xec,0x10};
     MEMORY_BASIC_INFORMATION memory;
     void *target=(void*)(GUEST_BASE+PROGRESSION_STATUS_RVA);

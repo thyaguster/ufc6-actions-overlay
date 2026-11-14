@@ -6,7 +6,7 @@ if (-not (Test-Path -LiteralPath $compiler)) { throw 'The Windows .NET Framework
 New-Item -ItemType Directory -Force -Path 'dist','.build','release' | Out-Null
 $release = Get-Content -LiteralPath 'dist\release.json' -Raw | ConvertFrom-Json
 $arguments = @('/nologo','/codepage:65001','/target:winexe','/platform:x64','/optimize+','/warn:4','/warnaserror+','/out:dist\UFC6ActionsOverlaySetup.exe','/win32manifest:installer\setup.manifest','/win32icon:installer\assets\overlay.ico','/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Web.Extensions.dll','/reference:System.IO.Compression.dll','/reference:System.IO.Compression.FileSystem.dll','/resource:installer\assets\overlay.png,overlay-brand.png','/resource:dist\diagnostics-components.json,diagnostics-components.json')
-foreach ($name in @('libwinpthread-1.dll','version.dll','ufc6_menu_layer.dll','ufc6_menu_layer.json','ufc6_menu_restart.exe','ufc6_menu_icons.exe','ufc6_menu_update.exe','release.json')) {
+foreach ($name in @('libwinpthread-1.dll','winmm.dll','version.dll','ufc6_menu_layer.dll','ufc6_menu_layer.json','ufc6_menu_restart.exe','ufc6_menu_icons.exe','ufc6_menu_update.exe','release.json')) {
     $arguments += "/resource:dist\$name,$name"
 }
 $arguments += @('installer\Setup.cs','installer\SelfTests.cs','installer\AssemblyInfo.cs','installer\UpdateClient.cs','installer\UpdateForm.cs','installer\ModernUi.cs','installer\FolderPicker.cs','installer\Diagnostics.cs','installer\DiagnosticsForm.cs','installer\DiagnosticsTests.cs')

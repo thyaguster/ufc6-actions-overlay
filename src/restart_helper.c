@@ -143,6 +143,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR arguments,int s
     if((!shutdown_pc&&(!reboot_pc||resume_game))&&(!config_ok||!launch_config_valid(&config))){log_line("Invalid launch configuration; game left running.");return 2;}
     HANDLE game=open_matching(pid,expected_game);
     if(!game){swprintf(expected_game,1200,L"%ls\\UFC 6 Parsec.exe",directory);game=open_matching(pid,expected_game);}
+    if(!game){swprintf(expected_game,1200,L"%ls\\UFC 6 novo.exe",directory);game=open_matching(pid,expected_game);}
     if(!game){log_line("Could not verify the game process; restart cancelled.");return 3;}
     HANDLE launcher=parent&&config_ok&&config.wait_parent?open_matching(parent,config.executable):NULL;
     if((shutdown_pc||reboot_pc)&&!prepare_shutdown()){log_line("Windows shutdown privilege is unavailable; game left running.");CloseHandle(game);if(launcher)CloseHandle(launcher);return 6;}

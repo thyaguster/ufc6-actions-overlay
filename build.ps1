@@ -25,6 +25,8 @@ if ($LASTEXITCODE) { throw "Compiler failed: $LASTEXITCODE" }
 if ($LASTEXITCODE) { throw 'Restart helper compilation failed' }
 & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -shared -Isrc src/pthread_bridge.c src/pthread_bridge.def -lkernel32 -o dist/libwinpthread-1.dll
 if ($LASTEXITCODE) { throw 'Startup bridge compilation failed' }
+& $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -shared -Isrc src/winmm_bridge.c src/winmm_bridge.def -lkernel32 -o dist/winmm.dll
+if ($LASTEXITCODE) { throw 'New-engine startup bridge compilation failed' }
 if (-not $Test) {
     if (-not (Test-Path -LiteralPath 'dist/ufc6_menu_icons.exe')) { & (Join-Path $root 'build-icons.ps1'); if ($LASTEXITCODE) { throw 'Icons helper build failed' } }
     & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -shared -Ivendor/vulkan-headers/include src/vulkan_menu_layer.c src/screenshot_png.c src/screenshot_folder.c src/vulkan_layer.def -lkernel32 -lole32 -lwindowscodecs -luuid -lshell32 -o dist/ufc6_menu_layer.dll
@@ -32,7 +34,7 @@ if (-not $Test) {
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     $manifest = [ordered]@{
-        version = '0.9.44'
+        version = '0.9.45'
         parsec_engine_sha256 = 'ad94dc7e30ad12c8078d14d96520c1d48d4b0c658604cc3dcc1d68a3e228773d'
         engine_revision = '3309ab23f'
         engine_sha256 = 'f3c42126bd9df5c12cb69c1c57233a94ba024c50929ba0dfe20e715521f691a2'
@@ -70,7 +72,35 @@ if (-not $Test) {
             $manifest.previous_companion_sha256[$name] = @($old | Where-Object { $_ -match '^[a-fA-F0-9]{64}$' -and $_ -ne $manifest.companion_files[$name] } | ForEach-Object { $_.ToLowerInvariant() } | Select-Object -Unique)
         }
     }
-    $manifest | ConvertTo-Json | Set-Content -LiteralPath 'dist/release.json' -Encoding utf8
+    $newCompanions = [ordered]@{
+        'winmm.dll' = (Get-FileHash -LiteralPath 'dist/winmm.dll').Hash.ToLowerInvariant()
+        'ufc6_menu_layer.dll' = $manifest.companion_files['ufc6_menu_layer.dll']
+        'ufc6_menu_layer.json' = $manifest.companion_files['ufc6_menu_layer.json']
+        'ufc6_menu_restart.exe' = $manifest.companion_files['ufc6_menu_restart.exe']
+        'ufc6_menu_icons.exe' = $manifest.companion_files['ufc6_menu_icons.exe']
+        'ufc6_menu_update.exe' = $manifest.companion_files['ufc6_menu_update.exe']
+    }
+    $manifest.new_engine = [ordered]@{
+        version = $manifest.version
+        engine_sha256 = 'ace7a59392b47a776d469768f4ed1aef2c3395c26ac4ed57fd67661c2d6abe48'
+        dll_sha256 = $manifest.dll_sha256
+        previous_dll_sha256 = @('b849688f39793ccb20a9a37c0bcb7f15f0b32f01a43454ee4be31381132a0061','52817b4b81d30eee7946c2baf39b3b8d7c9180c93cf9888d280ed03717d92e46')
+        companion_files = $newCompanions
+        previous_companion_sha256 = @{
+            'ufc6_menu_layer.dll' = @('c2f164630dbe55632afe8daa26e4c3026211fbaaf2b47aaa6e1be78493a81fd6')
+        }
+    }
+    if ($previousRelease -and $previousRelease.new_engine) {
+        $old = $previousRelease.new_engine
+        $manifest.new_engine.previous_dll_sha256 = @(@($manifest.new_engine.previous_dll_sha256) + @($old.dll_sha256) + @($old.previous_dll_sha256) | Where-Object { $_ -match '^[a-fA-F0-9]{64}$' -and $_ -ne $manifest.dll_sha256 } | Select-Object -Unique)
+        foreach ($name in $newCompanions.Keys) {
+            $prior = @($manifest.new_engine.previous_companion_sha256[$name])
+            if ($old.companion_files.PSObject.Properties[$name]) { $prior += $old.companion_files.$name }
+            if ($old.previous_companion_sha256 -and $old.previous_companion_sha256.PSObject.Properties[$name]) { $prior += $old.previous_companion_sha256.$name }
+            $manifest.new_engine.previous_companion_sha256[$name] = @($prior | Where-Object { $_ -match '^[a-fA-F0-9]{64}$' -and $_ -ne $newCompanions[$name] } | Select-Object -Unique)
+        }
+    }
+    $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath 'dist/release.json' -Encoding utf8
 }
 if ($Test) {
     New-Item -ItemType Directory -Force -Path '.build/bootstrap-compat' | Out-Null
@@ -198,6 +228,16 @@ if ($Test) {
     Copy-Item -LiteralPath 'dist/ufc6_menu_layer.dll','dist/ufc6_menu_layer.json' -Destination '.build/startup-bridge' -Force
     & ./.build/startup-bridge/startup_bridge_test.exe
     if ($LASTEXITCODE) { throw 'Startup bridge mitigation test failed' }
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -municode tests/winmm_bridge_test.c -o .build/winmm_bridge_test.exe
+    if ($LASTEXITCODE) { throw 'New-engine bridge test compilation failed' }
+    & ./.build/winmm_bridge_test.exe (Join-Path $root 'dist/winmm.dll')
+    if ($LASTEXITCODE) { throw 'New-engine timing/bootstrap test failed' }
+    New-Item -ItemType Directory -Force -Path '.build/new-engine-smoke' | Out-Null
+    & $compiler cc -target x86_64-windows-gnu -O2 -Wall -Wextra -Werror -Ivendor/vulkan-headers/include tests/new_engine_layer_smoke.c -lwinmm -o '.build/new-engine-smoke/UFC 6 novo.exe'
+    if ($LASTEXITCODE) { throw 'New-engine Vulkan smoke fixture compilation failed' }
+    Copy-Item -LiteralPath 'dist/winmm.dll','dist/version.dll','dist/ufc6_menu_layer.dll','dist/ufc6_menu_layer.json' -Destination '.build/new-engine-smoke' -Force
+    & './.build/new-engine-smoke/UFC 6 novo.exe'
+    if ($LASTEXITCODE) { throw 'New-engine Vulkan bootstrap smoke test failed' }
     New-Item -ItemType Directory -Force -Path '.build/controller-ci' | Out-Null
     Copy-Item -LiteralPath 'dist/quit_menu_test.dll' -Destination '.build/controller-ci/quit_menu_test.dll' -Force
     python tests/photo_ui_preview.py .build/controller-ci --reset

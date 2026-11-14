@@ -7,5 +7,5 @@ using System.Reflection;
 #endif
 [assembly: AssemblyProduct("UFC 6 Actions Overlay")]
 [assembly: AssemblyDescription("Install, update, or remove the UFC 6 Actions Overlay for the supported PORTHEON engine.")]
-[assembly: AssemblyVersion("0.9.39.0")]
+[assembly: AssemblyVersion("0.9.45.0")]
 [assembly: AssemblyFileVersion("0.9.39.0")]

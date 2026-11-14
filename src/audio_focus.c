@@ -48,7 +48,7 @@ int audio_focus_prepare(void){
 #ifdef AUDIO_FOCUS_TEST
  (void)install_slot;(void)engine_checked;ReleaseSRWLockExclusive(&setup_guard);return 0;
 #else
- if(!engine_checked){engine_checked=engine_fingerprint()?1:-1;}if(engine_checked<0){installed=-1;ReleaseSRWLockExclusive(&setup_guard);return 0;}
+ if(!engine_checked){int profile=engine_fingerprint();engine_checked=profile==1||profile==2?1:-1;}if(engine_checked<0){installed=-1;ReleaseSRWLockExclusive(&setup_guard);return 0;}
  uintptr_t base=(uintptr_t)GetModuleHandleW(NULL);unsigned char call[6],head[32];uintptr_t target=0;SIZE_T got;
  static const unsigned char call_head[]={0xff,0x15,0xfe,0xd9,0xa8,0};
  static const unsigned char target_head[]={0x41,0x57,0x41,0x56,0x41,0x54,0x56,0x57,0x53,0x48,0x83,0xec,0x28,0x48,0x85,0xc9,0x74,0x3c,0x48,0x85,0xd2,0x74,0x47,0x45,0x85,0xc0,0x78,0x52,0x40,0xb6,0x01,0x0f};

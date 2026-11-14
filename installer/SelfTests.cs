@@ -27,6 +27,21 @@ namespace UFC6OverlaySetup {
                 Assert(manager.Inspect(folder).ParsecStatus.StartsWith("Verified"),"Parsec engine must be recognized in the same folder.");
                 passed.Add("PASS: one shared install recognizes both normal and verified Parsec engines; no separate payload or steps.");
 
+                string novo=Path.Combine(Directory.GetParent(folder).FullName,"novo");Directory.CreateDirectory(novo);
+                string newExe=Path.Combine(novo,"UFC 6 novo.exe");File.WriteAllBytes(newExe,Bytes("verified PS5 Pro engine"));
+                var newPayload=new Dictionary<string,byte[]> {{"winmm.dll",Bytes("new timing bridge")},{"ufc6_menu_layer.dll",Bytes("new layer")},{"ufc6_menu_layer.json",Bytes("new manifest")},{"ufc6_menu_restart.exe",Bytes("new helper")},{"version.dll",Bytes("new core")}};
+                var newRelease=new Release {version="fixture",engine_sha256=Manager.HashFile(newExe),dll_sha256=Manager.Hash(newPayload["version.dll"]),previous_dll_sha256=new[]{Manager.Hash(Bytes("probe core"))},companion_files=newPayload.Where(p=>p.Key!="version.dll").ToDictionary(p=>p.Key,p=>Manager.Hash(p.Value)),previous_companion_sha256=new Dictionary<string,string[]>{{"ufc6_menu_layer.dll",new[]{Manager.Hash(Bytes("probe layer"))}}}};
+                manager.NewEngine=new Manager(newRelease,newPayload,"UFC 6 novo.exe","PORTHEON PS5 Pro / DLSS");
+                Assert(Manager.Normalize(novo)==novo&&manager.Inspect(novo).Supported,"New engine folder must be selectable and recognized.");
+                string newSettings=Path.Combine(novo,"ufc6-quit-menu.ini");File.WriteAllText(newSettings,"[Menu]\nUIScale=125\n");
+                File.WriteAllBytes(Path.Combine(novo,"version.dll"),Bytes("probe core"));File.WriteAllBytes(Path.Combine(novo,"ufc6_menu_layer.dll"),Bytes("probe layer"));
+                for(int fail=0;fail<manager.NewEngine.Order.Count;++fail){int point=fail;manager.NewEngine.BeforeCommit=count=>{if(count==point)throw new IOException("Injected new-engine commit failure");};Reject(()=>manager.Apply(novo,false),"New-engine rollback must reject every commit failure");Assert(File.ReadAllText(Path.Combine(novo,"version.dll"))=="probe core"&&File.ReadAllText(Path.Combine(novo,"ufc6_menu_layer.dll"))=="probe layer","New-engine rollback must restore the probe files");}
+                manager.NewEngine.BeforeCommit=null;manager.Apply(novo,false);
+                Assert(manager.Inspect(novo).Current==manager.NewEngine.Order.Count&&File.ReadAllText(newSettings).Contains("UIScale=125"),"New-engine upgrade must install all files and keep settings.");
+                manager.Apply(novo,true);Assert(manager.Inspect(novo).Installed==0&&File.ReadAllText(newSettings).Contains("UIScale=125"),"New-engine removal must preserve settings.");
+                File.WriteAllBytes(Path.Combine(novo,"winmm.dll"),Bytes("foreign bridge"));Reject(()=>manager.Apply(novo,false),"Foreign timing bridge must be preserved");File.Delete(Path.Combine(novo,"winmm.dll"));
+                passed.Add("PASS: verified PS5 Pro / DLSS folder, reversible probe upgrade, every commit rollback, settings preservation, removal and foreign-bridge rejection.");
+
                 string ini = Path.Combine(folder,"ufc6-quit-menu.ini"), screenshot = Path.Combine(folder,"existing-screenshot.png");
                 File.WriteAllText(ini,"[Menu]\nUIScale=175\nAutoLaunchAfterRestart=0\nGuideButtonOpensMenu=0\n"); File.WriteAllBytes(screenshot,Bytes("existing image"));
                 string settings = File.ReadAllText(ini);
@@ -150,6 +165,8 @@ namespace UFC6OverlaySetup {
                 // Verify the actual embedded release too, without touching a game directory.
                 var embedded = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Release>(Encoding.UTF8.GetString(Program.Resource("release.json")).TrimStart('\ufeff'));
                 new Manager(embedded,embedded.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n => n,n => Program.Resource(n)));
+                Assert(embedded.new_engine!=null,"Bundled release must describe the verified PS5 Pro engine.");
+                new Manager(embedded.new_engine,embedded.new_engine.companion_files.Keys.Concat(new [] {"version.dll"}).ToDictionary(n=>n,n=>Program.Resource(n)),"UFC 6 novo.exe","PORTHEON PS5 Pro / DLSS");
                 passed.Add("PASS: all actual bundled release files match the embedded manifest.");
                 var diagnosticHashes=new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Dictionary<string,string>>(Encoding.UTF8.GetString(Program.Resource("diagnostics-components.json")).TrimStart('\ufeff'));
                 Assert(diagnosticHashes["version.dll"]==embedded.dll_sha256,"Diagnostic core fingerprint must match the shipped core.");

@@ -112,7 +112,7 @@ int replay_prepare(void){
 #if defined(REPLAY_NATIVE_TEST) || defined(QUIT_MENU_TEST)
  (void)post_create;(void)update;(void)cinematic_update;(void)recording_init;installed=-1;return 0;
 #else
- if(!engine_verified){if(!engine_fingerprint()){installed=-1;return 0;}engine_verified=1;}
+ if(!engine_verified){int profile=engine_fingerprint();if(profile!=1&&profile!=2&&profile!=3){installed=-1;return 0;}engine_verified=1;}
  static const unsigned char head[]={0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x48};
  static const unsigned char seek_head[]={0x83,0xbf,0xb4,0,0,0,3,0x0f,0x85,0xbc,0,0,0,0x55,0x48,0x89,0xe5,0x53,0x50,0x48,0x8b,7,0x48,0x89,0xfb,0xc5,0xfb,0x11,0x45,0xf0,0xff,0x90};
  unsigned char bytes[32];if(!read_memory(0x905ac5ed0ULL,bytes,sizeof(head))||memcmp(bytes,head,sizeof(head))||!read_memory(0x905ac4610ULL,bytes,sizeof(seek_head))||memcmp(bytes,seek_head,sizeof(seek_head)))return 0;

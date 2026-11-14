@@ -52,7 +52,7 @@ static class CareerCodeCheck {
  static string Inspect(){
   var output=new StringBuilder();output.AppendLine("UFC 6 career-code check v1");output.AppendLine("UTC: "+DateTime.UtcNow.ToString("o"));
   output.AppendLine("Read-only: four career function headers, one registration name and loaded overlay module fingerprints. No saves or game assets are read. Nothing is uploaded.");
-  var games=Process.GetProcesses().Where(p=>p.ProcessName.Equals("UFC 6",StringComparison.OrdinalIgnoreCase)||p.ProcessName.Equals("UFC 6 Parsec",StringComparison.OrdinalIgnoreCase)).ToArray();
+  var games=Process.GetProcesses().Where(p=>p.ProcessName.Equals("UFC 6",StringComparison.OrdinalIgnoreCase)||p.ProcessName.Equals("UFC 6 Parsec",StringComparison.OrdinalIgnoreCase)||p.ProcessName.Equals("UFC 6 novo",StringComparison.OrdinalIgnoreCase)).ToArray();
   if(games.Length!=1){output.AppendLine("Expected exactly one running UFC 6 engine; found "+games.Length+". Leave the saved Legacy career open and retry.");foreach(var item in games)item.Dispose();return output.ToString();}
   using(var game=games[0]){
    string path=game.MainModule.FileName,hash=Hash(path);output.AppendLine("Engine: "+Path.GetFileName(path));output.AppendLine("Engine SHA256: "+hash);
