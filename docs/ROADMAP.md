@@ -14,6 +14,8 @@ These are investigation targets, not promises of released behavior.
 
 ## Other candidates
 
+- Validate in-game fight report export on both PORTHEON engines and collect separate KO, decision and draw cases. Bind fighter names only after confirming their native fields; keep ranked submission separate from local capture.
+- Integrate the verified Edit Appearance offline-popup suppression into the installer and **Suppress online notices** switch. UFC 6 01.006 opens `/features/common/cafoffline.pop` after the Create Fighter login failure; a local exact-byte test routed its `evt_caf_offline_accept` event without showing the popup, and Edit Appearance still opened normally on PS5 Pro. The current test patch has a separate restore backup and is not yet managed by overlay installation or the switch. Verify Original/Parsec, setting Off, upgrade, and uninstall restoration before release.
 - Verify the PS5 Pro / DLSS engine's career bindings in a loaded career before advertising career cheats as live-tested on that host. The checked guest-code signatures match; the save schema still needs a real career check.
 - Implement performance options directly in the overlay instead of relying on PORTHEON settings, with live application and restoration where feasible.
 - Follow up on the affected user's career-code/binding report. Running PORTHEON without administrator rights resolved that user's invisible-overlay issue; this is a client workaround, not a universal diagnosis.

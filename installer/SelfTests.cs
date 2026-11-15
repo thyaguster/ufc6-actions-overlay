@@ -9,6 +9,25 @@ namespace UFC6OverlaySetup {
     public static class SelfTests {
         static void Assert(bool condition,string message) { if (!condition) throw new Exception(message); }
         static byte[] Bytes(string text) { return Encoding.UTF8.GetBytes(text); }
+        static void Word(byte[] data,int offset,ushort value){Array.Copy(BitConverter.GetBytes(value),0,data,offset,2);}
+        static void Dword(byte[] data,int offset,uint value){Array.Copy(BitConverter.GetBytes(value),0,data,offset,4);}
+        static void Pattern(byte[] data,int offset,byte[] value){Array.Copy(value,0,data,offset,value.Length);}
+        static byte[] CompatibleEngine(string kind){
+            var data=new byte[0x5000];data[0]=(byte)'M';data[1]=(byte)'Z';Dword(data,0x3c,0x80);Dword(data,0x80,0x4550);
+            Word(data,0x84,0x8664);Word(data,0x86,1);Word(data,0x94,0xf0);Word(data,0x98,0x20b);
+            bool fresh=kind=="new";Dword(data,0x88,fresh?0x6af93830u:0x6adf7fd0u);
+            Dword(data,0x98+56,fresh?0x3c26000u:kind=="parsec"?0x3c05000u:0x3c03000u);
+            Pattern(data,0x188,Bytes(".text"));Dword(data,0x188+8,0x4000);Dword(data,0x188+12,fresh?0x1000u:0x126e000u);
+            Dword(data,0x188+16,0x4000);Dword(data,0x188+20,0x400);Dword(data,0x188+36,0x60000020);
+            if(fresh){Pattern(data,0x1080,new byte[]{0x55,0x41,0x56,0x56,0x57,0x53,0x48,0x83,0xec,0x20,0x48,0x8d,0x6c,0x24,0x20});
+                Pattern(data,0x1400,new byte[]{0x55,0x41,0x57,0x41,0x56,0x56,0x57,0x53,0x48,0x81,0xec,0xc8,0,0,0});
+                Pattern(data,0x1590,new byte[]{0x55,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x56,0x57,0x53,0x48,0x81,0xec,0xc8,0,0,0});}
+            else if(kind=="parsec"){Pattern(data,0x1360,new byte[]{0xe9,0xb0,0x41,0x99,0x02});Pattern(data,0x1440,new byte[]{0xe9,0x56,0x40,0x99,0x02});Pattern(data,0x1670,new byte[]{0xe9,0x17,0x3e,0x99,0x02});}
+            else {Pattern(data,0x1360,new byte[]{0x55,0x56,0x57,0x48,0x83,0xec,0x30,0x48,0x8d,0x6c,0x24,0x30,0x48,0xc7,0x45,0xf8,0xfe,0xff,0xff,0xff});
+                Pattern(data,0x1440,new byte[]{0x55,0x41,0x56,0x56,0x57,0x53,0x48,0x81,0xec,0xd0,0,0,0,0x48,0x8d,0xac,0x24,0x80,0,0,0});
+                Pattern(data,0x1670,new byte[]{0x55,0x41,0x57,0x41,0x56,0x41,0x54,0x56,0x57,0x53,0x48,0x81,0xec,0xd0,0,0,0,0x48,0x8d,0xac,0x24,0x80,0,0,0});}
+            return data;
+        }
         static void Reject(Action action,string message) { bool rejected = false; try { action(); } catch (IOException) { rejected = true; } catch (InvalidDataException) { rejected = true; } Assert(rejected,message); }
         public static void Run(string report) {
             string root = Path.Combine(Path.GetTempPath(),"UFC6 setup tests " + Guid.NewGuid().ToString("N"));
@@ -26,6 +45,15 @@ namespace UFC6OverlaySetup {
                 release.parsec_engine_sha256=Manager.HashFile(parsec);manager=new Manager(release,payload);
                 Assert(manager.Inspect(folder).ParsecStatus.StartsWith("Verified"),"Parsec engine must be recognized in the same folder.");
                 passed.Add("PASS: one shared install recognizes both normal and verified Parsec engines; no separate payload or steps.");
+                foreach(string kind in new[]{"original","parsec","new"}){
+                    string file=Path.Combine(root,"compatible-"+kind+".exe");byte[] compatible=CompatibleEngine(kind);File.WriteAllBytes(file,compatible);
+                    string label=kind=="original"?"UFC 6.exe":kind=="parsec"?"UFC 6 Parsec.exe":"UFC 6 novo.exe";
+                    Assert(EngineCompatibility.Matches(file,label),"Unchanged controller routines must survive a changed file hash: "+kind);
+                    compatible[kind=="new"?0x1590:kind=="parsec"?0x1670:0x1440]=0;
+                    File.WriteAllBytes(file,compatible);
+                    Assert(!EngineCompatibility.Matches(file,label),"Changed controller callback must be rejected: "+kind);
+                }
+                passed.Add("PASS: compatible updated engine hashes are accepted by exact callback signatures; modified callbacks are rejected.");
 
                 string novo=Path.Combine(Directory.GetParent(folder).FullName,"novo");Directory.CreateDirectory(novo);
                 string newExe=Path.Combine(novo,"UFC 6 novo.exe");File.WriteAllBytes(newExe,Bytes("verified PS5 Pro engine"));

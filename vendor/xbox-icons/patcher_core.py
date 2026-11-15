@@ -99,7 +99,7 @@ def game_running():
         entry.size = ctypes.sizeof(entry)
         ok = kernel.Process32FirstW(handle, ctypes.byref(entry))
         while ok:
-            if entry.exe.casefold() in ('ufc 6.exe', 'kyty_emulator.exe', 'ufc 6 parsec.exe'):
+            if entry.exe.casefold() in ('ufc 6.exe', 'kyty_emulator.exe', 'ufc 6 parsec.exe', 'ufc 6 novo.exe'):
                 return True
             ok = kernel.Process32NextW(handle, ctypes.byref(entry))
         return False

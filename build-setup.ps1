@@ -9,7 +9,7 @@ $arguments = @('/nologo','/codepage:65001','/target:winexe','/platform:x64','/op
 foreach ($name in @('libwinpthread-1.dll','winmm.dll','version.dll','ufc6_menu_layer.dll','ufc6_menu_layer.json','ufc6_menu_restart.exe','ufc6_menu_icons.exe','ufc6_menu_update.exe','release.json')) {
     $arguments += "/resource:dist\$name,$name"
 }
-$arguments += @('installer\Setup.cs','installer\SelfTests.cs','installer\AssemblyInfo.cs','installer\UpdateClient.cs','installer\UpdateForm.cs','installer\ModernUi.cs','installer\FolderPicker.cs','installer\Diagnostics.cs','installer\DiagnosticsForm.cs','installer\DiagnosticsTests.cs')
+$arguments += @('installer\Setup.cs','installer\EngineCompatibility.cs','installer\SelfTests.cs','installer\AssemblyInfo.cs','installer\UpdateClient.cs','installer\UpdateForm.cs','installer\ModernUi.cs','installer\FolderPicker.cs','installer\Diagnostics.cs','installer\DiagnosticsForm.cs','installer\DiagnosticsTests.cs')
 & $compiler @arguments
 if ($LASTEXITCODE) { throw 'Setup compilation failed.' }
 if ($Test) {

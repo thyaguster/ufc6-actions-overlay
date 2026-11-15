@@ -1,3 +1,19 @@
+## v0.9.63 — More resilient PORTHEON engine checks
+
+- Recognize compatible engine updates by guarded controller routines instead of requiring an identical executable hash. On PS5 Pro / DLSS, locate the controller callbacks even when an update moves them together.
+- Keep installer and in-game checks aligned. Reject engines whose checked routines change, rather than installing hooks at unverified addresses. A PORTHEON update that removes overlay files still requires reinstalling the overlay.
+- Mark Parsectagon as a **closed beta** in the main menu. Room availability depends on the beta lobby server and access.
+
+## v0.9.62 — PORTHEON engine update compatibility
+
+- Recognize the updated Original, Parsec and PS5 Pro engine executables released on 15 November 2026. The PS5 Pro controller callbacks moved, so the overlay verifies their new exact signatures before installing its input hooks.
+- Update setup's engine fingerprints for all three modes. Existing overlay settings and screenshots remain in place during an update.
+
+## v0.9.61 — Fight report export
+
+- Add **Export fight report** to Parsectagon in the overlay. It captures validated result and overall statistics from a finished fight, then saves a JSON file under Documents for manual attachment to a match on the lobby website. Export never submits a result or changes rank automatically.
+- Reject unfinished or inconsistent game data. Fighter names, additional finish methods, draws and Original/Parsec live behavior still need verification; the game report keeps unverified fields empty.
+
 ## v0.9.48 — Background audio muting on PS5 Pro / DLSS
 
 - Make **Mute when unfocused** available on PORTHEON's PS5 Pro / DLSS engine. It mutes UFC 6's own Windows audio session while the game is minimized or another application has focus, then restores sound on return or when the switch is turned Off.

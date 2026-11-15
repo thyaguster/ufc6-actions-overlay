@@ -25,3 +25,7 @@ The asset-free `patcher_core.py` and version profile under `vendor/xbox-icons` c
 ## Controller prompt artwork
 
 The SVG artwork under `src/assets/controller-prompts` is a selected subset of [Kenney Input Prompts 1.5A](https://kenney.nl/assets/input-prompts), distributed under Creative Commons Zero (CC0). The original license is included in that directory. The exact authored paths are compiled into `src/controller_artwork_data.h` by `src/generate_controller_artwork.py` and drawn as vectors. White face-button artwork is tinted to the overlay's Xbox/PlayStation prompt colors; authored direction highlights are preserved. No game artwork is bundled for these overlay prompts.
+
+## Parsectagon room artwork
+
+The lobby logo, arena backdrop, and six fighter portrait presets under `src/assets` are copied from the companion Parsectagon lobby project. The native overlay embeds reduced versions via `src/generate_lobby_brand.py` and `src/generate_lobby_poster.py`. These are lobby artwork, not UFC 6 game assets.

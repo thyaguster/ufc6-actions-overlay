@@ -12,14 +12,17 @@ enum {
     OPEN_CHORD=PAD_LB|PAD_RB|PAD_MENU,
     SHORTCUT_BUTTONS=0x0000fcfe
 };
-enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT, PAGE_SCREENSHOT, PAGE_RESET, PAGE_CHEATS, PAGE_CAREER_ADD, PAGE_GAME_ICONS, PAGE_GAME_ICONS_CONFIRM, PAGE_BACKUPS, PAGE_KEYBINDS, PAGE_BINDING, PAGE_THEME, PAGE_QUIT, PAGE_SETTINGS_HOME, PAGE_APPEARANCE, PAGE_CONTROLS, PAGE_GAME_SETTINGS, PAGE_TOOLS, PAGE_PHOTO, PAGE_PHOTO_CONTROLS, PAGE_PHOTO_EFFECTS, PAGE_PHOTO_WATERMARK, PAGE_PERFORMANCE, PAGE_PERFORMANCE_RESTART, PAGE_PERFORMANCE_DISCARD, PAGE_STARTUP, PAGE_STARTUP_CONFIRM, PAGE_EXPERIMENTAL, PAGE_WELCOME, PAGE_AVATAR_REPAIR, PAGE_AVATAR_ALWAYS };
-enum { MAIN_RESUME, MAIN_SCREENSHOT, MAIN_RESTART, MAIN_CHEATS, MAIN_PHOTO, MAIN_SETTINGS, MAIN_QUIT, MAIN_REBOOT, MAIN_SHUTDOWN, MAIN_COUNT };
+enum { PAGE_MAIN, PAGE_SETTINGS, PAGE_RESTART, PAGE_SHUTDOWN, PAGE_REBOOT, PAGE_SCREENSHOT, PAGE_RESET, PAGE_CHEATS, PAGE_CAREER_ADD, PAGE_GAME_ICONS, PAGE_GAME_ICONS_CONFIRM, PAGE_BACKUPS, PAGE_KEYBINDS, PAGE_BINDING, PAGE_THEME, PAGE_QUIT, PAGE_SETTINGS_HOME, PAGE_APPEARANCE, PAGE_CONTROLS, PAGE_GAME_SETTINGS, PAGE_TOOLS, PAGE_PHOTO, PAGE_PHOTO_CONTROLS, PAGE_PHOTO_EFFECTS, PAGE_PHOTO_WATERMARK, PAGE_PERFORMANCE, PAGE_PERFORMANCE_RESTART, PAGE_PERFORMANCE_DISCARD, PAGE_STARTUP, PAGE_STARTUP_CONFIRM, PAGE_EXPERIMENTAL, PAGE_WELCOME, PAGE_AVATAR_REPAIR, PAGE_AVATAR_ALWAYS, PAGE_LOBBY };
+enum { MAIN_RESUME, MAIN_SCREENSHOT, MAIN_RESTART, MAIN_CHEATS, MAIN_PHOTO, MAIN_LOBBY, MAIN_SETTINGS, MAIN_QUIT, MAIN_REBOOT, MAIN_SHUTDOWN, MAIN_COUNT };
 enum { SETTING_ICONS, SETTING_SHORTCUT, SETTING_SCALE, SETTING_AUTO_LAUNCH, SETTING_GUIDE, SETTING_GAMEBAR, SETTING_LAUNCHER, SETTING_ACCESS, SETTING_SCREENSHOTS, SETTING_RESET, SETTING_GAME_ICONS, SETTING_UPDATE, SETTING_DIAGNOSTICS, SETTING_KEYBINDS, SETTING_THEME, SETTING_BACK, SETTING_FONT, SETTING_BOX_STYLE, SETTING_WINDOW_SIZE, SETTING_STARTUP_POPUPS, SETTING_SKIP_SPLASHES, SETTING_SUPPRESS_ONLINE_NOTICES, SETTING_SCREENSHOT_UI, SETTING_STARTUP_PATCH, SETTING_AUDIO_FOCUS, SETTING_DECISION_REPLAY, SETTING_EXPERIMENTAL, SETTING_INSTANT_REPLAY, SETTING_AVATAR_REPAIR, SETTING_AVATAR_ALWAYS, SETTING_COUNT };
 enum { MENU_NONE, MENU_OPEN, MENU_RESUME, MENU_QUIT, MENU_CHANGED,
-       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED, MENU_LAUNCHER_SETTINGS, MENU_ACCESS_CHANGED, MENU_OPEN_SCREENSHOTS, MENU_RESET_SETTINGS, MENU_CHEAT_STAMINA, MENU_CHEAT_HEALTH, MENU_CAREER_ADD, MENU_GAME_ICONS_OPEN, MENU_GAME_ICONS_APPLY, MENU_BACKUP_CREATE, MENU_BACKUP_FOLDER, MENU_BACKUP_OPEN, MENU_CHECK_UPDATES, MENU_EXPORT_DIAGNOSTICS, MENU_CAREER_LONGEVITY, MENU_TRAINING_MULTIPLIER, MENU_BIND_KEY_CAPTURE, MENU_BIND_CLEAR_KEY, MENU_BIND_CLEAR_PAD, MENU_BIND_PAD_CHANGED, MENU_THEME_CHANGED, MENU_FONT_CHANGED, MENU_BOX_STYLE_CHANGED, MENU_WINDOW_SIZE_CHANGED, MENU_STARTUP_CHANGED, MENU_ONLINE_NOTICES_CHANGED, MENU_PHOTO_ENTER, MENU_PHOTO_FREEZE, MENU_PHOTO_RESET, MENU_PHOTO_EXIT, MENU_PHOTO_HUD, MENU_PHOTO_CAGE, MENU_PHOTO_HELP, MENU_SCREENSHOT_OVERLAY, MENU_PHOTO_EFFECTS_CHANGED, MENU_SCREENSHOT_UI_CHANGED, MENU_PERFORMANCE_OPEN, MENU_PERFORMANCE_SAVE, MENU_PERFORMANCE_RESTART, MENU_STARTUP_PATCH_OPEN, MENU_STARTUP_PATCH_APPLY, MENU_AUDIO_FOCUS_CHANGED, MENU_NEXT_HIT_KO, MENU_DECISION_REPLAY_CHANGED, MENU_INSTANT_REPLAY_CHANGED, MENU_WELCOME_DONE, MENU_AVATAR_REPAIR_START, MENU_AVATAR_REPAIR_FINISH, MENU_AVATAR_ALWAYS_CHANGED };
+       MENU_STYLE_CHANGED, MENU_SHORTCUT_CHANGED, MENU_SCREENSHOT, MENU_RESTART, MENU_SHUTDOWN, MENU_SCALE_CHANGED, MENU_REBOOT, MENU_AUTO_LAUNCH_CHANGED, MENU_GUIDE_CHANGED, MENU_GAMEBAR_CHANGED, MENU_LAUNCHER_SETTINGS, MENU_ACCESS_CHANGED, MENU_OPEN_SCREENSHOTS, MENU_RESET_SETTINGS, MENU_CHEAT_STAMINA, MENU_CHEAT_HEALTH, MENU_CAREER_ADD, MENU_GAME_ICONS_OPEN, MENU_GAME_ICONS_APPLY, MENU_BACKUP_CREATE, MENU_BACKUP_FOLDER, MENU_BACKUP_OPEN, MENU_CHECK_UPDATES, MENU_EXPORT_DIAGNOSTICS, MENU_CAREER_LONGEVITY, MENU_TRAINING_MULTIPLIER, MENU_BIND_KEY_CAPTURE, MENU_BIND_CLEAR_KEY, MENU_BIND_CLEAR_PAD, MENU_BIND_PAD_CHANGED, MENU_THEME_CHANGED, MENU_FONT_CHANGED, MENU_BOX_STYLE_CHANGED, MENU_WINDOW_SIZE_CHANGED, MENU_STARTUP_CHANGED, MENU_ONLINE_NOTICES_CHANGED, MENU_PHOTO_ENTER, MENU_PHOTO_FREEZE, MENU_PHOTO_RESET, MENU_PHOTO_EXIT, MENU_PHOTO_HUD, MENU_PHOTO_CAGE, MENU_PHOTO_HELP, MENU_SCREENSHOT_OVERLAY, MENU_PHOTO_EFFECTS_CHANGED, MENU_SCREENSHOT_UI_CHANGED, MENU_PERFORMANCE_OPEN, MENU_PERFORMANCE_SAVE, MENU_PERFORMANCE_RESTART, MENU_STARTUP_PATCH_OPEN, MENU_STARTUP_PATCH_APPLY, MENU_AUDIO_FOCUS_CHANGED, MENU_NEXT_HIT_KO, MENU_DECISION_REPLAY_CHANGED, MENU_INSTANT_REPLAY_CHANGED, MENU_WELCOME_DONE, MENU_AVATAR_REPAIR_START, MENU_AVATAR_REPAIR_FINISH, MENU_AVATAR_ALWAYS_CHANGED, MENU_LOBBY_OPEN_ROOM, MENU_LOBBY_REFRESH };
+
+enum { MENU_LOBBY_FILTER_CHANGED=MENU_LOBBY_REFRESH+1, MENU_FIGHT_EXPORT };
 
 typedef struct {
     int visible,selection,armed,chord_latched,draining;
+    int lobby_room_count,lobby_region,lobby_rank,lobby_mode;
     int playstation_icons,page;
     int startup_popups,skip_splashes,suppress_online_notices,mute_background,decision_replays,instant_replay,avatar_mode;
     PerformanceSettings performance,performance_original;
@@ -85,11 +88,27 @@ static void menu_return_setting(MenuState *s,int id){
     for(int p=0;p<4;++p)for(int i=0;i<counts[p];++i)if(menu_setting_id(pages[p],i)==id){s->page=pages[p];s->selection=i;return;}
     s->page=PAGE_SETTINGS_HOME;s->selection=0;
 }
-static int menu_scroll_page(int page){return page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_CHEATS||page==PAGE_KEYBINDS||page==PAGE_THEME||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE;}
-static int menu_rows(const MenuState *s) {return s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?6:s->page==PAGE_APPEARANCE?7:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?10:s->page==PAGE_TOOLS?6:s->page==PAGE_EXPERIMENTAL?5:s->page==PAGE_KEYBINDS?11:s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?3:s->shutdown_countdown?1:2;}
-static int menu_visible_rows(const MenuState *s){int capacity=s->window_size==2?12:s->window_size==1?9:6,count=menu_rows(s);return count<capacity?count:capacity;}
-static uint32_t menu_canvas_height(const MenuState *s){int rows=menu_visible_rows(s);return MENU_BASE_HEIGHT+(s->page==PAGE_WELCOME?150:s->page==PAGE_MAIN?27:0)+(menu_scroll_page(s->page)&&rows>6?(uint32_t)(rows-6)*32:0);}
-static int menu_first_row(const MenuState *s){int visible=menu_visible_rows(s);return menu_scroll_page(s->page)&&s->selection>=visible?s->selection-visible+1:0;}
+static int menu_scroll_page(int page){return page==PAGE_LOBBY||page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_CHEATS||page==PAGE_KEYBINDS||page==PAGE_THEME||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE;}
+static int menu_rows(const MenuState *s) {return s->page==PAGE_LOBBY?7+s->lobby_room_count:s->page==PAGE_WELCOME?1:s->page==PAGE_STARTUP?3:s->page==PAGE_STARTUP_CONFIRM||s->page==PAGE_AVATAR_REPAIR||s->page==PAGE_AVATAR_ALWAYS?2:s->page==PAGE_PERFORMANCE?PERF_ROWS:s->page==PAGE_PERFORMANCE_RESTART||s->page==PAGE_PERFORMANCE_DISCARD?2:s->page==PAGE_PHOTO_EFFECTS?FX_ROWS:s->page==PAGE_PHOTO_WATERMARK?MARK_ROWS:s->page==PAGE_PHOTO?12:s->page==PAGE_PHOTO_CONTROLS?12:s->page==PAGE_SETTINGS_HOME?6:s->page==PAGE_APPEARANCE?7:s->page==PAGE_CONTROLS?5:s->page==PAGE_GAME_SETTINGS?10:s->page==PAGE_TOOLS?6:s->page==PAGE_EXPERIMENTAL?5:s->page==PAGE_KEYBINDS?11:s->page==PAGE_BINDING?5:s->page==PAGE_THEME?7:s->page==PAGE_MAIN?MAIN_COUNT:s->page==PAGE_SETTINGS?SETTING_COUNT:s->page==PAGE_CHEATS?12:s->page==PAGE_BACKUPS?3:s->page==PAGE_GAME_ICONS?3:s->shutdown_countdown?1:2;}
+static int lobby_visible_rooms(const MenuState *s){return s->lobby_room_count<4?s->lobby_room_count:4;}
+static int lobby_cards_bottom(const MenuState *s){int rooms=lobby_visible_rooms(s);if(!rooms)return 488;return 328+((rooms+1)/2-1)*226+214;}
+static int menu_visible_rows(const MenuState *s){int capacity=s->page==PAGE_LOBBY?7+lobby_visible_rooms(s):s->window_size==2?12:s->window_size==1?9:6,count=menu_rows(s);return count<capacity?count:capacity;}
+static inline uint32_t menu_canvas_width(const MenuState *s){return s->page==PAGE_LOBBY?840u:MENU_BASE_WIDTH;}
+static uint32_t menu_canvas_height(const MenuState *s){
+    int rows=menu_visible_rows(s);
+    if(s->page==PAGE_LOBBY){uint32_t height=(uint32_t)lobby_cards_bottom(s)+150u;return height<555u?555u:height;}
+    return MENU_BASE_HEIGHT+(s->page==PAGE_WELCOME?150:s->page==PAGE_MAIN?54:0)+(menu_scroll_page(s->page)&&rows>6?(uint32_t)(rows-6)*32:0);
+}
+static int menu_first_row(const MenuState *s){
+    if(s->page==PAGE_LOBBY){
+        if(s->selection<4||s->selection>=4+s->lobby_room_count)return 4;
+        int first=4+((s->selection-4)/4)*4;
+        int remaining=4+s->lobby_room_count-first;
+        if(remaining==2&&first>=6)first-=2;
+        return first;
+    }
+    int visible=menu_visible_rows(s);return menu_scroll_page(s->page)&&s->selection>=visible?s->selection-visible+1:0;
+}
 static void menu_cancel_shutdown(MenuState *s) {
     s->shutdown_holding=0;s->shutdown_countdown=0;s->shutdown_progress=0;
     s->shutdown_hold_since=0;s->shutdown_countdown_since=0;s->shutdown_seconds=0;
@@ -184,6 +203,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         if(s->page==PAGE_GAME_ICONS){menu_return_setting(s,SETTING_GAME_ICONS);return MENU_CHANGED;}
         if(s->page==PAGE_CAREER_ADD){s->page=PAGE_CHEATS;s->selection=menu_career_row(s->career_kind);s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_CHEATS){s->page=PAGE_MAIN;s->selection=MAIN_CHEATS;s->armed=0;return MENU_CHANGED;}
+        if(s->page==PAGE_LOBBY){s->page=PAGE_MAIN;s->selection=MAIN_LOBBY;s->armed=0;return MENU_CHANGED;}
         if(s->page==PAGE_RESET){menu_return_setting(s,SETTING_RESET);return MENU_CHANGED;}
         if(s->page==PAGE_SCREENSHOT){s->page=PAGE_MAIN;s->selection=MAIN_SCREENSHOT;s->armed=0;return MENU_CHANGED;}
         if(menu_power_page(s)){menu_cancel_shutdown(s);s->selection=menu_power_selection(s);s->page=PAGE_MAIN;s->armed=0;return MENU_CHANGED;}
@@ -191,6 +211,47 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         return menu_close(s,MENU_RESUME);
     }
     if(s->page==PAGE_WELCOME&&button==PAD_A){s->page=PAGE_MAIN;s->selection=MAIN_RESUME;s->armed=0;return MENU_WELCOME_DONE;}
+    if(s->page==PAGE_LOBBY){
+        int rooms=s->lobby_room_count,first=4,last=first+rooms-1,refresh=first+rooms,export=refresh+1,back=refresh+2;
+        if(button==PAD_A){
+            if(s->selection==0||(s->selection>=first&&s->selection<=last))return MENU_LOBBY_OPEN_ROOM;
+            if(s->selection>=1&&s->selection<=3){
+                int *value=s->selection==1?&s->lobby_region:s->selection==2?&s->lobby_rank:&s->lobby_mode;
+                int size=s->selection==1?4:s->selection==2?8:3;*value=(*value+1)%size;return MENU_LOBBY_FILTER_CHANGED;
+            }
+            if(s->selection==refresh)return MENU_LOBBY_REFRESH;
+            if(s->selection==export)return MENU_FIGHT_EXPORT;
+            s->page=PAGE_MAIN;s->selection=MAIN_LOBBY;s->armed=0;return MENU_CHANGED;
+        }
+        if(button==PAD_LEFT||button==PAD_RIGHT){
+            if(s->selection>=1&&s->selection<=3){
+                int *value=s->selection==1?&s->lobby_region:s->selection==2?&s->lobby_rank:&s->lobby_mode;
+                int size=s->selection==1?4:s->selection==2?8:3;*value=(*value+(button==PAD_LEFT?size-1:1))%size;return MENU_LOBBY_FILTER_CHANGED;
+            }
+            if(s->selection>=first&&s->selection<=last){int next=s->selection+(button==PAD_LEFT?-1:1);
+                if(next>=first&&next<=last&&(next-first)/2==(s->selection-first)/2){s->selection=next;return MENU_CHANGED;}}
+            else if(s->selection>=refresh&&s->selection<=back){int next=s->selection+(button==PAD_LEFT?-1:1);
+                if(next>=refresh&&next<=back){s->selection=next;return MENU_CHANGED;}}
+            return MENU_NONE;
+        }
+        if(button==PAD_DOWN){
+            if(s->selection==0)s->selection=1;
+            else if(s->selection<3)s->selection++;
+            else if(s->selection==3)s->selection=rooms?first:refresh;
+            else if(s->selection<=last)s->selection=s->selection+2<=last?s->selection+2:((s->selection-first)&1)?export:refresh;
+            else s->selection=s->selection==back?0:s->selection+1;
+            return MENU_CHANGED;
+        }
+        if(button==PAD_UP){
+            if(s->selection==0)s->selection=back;
+            else if(s->selection<=3)s->selection--;
+            else if(s->selection<=last)s->selection=s->selection>=first+2?s->selection-2:3;
+            else if(s->selection==back)s->selection=export;
+            else if(rooms)s->selection=s->selection==export?last:(rooms%2?last:last-1);
+            else s->selection=3;
+            return MENU_CHANGED;
+        }
+    }
     if(button==PAD_UP||button==PAD_DOWN) {
         if(menu_power_page(s))menu_cancel_shutdown(s);
         int count=menu_rows(s);s->selection=(s->selection+(button==PAD_UP?count-1:1))%count;
@@ -402,6 +463,7 @@ static int menu_button(MenuState *s,uint32_t button,int down) {
         case MAIN_RESTART:s->page=PAGE_RESTART;s->selection=0;s->armed=0;return MENU_CHANGED;
         case MAIN_PHOTO:s->page=PAGE_PHOTO;s->selection=0;s->armed=0;return MENU_CHANGED;
         case MAIN_CHEATS:s->page=PAGE_CHEATS;s->selection=0;s->armed=0;return MENU_CHANGED;
+        case MAIN_LOBBY:s->page=PAGE_LOBBY;s->selection=0;s->armed=0;return MENU_CHANGED;
         case MAIN_SETTINGS:s->page=s->settings_legacy?PAGE_SETTINGS:PAGE_SETTINGS_HOME;s->selection=SETTING_ICONS;s->armed=0;return MENU_CHANGED;
         case MAIN_REBOOT:case MAIN_SHUTDOWN:menu_cancel_shutdown(s);s->page=s->selection==MAIN_REBOOT?PAGE_REBOOT:PAGE_SHUTDOWN;s->selection=0;s->armed=0;return MENU_CHANGED;
         case MAIN_QUIT:return menu_close(s,MENU_QUIT);

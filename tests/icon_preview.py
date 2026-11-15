@@ -4,6 +4,9 @@ import ctypes as c
 from ctypes import wintypes as w
 from pathlib import Path
 import time
+import json
+from http.server import BaseHTTPRequestHandler,HTTPServer
+from threading import Thread
 
 parser=argparse.ArgumentParser()
 parser.add_argument("folder",type=Path)
@@ -46,10 +49,38 @@ parser.add_argument("--startup-reload",action="store_true")
 parser.add_argument("--avatar",action="store_true")
 parser.add_argument("--welcome",action="store_true")
 parser.add_argument("--welcome-current",action="store_true")
+parser.add_argument("--lobby-unavailable",action="store_true")
+parser.add_argument("--lobby-live",action="store_true")
+parser.add_argument("--lobby-one-room",action="store_true")
+parser.add_argument("--lobby-empty",action="store_true")
+parser.add_argument("--lobby-playstation",action="store_true")
+parser.add_argument("--lobby-staged",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
+lobby_server=None
+if args.lobby_live or args.lobby_one_room or args.lobby_empty or args.lobby_staged:
+    class LobbyHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            if self.path!="/api/bridge/snapshot":self.send_error(404);return
+            self.rfile.read(int(self.headers.get("Content-Length","0")))
+            ranks=[("bronze",900),("silver",1200),("gold",1300),("platinum",1450),("diamond",1600),("champion",1800),("provisional",1000),("gold",1350)]
+            avatars=["striker","grappler","southpaw","champion","counter","rookie"]
+            rooms=[{"id":f"room-{i}","title":"Europe Ranked" if i==1 else f"Fight Room {i}","notes":"Five rounds · any division","host":"Alex" if i==1 else f"Player {i}","hostAvatar":avatars[(i-1)%6],"hostRank":ranks[i-1][0],"hostQualified":i!=7,"hostRating":ranks[i-1][1],"hostWins":i+2,"hostLosses":2,"hostDraws":i%3,"hostActive":True,"players":1,"region":"Europe" if i<4 else "North America","mode":"casual" if i==8 else "ranked","guestFighter":None} for i in range(1,9)]
+            if args.lobby_one_room:rooms=rooms[:1];rooms[0].pop("hostDraws")
+            if args.lobby_empty:rooms=[]
+            if args.lobby_staged:
+                rooms=[{"id":f"preview-{i}","title":f"Staged Fight {i}","notes":"Five rounds · any division","host":f"SampleHost{i}","hostAvatar":avatars[i-1],"hostRank":ranks[i-1][0],"hostQualified":True,"hostRating":ranks[i-1][1],"hostWins":i+2,"hostLosses":2,"hostDraws":i%3,"hostActive":True,"players":2 if i>4 else 1,"guestFighter":{"name":f"Challenger{i}","avatar":avatars[(i+1)%6],"rating":1100+i*100,"qualified":True,"wins":i,"losses":1} if i>4 else None,"region":"Europe" if i<4 else "North America","mode":"casual" if i==3 else "ranked","preview":True} for i in range(1,7)]
+            rooms.extend([{"id":"demo-1","demo":True},{"id":"full-1","hostActive":True,"players":2}])
+            body=json.dumps({"version":1,"presence":{"online":2 if args.lobby_one_room or args.lobby_empty or args.lobby_staged else 12,"looking":0 if args.lobby_one_room or args.lobby_empty or args.lobby_staged else 3,"openRooms":0 if args.lobby_empty or args.lobby_staged else 1 if args.lobby_one_room else 8},"rooms":rooms},separators=(",",":")).encode()
+            self.send_response(200);self.send_header("Content-Type","application/json");self.send_header("Content-Length",str(len(body)));self.end_headers();self.wfile.write(body)
+        def log_message(self,*_):pass
+    lobby_server=HTTPServer(("127.0.0.1",0),LobbyHandler)
+    Thread(target=lobby_server.serve_forever,daemon=True).start()
+    (folder/"ufc6-quit-menu.test.ini").write_text(f"[Menu]\nLobbyServerURL=http://127.0.0.1:{lobby_server.server_port}\nButtonIcons={'PlayStation' if args.lobby_playstation else 'Xbox'}\n")
 if args.reset:
     (folder/"ufc6-quit-menu.test.ini").write_text("[Menu]\nButtonIcons=Xbox\nOpeningShortcut=0xc08\nUIScale=100\n")
+if args.lobby_unavailable:
+    (folder/"ufc6-quit-menu.test.ini").write_text("[Menu]\nLobbyServerURL=http://127.0.0.1:1\n")
 u=c.WinDLL("user32",use_last_error=True)
 k=c.WinDLL("kernel32",use_last_error=True)
 u.CreateWindowExW.argtypes=[w.DWORD,w.LPCWSTR,w.LPCWSTR,w.DWORD,c.c_int,c.c_int,c.c_int,c.c_int,w.HWND,w.HMENU,w.HINSTANCE,c.c_void_p]
@@ -86,12 +117,12 @@ dll.Ufc6RenderMenu.argtypes=[c.c_void_p,w.DWORD];dll.Ufc6RenderMenu.restype=w.BO
 
 
 def press(button):
-    if not (args.decision_replays or args.decision_replays_reload or args.startup or args.startup_reload or args.avatar or args.appearance or args.appearance_reload or args.window or args.window_reload) and button==0x4000 and ((dll.MenuTestSnapshot()>>12)&31)==0 and (dll.MenuTestSnapshot()&15)==5:
+    if not (args.decision_replays or args.decision_replays_reload or args.startup or args.startup_reload or args.avatar or args.appearance or args.appearance_reload or args.window or args.window_reload) and button==0x4000 and ((dll.MenuTestSnapshot()>>12)&31)==0 and (dll.MenuTestSnapshot()&15)==6:
         dll.MenuTestLegacySettings();pump(.08);return
     dll.MenuTestButton(button,1);dll.MenuTestButton(button,0);pump(.06)
-    # These existing scenarios target pre-Photo actions; navigate past its new row.
-    if button in (0x10,0x40) and ((dll.MenuTestSnapshot()>>12)&31)==0 and dll.MenuTestSnapshot()&15==4:
-        dll.MenuTestButton(button,1);dll.MenuTestButton(button,0);pump(.06)
+    # Older scenarios navigate directly between Cheats and Settings.
+    if ((button==0x40 and (dll.MenuTestSnapshot()&15)==4) or (button==0x10 and (dll.MenuTestSnapshot()&15)==5)) and ((dll.MenuTestSnapshot()>>12)&31)==0:
+        for _ in range(2):dll.MenuTestButton(button,1);dll.MenuTestButton(button,0);pump(.06)
 
 
 def render(name,viewport=(2560,1440)):
@@ -111,7 +142,7 @@ try:
     dll.MenuTestStart(window);pump(.4)
     dll.MenuTestSettingsMode(0 if (args.decision_replays or args.decision_replays_reload or args.startup or args.startup_reload or args.avatar or args.appearance or args.appearance_reload or args.window or args.window_reload) else 1)
     dll.Ufc6VulkanActive() # Match production before opening; no desktop-fit/render extent race.
-    assert (dll.MenuTestSnapshot()>>4)&1 == (1 if args.appearance_reload else int(args.reload)),"Stored profile was not loaded"
+    assert (dll.MenuTestSnapshot()>>4)&1 == (1 if args.appearance_reload or args.lobby_playstation else int(args.reload)),"Stored profile was not loaded"
     assert dll.MenuTestScale()==(175 if args.reload and args.scale else 100)
     if args.reload:
         assert dll.MenuTestShortcut()==6,"Recorded shortcut was not persisted"
@@ -120,6 +151,118 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     assert dll.MenuTestSnapshot()&0x100
+    if args.lobby_live or args.lobby_one_room or args.lobby_empty or args.lobby_staged:
+        dll.MenuTestPage.restype=c.c_int;dll.MenuTestLobbyStatus.restype=c.c_int;dll.MenuTestLobbyCount.restype=c.c_int
+        dll.MenuTestLobbyAge.argtypes=[c.c_uint,c.c_int,w.LPWSTR,c.c_int]
+        age=c.create_unicode_buffer(64);dll.MenuTestLobbyAge(3,1,age,64);assert age.value=="Rooms updated 3s ago",age.value
+        dll.MenuTestLobbyAge(67,0,age,64);assert age.value=="Last checked 1m ago",age.value
+        dll.MenuTestLobbyOpenURL.argtypes=[w.LPWSTR,c.c_int]
+        for _ in range(5):dll.MenuTestButton(0x40,1);dll.MenuTestButton(0x40,0);pump(.06)
+        dll.MenuTestButton(0x4000,1);dll.MenuTestButton(0x4000,0);pump(.08)
+        for _ in range(60):
+            if dll.MenuTestLobbyStatus()==1:break
+            pump(.1)
+        assert dll.MenuTestPage()==34 and dll.MenuTestLobbyStatus()==1 and dll.MenuTestLobbyCount()==(0 if args.lobby_empty else 1 if args.lobby_one_room else 6 if args.lobby_staged else 8),(dll.MenuTestPage(),dll.MenuTestLobbyStatus(),dll.MenuTestLobbyCount())
+        if args.lobby_staged:
+            render("parsectagon-staged-rooms.png")
+            dll.MenuTestLobbyClick.argtypes=[c.c_int,c.c_int];dll.MenuTestLobbyClick.restype=c.c_int
+            assert dll.MenuTestLobbyClick(100,355),"Staged card details must be selectable"
+            pump(.15)
+            target=c.create_unicode_buffer(400);dll.MenuTestLobbyOpenURL(target,400)
+            assert target.value==f"http://127.0.0.1:{lobby_server.server_port}/?room=preview-1",target.value
+            for _ in range(2):dll.MenuTestButton(0x40,1);dll.MenuTestButton(0x40,0);pump(.08)
+            render("parsectagon-full-preview-rooms.png")
+            assert dll.MenuTestLobbyClick(100,580),"Scrolled full preview card must be selectable"
+            pump(.15)
+            dll.MenuTestLobbyOpenURL(target,400)
+            assert target.value==f"http://127.0.0.1:{lobby_server.server_port}/?room=preview-5",target.value
+            print("PASS: staged and full preview rooms render with preview labels and open browser details only.")
+            raise SystemExit(0)
+        if args.lobby_empty:
+            render("fight-lobby-empty.png")
+            dll.MenuTestLobbyClick.argtypes=[c.c_int,c.c_int];dll.MenuTestLobbyClick.restype=c.c_int
+            assert not dll.MenuTestLobbyClick(100,380),"Empty-state panel must not act like a room"
+            assert dll.MenuTestLobbyClick(100,525),"Refresh must work without rooms"
+            print("PASS: empty lobby renders without clipping and refresh remains available.")
+            raise SystemExit(0)
+        if args.lobby_one_room:
+            render("fight-lobby-one-room.png")
+            dll.MenuTestLobbyClick.argtypes=[c.c_int,c.c_int];dll.MenuTestLobbyClick.restype=c.c_int
+            dll.MenuTestLobbyHover.argtypes=[c.c_int,c.c_int];dll.MenuTestLobbyHover.restype=c.c_int
+            assert not dll.MenuTestLobbyClick(450,355),"Information panel must not be clickable"
+            assert dll.MenuTestLobbyHover(100,355)==4,"Hover should select the room card"
+            render("fight-lobby-one-room-hover.png")
+            assert dll.MenuTestLobbyClick(100,355),"Room card must be clickable"
+            target=c.create_unicode_buffer(400);dll.MenuTestLobbyOpenURL(target,400)
+            assert target.value==f"http://127.0.0.1:{lobby_server.server_port}/?room=room-1",target.value
+            print("PASS: one-room lobby uses a card and information panel; room opens the correct browser URL.")
+            raise SystemExit(0)
+        lobby_image="fight-lobby-playstation.png" if args.lobby_playstation else "fight-lobby-live.png"
+        render(lobby_image)
+        from PIL import Image
+        branded=Image.open(folder/lobby_image).convert("RGB")
+        red=branded.getpixel((340,30))
+        assert red[0]>180 and 45<=red[1]<120 and 45<=red[2]<120,"Parsectagon UFC 6 brand crest must render"
+        if args.lobby_playstation:
+            from PIL import ImageChops
+            xbox=Image.open(folder/"fight-lobby-live.png").convert("RGBA")
+            ps=Image.open(folder/"fight-lobby-playstation.png").convert("RGBA")
+            footer=(30,xbox.height-87,540,xbox.height-36)
+            assert ImageChops.difference(xbox.crop(footer).convert("RGB"),ps.crop(footer).convert("RGB")).getbbox(),"Controller prompt artwork must change with icon style"
+        render("fight-lobby-small-viewport.png",(640,360))
+        dll.MenuTestLobbyClick.argtypes=[c.c_int,c.c_int];dll.MenuTestLobbyClick.restype=c.c_int
+        assert not dll.MenuTestLobbyClick(5,300),"Click outside a room must do nothing"
+        assert dll.MenuTestLobbyClick(100,355),"First room card should open from a click"
+        target=c.create_unicode_buffer(400);dll.MenuTestLobbyOpenURL(target,400)
+        assert target.value==f"http://127.0.0.1:{lobby_server.server_port}/?room=room-1",target.value
+        pump(.15);assert dll.MenuTestLobbyClick(680,45),"Browser action should remain clickable"
+        dll.MenuTestStatus.argtypes=[w.LPCWSTR];dll.MenuTestStatus("Fight lobby refreshed.")
+        render("fight-lobby-refreshed.png")
+        for _ in range(10):dll.MenuTestButton(0x40,1);dll.MenuTestButton(0x40,0);pump(.06)
+        assert dll.MenuTestPage()==34
+        render("fight-lobby-scrolled.png")
+        pump(.15);assert dll.MenuTestLobbyClick(100,355),"Grid card should remain clickable after controller navigation"
+        pump(.15)
+        dll.MenuTestButton(0x4000,1);dll.MenuTestButton(0x4000,0);pump(.08)
+        target=c.create_unicode_buffer(400);dll.MenuTestLobbyOpenURL(target,400)
+        assert target.value==f"http://127.0.0.1:{lobby_server.server_port}/?room=room-1",target.value
+        assert dll.MenuTestPage()==34,"Browser handoff must not close the overlay or change the game page"
+        assert dll.MenuTestLobbyClick(100,273),"Region filter is clickable"
+        assert dll.MenuTestLobbyCount()==3,"Europe filter should show three rooms"
+        assert dll.MenuTestLobbyClick(340,273),"Host-rank filter is clickable"
+        assert dll.MenuTestLobbyCount()==0,"Provisional filter should have no Europe rooms"
+        render("fight-lobby-no-matches.png")
+        assert dll.MenuTestLobbyClick(340,273),"Host-rank filter should advance to Bronze"
+        assert dll.MenuTestLobbyCount()==1,f"Bronze filter should show one Europe room, got {dll.MenuTestLobbyCount()}"
+        render("fight-lobby-filtered.png")
+        assert dll.MenuTestLobbyClick(100,355),"Filtered room card should open"
+        dll.MenuTestLobbyOpenURL(target,400)
+        assert target.value==f"http://127.0.0.1:{lobby_server.server_port}/?room=room-1",target.value
+        print("PASS: live room/count/rank snapshot and exact selected browser URL; no external browser opened.")
+        raise SystemExit(0)
+    if args.lobby_unavailable:
+        dll.MenuTestSettingsMode(0)
+        dll.MenuTestPage.restype=c.c_int;dll.MenuTestLobbyStatus.restype=c.c_int
+        for _ in range(5):
+            dll.MenuTestButton(0x40,1);dll.MenuTestButton(0x40,0);pump(.06)
+        assert dll.MenuTestSnapshot()&15==5
+        dll.MenuTestButton(0x4000,1);dll.MenuTestButton(0x4000,0);pump(.08)
+        assert dll.MenuTestPage()==34
+        for _ in range(60):
+            if dll.MenuTestLobbyStatus()==-1:break
+            pump(.1)
+        assert dll.MenuTestLobbyStatus()==-1,"Unreachable lobby must display a connection error"
+        render("fight-lobby-unavailable.png")
+        dll.MenuTestButton(0x2000,1);dll.MenuTestButton(0x2000,0);pump(.08)
+        assert dll.MenuTestPage()==0 and dll.MenuTestSnapshot()&0x100
+        dll.MenuTestButton(0x4000,1);dll.MenuTestButton(0x4000,0);pump(.08)
+        assert dll.MenuTestPage()==34,"Lobby must reopen after a failed poll"
+        dll.MenuTestButton(0x2000,1);dll.MenuTestButton(0x2000,0);pump(.08)
+        dll.MenuTestButton(0x40,1);dll.MenuTestButton(0x40,0);pump(.06)
+        dll.MenuTestButton(0x4000,1);dll.MenuTestButton(0x4000,0);pump(.08)
+        assert dll.MenuTestPage()==16,"Other overlay pages must remain usable when lobby is offline"
+        print("PASS: offline lobby error, Back/reopen and Settings navigation remain usable.")
+        raise SystemExit(0)
     if args.welcome or args.welcome_current:
         dll.MenuTestWelcome.argtypes=[c.c_int]
         dll.MenuTestWelcome(int(args.welcome));pump(.1);render("welcome-old-version.png" if args.welcome else "welcome-current.png")
@@ -258,7 +401,7 @@ try:
 
         # Visit every settings category and return without losing the group.
         for category,expected in [(2,19),(3,20)]:
-            while dll.MenuTestSnapshot()&15!=5:press(0x40)
+            while dll.MenuTestSnapshot()&15!=6:press(0x40)
             press(0x4000)
             for _ in range(category):press(0x40)
             press(0x4000);assert page()==expected
@@ -268,7 +411,7 @@ try:
         dll.MenuTestToggle();pump(.12);assert not dll.MenuTestSnapshot()&0x100
         render("notification-screenshot.png")
         x,y=w.DWORD(),w.DWORD();dll.Ufc6OverlayPosition.argtypes=[w.DWORD,w.DWORD,c.POINTER(w.DWORD),c.POINTER(w.DWORD)]
-        dll.Ufc6OverlayPosition(2560,1440,c.byref(x),c.byref(y));assert x.value==2116 and y.value==24
+        dll.Ufc6OverlayPosition(2560,1440,c.byref(x),c.byref(y));assert x.value==2116 and y.value==24,(x.value,y.value)
         pump(3.1);assert not dll.Ufc6RenderMenu(None,0),"Notification must expire without opening or capturing the menu"
         print("PASS: grouped Settings routes/back, consistent large font text bounds, all box styles, PlayStation shortcut glyphs, persisted appearance and focus-free expiring corner notification.")
         raise SystemExit(0)
@@ -507,8 +650,8 @@ try:
         dll.MenuTestButtonDevice.argtypes=[c.c_int,w.DWORD,c.c_int]
         def native(button,pad=42):
             dll.MenuTestButtonDevice(pad,button,1);dll.MenuTestButtonDevice(pad,button,0);pump(.06)
-            if button in (0x10,0x40) and ((dll.MenuTestSnapshot()>>12)&31)==0 and dll.MenuTestSnapshot()&15==4:
-                dll.MenuTestButtonDevice(pad,button,1);dll.MenuTestButtonDevice(pad,button,0);pump(.06)
+            if ((button==0x40 and (dll.MenuTestSnapshot()&15)==4) or (button==0x10 and (dll.MenuTestSnapshot()&15)==5)) and ((dll.MenuTestSnapshot()>>12)&31)==0:
+                for _ in range(2):dll.MenuTestButtonDevice(pad,button,1);dll.MenuTestButtonDevice(pad,button,0);pump(.06)
         dll.MenuTestButtonDevice(7,0x20,0);pump(.04) # Player 2 is observed before Player 1.
         if args.reload_access:
             assert dll.MenuTestAccess()==1
@@ -553,8 +696,8 @@ try:
         def raw(slot,buttons,connected=1):dll.MenuTestRawPad(slot,buttons,connected);pump(.05)
         def rpress(slot,buttons):
             raw(slot,buttons);raw(slot,0)
-            if buttons in (1,2) and ((dll.MenuTestSnapshot()>>12)&31)==0 and dll.MenuTestSnapshot()&15==4:
-                raw(slot,buttons);raw(slot,0)
+            if ((buttons==2 and (dll.MenuTestSnapshot()&15)==4) or (buttons==1 and (dll.MenuTestSnapshot()&15)==5)) and ((dll.MenuTestSnapshot()>>12)&31)==0:
+                for _ in range(2):raw(slot,buttons);raw(slot,0)
         press(0x2000);raw(0,0);raw(1,0x400);raw(1,0)
         rpress(1,2);assert dll.MenuTestPlayer()==2
         rpress(0,2);assert dll.MenuTestSnapshot()&0xf==1
@@ -661,7 +804,7 @@ try:
         dll.MenuTestDisconnect(1);pump(.08)
         assert not dll.MenuTestSnapshot()&0x100,"Disconnecting the owner must close the menu"
         dll.MenuTestGuide(1);pump(.06);dll.MenuTestGuide(0);pump(.06)
-        for _ in range(5):
+        for _ in range(6):
             dll.MenuTestButtonDevice(1,0x40,1);dll.MenuTestButtonDevice(1,0x40,0);pump(.05)
         dll.MenuTestButtonDevice(1,0x4000,1);dll.MenuTestButtonDevice(1,0x4000,0);pump(.07)
         assert (dll.MenuTestSnapshot()>>12)&31==1
@@ -844,3 +987,4 @@ try:
     print("PASS: Back resumes from the setting without exiting the host.")
 finally:
     u.DestroyWindow(window);pump(.1)
+    if lobby_server:lobby_server.shutdown();lobby_server.server_close()

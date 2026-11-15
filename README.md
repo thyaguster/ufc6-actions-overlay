@@ -29,17 +29,71 @@
 
 **One `bin` install covers both the original and Parsec/two-player mode. PS5 Pro / DLSS uses a separate `novo` install.** The Xbox game button-icons mod is included; no separate Python or button-mod installation is required.
 
+Compatible PORTHEON engine updates can keep the overlay working without a new release: the installer and overlay verify the routines they hook, and the PS5 Pro build locates those routines if an update moves them. If PORTHEON replaces the overlay files, run **Install / Update** again. If an update changes the checked routines, the installer will reject that engine until the overlay is updated.
+
 **PORTHEON 6.2:** v0.9.8 recognizes and upgrades its bundled older overlay. Close the game and launcher and use **Install / Update**; do not manually delete DLLs. The standalone overlay works with the launcher's bundled-menu switch On or Off, including supported Parsec mode. Keep `ufc6_pthread_original.dll`: it is your original threading runtime, required by the startup bridge.
 
 ![Actions overlay over the actual UFC 6 menu](docs/screenshots/overlay-in-game.png)
 
-An in-process extension for the verified **PORTHEON UFC 6 `3309ab23f` original/Parsec engine** and **`09eaab2` PS5 Pro / DLSS engine**. It draws its menu directly into the game's Vulkan frames and keeps focus on the game. The main menu contains **Resume, Take screenshot, Restart game, Cheats, Photo Mode, Settings, and Quit game**, followed by a gap separating **Restart PC and Shut down PC**.
+An in-process extension for the verified **PORTHEON UFC 6 `3309ab23f` original/Parsec engine** and **`09eaab2` PS5 Pro / DLSS engine**. It draws its menu directly into the game's Vulkan frames and keeps focus on the game. The main menu contains **Resume, Take screenshot, Restart game, Cheats, Photo Mode, Parsectagon, Settings, and Quit game**, followed by a gap separating **Restart PC and Shut down PC**.
 
 The engine executable is not modified on disk. The optional controller-icon patch changes verified game-asset ranges and keeps a local restore backup. The original/Parsec startup bridge forwards calls to your verified original threading runtime, preserved byte-for-byte as `ufc6_pthread_original.dll` and restored by the uninstaller. The PS5 Pro / DLSS bridge forwards timing calls to the Windows system library. A short-lived helper handles restart or confirmed shutdown after the game has exited and, when configured, after launcher cleanup.
 
 This download contains the overlay, asset-free controller-icon patcher, and installer. UFC 6, the emulator/launcher, firmware, keys, and other game content are not included. The installer checks the executable hash before installing; other KytyPS5 builds are not automatically supported.
 
 **The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Game & launcher → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
+
+## New in v0.9.61
+
+- **Fight report export:** from the finished fight's Statistics screen, choose **Parsectagon → Export fight report**. The overlay saves a read-only JSON report under Documents for manual attachment to the correct match in **My fighter** on the website. It does not submit a result or change rank automatically. Unverified outcomes are rejected.
+
+## New in v0.9.60
+
+- **Fight-poster room cards:** Parsectagon now uses the website's arena artwork and six preset fighter portraits. Cards show host-versus-challenger or an open spot, rank, rules, fighter count, and a clear preview/details state. Larger cards show four rooms at once and keep D-pad and mouse navigation, filters, refresh, and browser handoff.
+
+## New in v0.9.59
+
+- **Website preview rooms in-game:** when the Parsectagon website enables staged rooms, the overlay shows the same sample cards, including full examples. Amber **PREVIEW** badges and **DETAILS** buttons distinguish them from green **JOIN** cards. Selecting a preview opens the website's read-only room details; staged rooms cannot accept join requests.
+- **Matching board totals:** the in-game online and open-room tiles include the staged hosts and open sample rooms when previews are enabled, matching the website display. The footer states how many staged previews are present. The bridge's underlying live counts remain unchanged.
+
+## New in v0.9.58
+
+- **Parsectagon branding:** the in-game lobby uses the same high-resolution UFC 6 logo as the browser lobby. The overlay's main menu entry is now **Parsectagon**.
+- **Live room bridge:** the overlay reads host rooms from the browser lobby's bridge; v0.9.59 adds the website's staged preview cards.
+
+## New in v0.9.57
+
+- **Room cards:** a green JOIN badge marks selectable rooms, and each card shows a compact two-line W/L/D record in green, red and gold. Selecting a room opens its browser page to sign in and request to join. Ranked draws come from the lobby bridge; older servers show a dash for draws until updated.
+- **Refresh age:** the Fight Lobby footer shows how long ago rooms were updated, or when an unavailable server was last checked.
+
+## New in v0.9.56
+
+- **Fight Lobby filters:** narrow live rooms by region, host rank, and ranked or casual fight type. Filters work with the D-pad, left/right, confirm, and mouse; a no-match panel explains how to broaden the search. The online and open-room totals continue to reflect the server.
+- **Controller prompts:** the lobby footer now uses the overlay's bundled Xbox or PlayStation button artwork, following the selected overlay icon style.
+
+## New in v0.9.55
+
+- **Browser lobby styling in-game:** the Fight Lobby now uses the browser lobby's charcoal and red palette, branded header, prominent live counts, green room badges, and View Room buttons. The empty and disconnected states have matching panels. Room selection still opens the browser for sign-in and join requests.
+
+## New in v0.9.54
+
+- **Fight Lobby visual update:** the empty room state now has a clear arena panel and short hosting steps. Room cards show a visible View Room action, and a live server indicator makes connection status easier to spot.
+
+## New in v0.9.53
+
+- **Fight Lobby dashboard:** replaces the stacked room list with two-column room cards, live activity tiles, a clear empty state, and a guide beside a lone room. Cards show host, region, fight type, record and rank, with mouse hover/click and two-column controller navigation. The browser handoff and off-thread polling remain the same.
+
+## New in v0.9.52
+
+- **Fight Lobby cards:** room rows now show live availability, region, mode, record and rank-colored shields matching the browser lobby tiers. Online, looking and open-room counts have separate tiles. Click a room card with the mouse or select it with a controller to open its browser page for sign-in and join requests. Refresh and connection errors remain visible when the server is unavailable.
+
+## New in v0.9.51
+
+- **Larger Fight Lobby page:** a wider room list shows each room's title, host, region, mode, win/loss record, rank, and rating on readable two-line cards. Up to nine rooms appear before scrolling; the page adapts to smaller displays.
+
+## New in v0.9.50
+
+- **UFC 6 Fight Lobby:** a read-only in-game room list with online/looking counts and host ranks. Select a room to sign in and request to join through its browser page. Configure `[Menu] LobbyServerURL` in `ufc6-quit-menu.ini`. An unavailable server shows a clear error and does not block the other menus.
 
 ## New in v0.9.49
 
@@ -252,6 +306,8 @@ Select **Settings** and choose a category. The available controls include:
 
 Preferences save automatically to `bin/ufc6-quit-menu.ini` and are preserved when upgrading. A custom shortcut uses the same 0.8-second hold time. The INI can also be edited while the game is closed:
 
+**Parsectagon (closed beta):** Open this page from the overlay's main menu to see current online and looking-for-fight counts, rooms, and each host's rank and rating. Select a green **JOIN** room to open its browser page, where you can sign in and request to join. Staged sample rooms enabled by the website appear with amber **PREVIEW** badges; selecting one opens details but cannot join it. Inactive and full real rooms are excluded, while full preview cards are shown for layout examples. The page is read-only: the browser still handles sign-in, requests and Parsec connections. If the server is unavailable, the overlay shows the connection error and its other menus remain usable. The page polls in the background while open. Set `LobbyServerURL` under `[Menu]` to your lobby's base URL, for example `http://127.0.0.1:3000` for a server on this PC or an HTTPS URL for a remote server. Restart is unnecessary after editing this value; reopen the page or select Refresh rooms.
+
 ```ini
 [Menu]
 ButtonIcons=PlayStation
@@ -260,6 +316,7 @@ UIScale=100
 AutoLaunchAfterRestart=1
 GuideButtonOpensMenu=1
 ControllerAccess=Either
+LobbyServerURL=http://127.0.0.1:3000
 ```
 
 `Xbox` is the other icon style. The hexadecimal value above is the default shoulder/Menu combination; use the recorder to choose a different combination.

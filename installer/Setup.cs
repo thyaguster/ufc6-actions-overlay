@@ -102,9 +102,10 @@ namespace UFC6OverlaySetup {
             folder = Normalize(folder);
             if(NewEngine!=null && File.Exists(Path.Combine(folder,"UFC 6 novo.exe"))) return NewEngine.Inspect(folder);
             if (Linked(Path.Combine(folder,engineFile))) throw new IOException("The game executable is a link. Nothing was changed.");
-            var result = new Inspection { Folder = folder, Supported = File.Exists(Path.Combine(folder,engineFile)) && HashFile(Path.Combine(folder,engineFile)) == engineHash, TotalFiles=Order.Count, EngineLabel=engineLabel };
+            string executable=Path.Combine(folder,engineFile);
+            var result = new Inspection { Folder = folder, Supported = File.Exists(executable) && (HashFile(executable) == engineHash || EngineCompatibility.Matches(executable,engineFile)), TotalFiles=Order.Count, EngineLabel=engineLabel };
             string parsec = Path.Combine(folder,"UFC 6 Parsec.exe");
-            if (parsecHash != null && File.Exists(parsec)) result.ParsecStatus = !Linked(parsec) && HashFile(parsec) == parsecHash ? "Verified Parsec / two-player engine is supported." : "Unrecognized Parsec engine: that mode will not load the overlay.";
+            if (parsecHash != null && File.Exists(parsec)) result.ParsecStatus = !Linked(parsec) && (HashFile(parsec) == parsecHash || EngineCompatibility.Matches(parsec,"UFC 6 Parsec.exe")) ? "Verified Parsec / two-player engine is supported." : "Unrecognized Parsec engine: that mode will not load the overlay.";
             foreach (string name in Order) {
                 string path = Path.Combine(folder,name);
                 if (Directory.Exists(path) || (File.Exists(path) && Linked(path))) { result.Conflicts.Add(name); continue; }
