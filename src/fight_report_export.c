@@ -34,9 +34,9 @@ static int read_exact(uintptr_t address,void *out,size_t length){
     SIZE_T read=0;
     return address>=0x10000&&ReadProcessMemory(GetCurrentProcess(),(void*)address,out,length,&read)&&read==length;
 }
-static int report_read(FightReportRaw *raw){
+static int report_read_count(FightReportRaw *raw,int count){
     uint64_t world=0;
-    for(int i=0;i<REPORT_FIELD_COUNT;++i){
+    for(int i=0;i<count;++i){
         uintptr_t object=0,name_address=0,buffer_address=0;
         unsigned char header[0x68],buffer[40];
         char name[96];
@@ -62,11 +62,17 @@ static int report_read(FightReportRaw *raw){
     }
     return world!=0;
 }
+static int report_read(FightReportRaw *raw){return report_read_count(raw,REPORT_FIELD_COUNT);}
+int fight_report_match_state(void){
+    FightReportRaw raw={0};
+    if(!report_read_count(&raw,REPORT_STATE+1))return -1;
+    return raw.value[REPORT_STATE][0]<=3?(int)raw.value[REPORT_STATE][0]:-1;
+}
 static float game_float(uint32_t bits){float value;memcpy(&value,&bits,4);return value;}
 static int valid_stat(const FightReportRaw *r,int field,int fighter){
     return r->value[field][fighter]<=9999;
 }
-static int report_valid(const FightReportRaw *r,int *winner,int *round,int *seconds){
+static int report_result_valid(const FightReportRaw *r,int *winner,int *round,int *seconds){
     if(r->value[REPORT_STATE][0]!=3||
        r->value[REPORT_RESULT_TYPE][0]!=r->value[REPORT_ONLINE_RESULT_TYPE][0])return 0;
     uint32_t blue=r->value[REPORT_ONLINE_RESULT][0],red=r->value[REPORT_ONLINE_RESULT][1];
@@ -76,9 +82,13 @@ static int report_valid(const FightReportRaw *r,int *winner,int *round,int *seco
     uint32_t round_index=r->value[REPORT_ROUND][0];
     float length=game_float(r->value[REPORT_ROUND_LENGTH][0]);
     if(round_index>=12||!isfinite(length)||length<30||length>1800)return 0;
-    float elapsed=(float)r->value[REPORT_MATCH_TIME][0]-(float)round_index*length;
-    if(!isfinite(elapsed)||elapsed<0||elapsed>length)return 0;
-    *round=(int)round_index+1;*seconds=(int)(elapsed+0.5f);
+    float remaining=(float)r->value[REPORT_MATCH_TIME][0]-(float)round_index*length;
+    if(!isfinite(remaining)||remaining<0||remaining>length)return 0;
+    *round=(int)round_index+1;*seconds=(int)(length-remaining+0.5f);
+    return 1;
+}
+static int report_valid(const FightReportRaw *r,int *winner,int *round,int *seconds){
+    if(!report_result_valid(r,winner,round,seconds))return 0;
     const int stats[]={REPORT_KNOCKDOWNS,REPORT_SIG_ATTEMPTED,REPORT_SIG_LANDED,
         REPORT_TOTAL_ATTEMPTED,REPORT_TOTAL_LANDED,REPORT_TD_ATTEMPTED,REPORT_TD_LANDED,REPORT_STUNS};
     for(int fighter=0;fighter<2;++fighter){
@@ -105,6 +115,24 @@ static int format_stats(const FightReportRaw *r,int fighter,char *out,size_t cou
         (int)(control+0.5f));
     return length>0&&(size_t)length<count;
 }
+int fight_report_format_result(const FightReportRaw *raw,const char *version,const char *engine,
+                               const char *id,unsigned long long captured_at,
+                               char *json,size_t capacity){
+    int winner=0,round=0,seconds=0;
+    if(!raw||!version||!engine||!id||!json||
+       !report_result_valid(raw,&winner,&round,&seconds))return 0;
+    uint32_t method=raw->value[REPORT_RESULT_TYPE][0];
+    int length=snprintf(json,capacity,
+        "{\"schema\":1,\"id\":\"%s\",\"reportStage\":\"result\",\"fightStatisticsComplete\":false,"
+        "\"gameVersion\":\"%s\",\"engine\":\"%s\",\"capturedAt\":%llu,"
+        "\"result\":{\"winnerCorner\":\"%s\",\"method\":%s,\"gameMethodCode\":%u,"
+        "\"round\":%d,\"clockSeconds\":%d},\"fighters\":["
+        "{\"corner\":\"red\",\"name\":null},{\"corner\":\"blue\",\"name\":null}]}\n",
+        id,version,engine,captured_at,winner?"red":"blue",
+        method==0?"\"Knockout\"":method==1?"\"TKO\"":method==2?"\"Submission\"":"null",
+        method,round,seconds);
+    return length>0&&(size_t)length<capacity;
+}
 int fight_report_format(const FightReportRaw *raw,const char *version,const char *engine,
                         const char *id,unsigned long long captured_at,
                         char *json,size_t capacity){
@@ -114,13 +142,17 @@ int fight_report_format(const FightReportRaw *raw,const char *version,const char
        !format_stats(raw,1,red,sizeof(red))||!format_stats(raw,0,blue,sizeof(blue)))return 0;
     /* Names are left null until the game's fighter-name binding is verified. */
     int length=snprintf(json,capacity,
-        "{\"schema\":1,\"id\":\"%s\",\"gameVersion\":\"%s\",\"engine\":\"%s\","
-        "\"capturedAt\":%llu,\"result\":{\"winnerCorner\":\"%s\",\"method\":%s,"
+        "{\"schema\":1,\"id\":\"%s\",\"reportStage\":\"result\",\"fightStatisticsComplete\":false,"
+        "\"gameVersion\":\"%s\",\"engine\":\"%s\","
+        "\"capturedAt\":%llu,\"result\":{\"winnerCorner\":\"%s\",\"method\":%s,\"gameMethodCode\":%u,"
         "\"round\":%d,\"clockSeconds\":%d},\"fighters\":["
         "{\"corner\":\"red\",\"name\":null,\"stats\":%s},"
         "{\"corner\":\"blue\",\"name\":null,\"stats\":%s}]}\n",
         id,version,engine,captured_at,winner? "red":"blue",
+        raw->value[REPORT_RESULT_TYPE][0]==0?"\"Knockout\"":
+        raw->value[REPORT_RESULT_TYPE][0]==1?"\"TKO\"":
         raw->value[REPORT_RESULT_TYPE][0]==2?"\"Submission\"":"null",
+        raw->value[REPORT_RESULT_TYPE][0],
         round,seconds,red,blue);
     return length>0&&(size_t)length<capacity;
 }
@@ -185,6 +217,66 @@ int fight_report_export(const wchar_t *game_version,int new_engine,
     ok=WriteFile(file,json,size,&written,NULL)&&written==size&&FlushFileBuffers(file);
     CloseHandle(file);
     if(!ok){DeleteFileW(target);set_error(error,error_count,L"Could not save the fight report.");return 0;}
+    if(path&&path_count)lstrcpynW(path,target,(int)path_count);
+    if(error&&error_count)error[0]=0;
+    return 1;
+}
+
+/* Persist the smallest useful result first. Only seven verified bindings are
+   needed, so this stage is independent of the later Fight Statistics table. */
+int fight_report_export_result(const wchar_t *game_version,int new_engine,
+                               wchar_t *path,size_t path_count,wchar_t *error,size_t error_count){
+    FightReportRaw first={0},second={0};
+    if(!report_read_count(&first,REPORT_MATCH_TIME+1)){
+        set_error(error,error_count,L"Finished-fight result is not ready.");return 0;
+    }
+    Sleep(10);
+    if(!report_read_count(&second,REPORT_MATCH_TIME+1)||memcmp(&first,&second,sizeof(first))){
+        set_error(error,error_count,L"Fight result changed during capture.");return 0;
+    }
+    char version[24]="unknown";
+    if(game_version&&game_version[0]){
+        int i=0;for(;i<22&&game_version[i];++i){
+            wchar_t c=game_version[i];
+            if(!((c>=L'0'&&c<=L'9')||c==L'.'))break;
+            version[i]=(char)c;
+        }
+        if(i&&i<23)version[i]=0;
+    }
+    GUID guid;if(FAILED(CoCreateGuid(&guid))){set_error(error,error_count,L"Could not create a result ID.");return 0;}
+    char id[40];snprintf(id,sizeof(id),"%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+        (unsigned long)guid.Data1,guid.Data2,guid.Data3,
+        guid.Data4[0],guid.Data4[1],guid.Data4[2],guid.Data4[3],guid.Data4[4],
+        guid.Data4[5],guid.Data4[6],guid.Data4[7]);
+    FILETIME ft;GetSystemTimeAsFileTime(&ft);ULARGE_INTEGER timestamp;
+    timestamp.LowPart=ft.dwLowDateTime;timestamp.HighPart=ft.dwHighDateTime;
+    unsigned long long milliseconds=(timestamp.QuadPart-116444736000000000ULL)/10000ULL;
+    char json[1024];
+    if(!fight_report_format_result(&second,version,new_engine?"ps5-pro":"original-parsec",
+                                   id,milliseconds,json,sizeof(json))){
+        set_error(error,error_count,L"Finished-fight result is not ready.");return 0;
+    }
+    PWSTR documents=NULL;
+    if(FAILED(SHGetKnownFolderPath(&documents_id,KF_FLAG_CREATE,NULL,&documents))||!documents){
+        set_error(error,error_count,L"Windows Documents folder is unavailable.");return 0;
+    }
+    wchar_t parent[MAX_PATH],folder[MAX_PATH],target[MAX_PATH];
+    int ok=swprintf(parent,MAX_PATH,L"%ls\\Parsectagon",documents)>0&&
+           swprintf(folder,MAX_PATH,L"%ls\\Fight Reports",parent)>0;
+    CoTaskMemFree(documents);
+    if(!ok||!make_directory(parent)||!make_directory(folder)){
+        set_error(error,error_count,L"Could not create Documents\\Parsectagon\\Fight Reports.");return 0;
+    }
+    wchar_t short_id[9];for(int i=0;i<8;++i)short_id[i]=(wchar_t)(unsigned char)id[i];short_id[8]=0;
+    if(swprintf(target,MAX_PATH,L"%ls\\fight-result-%ls.json",folder,short_id)<=0){
+        set_error(error,error_count,L"Could not name the result file.");return 0;
+    }
+    HANDLE file=CreateFileW(target,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE){set_error(error,error_count,L"Could not create the result file.");return 0;}
+    DWORD written=0,size=(DWORD)strlen(json);
+    ok=WriteFile(file,json,size,&written,NULL)&&written==size&&FlushFileBuffers(file);
+    CloseHandle(file);
+    if(!ok){DeleteFileW(target);set_error(error,error_count,L"Could not save the result.");return 0;}
     if(path&&path_count)lstrcpynW(path,target,(int)path_count);
     if(error&&error_count)error[0]=0;
     return 1;

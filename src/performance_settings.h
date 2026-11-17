@@ -15,4 +15,6 @@ static inline void performance_adjust(PerformanceSettings *p,int row,int directi
 }
 int performance_load(const wchar_t *bin,PerformanceSettings *out);
 int performance_save(const wchar_t *bin,const PerformanceSettings *expected,const PerformanceSettings *desired);
+enum { PARSEC_PRESET_ESPORTS, PARSEC_PRESET_BALANCED, PARSEC_PRESET_LAN, PARSEC_PRESET_RESTORE, PARSEC_PRESET_COUNT };
+int apply_parsec_preset(int preset_id);
 #endif

@@ -15,6 +15,8 @@ typedef struct {
 typedef struct {
     int connected,online,looking,open_rooms,room_count,preview_room_count;
     wchar_t url[LOBBY_URL_LENGTH],error[160];
+    int account_status,account_rating; /* 0 unlinked, 1 pending, 2 linked, -1 error */
+    wchar_t account_name[64],account_rank[32],account_code[16],account_error[160];
     LobbyRoom rooms[LOBBY_MAX_ROOMS];
     unsigned long long updated_at;
 } LobbySnapshot;

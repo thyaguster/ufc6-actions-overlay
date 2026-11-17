@@ -43,9 +43,22 @@ This download contains the overlay, asset-free controller-icon patcher, and inst
 
 **The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Game & launcher → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
 
-## New in v0.9.61
+## New in v0.9.74
 
-- **Fight report export:** from the finished fight's Statistics screen, choose **Parsectagon → Export fight report**. The overlay saves a read-only JSON report under Documents for manual attachment to the correct match in **My fighter** on the website. It does not submit a result or change rank automatically. Unverified outcomes are rejected.
+- **Stable overlay release:** F10 → Parsectagon and UFC 6's Online tab use the same full-size in-game lobby page. Parsectagon is a **closed beta**; joining rooms and reviewing match results still use its website.
+- Includes the tested fight-report capture, account linking, keyboard/mouse game icon options, and PS5 Pro engine support. This release does not include the separate Parsectagon website's newer UI work.
+
+## New in v0.9.73
+
+- **Parsectagon on Online:** selecting UFC 6's Online tab opens the in-game Parsectagon page immediately in fullscreen. Back closes it; switching away and returning opens it again.
+
+## New in v0.9.71
+
+- **Parsectagon account linking:** open **Parsectagon → Account → Link or change account**. Approve the displayed code in your browser while signed in to the fighter you want to use. The overlay shows the linked fighter and rank; **Unlink this PC** revokes its upload key. The key can only upload fight reports. Room requests and other account actions remain on the website. The room list still works if the account or server is unavailable.
+
+## New in v0.9.70
+
+- **Fight report export:** from the finished fight's Statistics screen, choose **Parsectagon → Export fight report**. The overlay saves a read-only JSON report under Documents for manual attachment to the correct match in **My fighter** on the website. When the game retains its complete statistics response, the file includes round records and judges' scores. Otherwise it includes the result and detailed overall statistics, clearly marked as missing round details. Fighter names and game IDs appear when their profile response is available. Export does not submit a result or change rank automatically.
 
 ## New in v0.9.60
 
@@ -261,13 +274,14 @@ The isolated page images use the current overlay renderer in a test host with po
 
 The overlay includes the patcher from [UFC 6 Xbox Icons](https://github.com/thyaguster/ufc6-xbox-icons), so one overlay installation provides both the actions menu and the game button-icons mod.
 
-1. Open the overlay and go to **Settings → Game & launcher → Patch in-game controller icons...**. It is in the Game & launcher category.
-2. Choose **Xbox game icons** or **PlayStation game icons** on the **Controller icon patch** page. It also shows which icons are currently installed.
-3. Confirm **Apply and restart game**. The game and its launcher close normally, the patch is applied, and UFC 6 relaunches through your saved launcher settings.
+1. Open the overlay and go to **Settings → Game & launcher → Patch in-game controller icons...**.
+2. Choose **Xbox**, **Keyboard & mouse**, or the original **PlayStation** game icons on the **Game input icons** page. It shows the installed style.
+3. For custom bindings, choose **Edit icon mappings...**. This opens the included desktop editor and minimizes UFC 6. It imports nearby PORTHEON settings or lets you import a `UFC6.ini`, exported JSON, or Kyty keymap. Edits save for the overlay automatically. Match the same bindings in PORTHEON/Kyty; icon changes do not change gameplay input.
+4. Confirm **Apply and restart game**. The game and its launcher close normally, the patch is applied, and UFC 6 relaunches through your saved launcher settings. Reapply the style after changing bindings.
 
 **Overlay button icons** changes the prompts inside this overlay. **Patch in-game controller icons...** changes the prompts inside UFC 6 itself; the two choices are independent.
 
-The game-icons patch supports extracted **PPSA23566 01.006.000** game files. It verifies the files and keeps a local `.ufc6-xbox-icons-backup.zip` for restoring the original PlayStation icons. The download contains the patcher, not game artwork or game files. Uninstalling the overlay keeps the patched icons and restore backup; choose PlayStation icons first if you want the original artwork restored.
+The patch supports extracted **PPSA23566 01.006.000** game files. It verifies the files and keeps `.ufc6-input-icons-backup.zip` and `.ufc6-input-icons-state.json` in the game folder. Verified older Xbox backups are migrated. The download contains the patcher, not game artwork or game files. Uninstalling the overlay keeps patched icons and the restore backup; choose PlayStation icons first if you want the original artwork restored.
 
 [View the controller-icon patch page](docs/screenshots/game-button-icons.png) · [Standalone button-icons mod and documentation](https://github.com/thyaguster/ufc6-xbox-icons)
 
@@ -290,7 +304,7 @@ Updates are checked when you open the checker; nothing is downloaded or installe
 Select **Settings** and choose a category. The available controls include:
 
 - **Overlay button icons:** left/right or confirm switches this overlay between Xbox A/B and PlayStation cross/circle prompts.
-- **Patch in-game controller icons...:** choose Xbox or the original PlayStation artwork independently. The Cancel-first confirmation applies the selected theme after the game and its launcher close, then relaunches through your saved launcher settings. It supports extracted PPSA23566 01.006.000 and creates/verifies `.ufc6-xbox-icons-backup.zip` in the game folder. No game assets are bundled. Existing development installs must first be migrated/restored with their original tool; unknown data is left untouched. Uninstalling the overlay keeps game artwork and the backup; restore PlayStation icons before uninstalling if desired. This is labeled **Controller icon patch** on its own page.
+- **Patch in-game controller icons...:** choose Xbox, keyboard/mouse, or original PlayStation artwork independently from overlay button icons. The bundled editor imports and edits keyboard/controller mappings; the installed helper saves custom mappings in `ufc6-input-bindings.json` beside itself. The Cancel-first confirmation applies icons after the game closes, then relaunches through your saved launcher. It supports extracted PPSA23566 01.006.000 and verifies a unified `.ufc6-input-icons-backup.zip` plus state journal in the game folder. Unknown game edits are left untouched. Restore PlayStation icons before uninstalling if desired.
 - **Opening shortcut:** confirm starts recording. Release the confirmation button, hold a combination of **2–4 digital buttons** for about half a second, then release to save it. Supported buttons are shoulders, stick clicks, D-pad, face buttons, and Menu/Options. Analog triggers and Guide are not recorded. B/circle alone cancels recording; F10 closes the overlay without changing the shortcut.
 - **UI scale:** left/right changes the whole overlay from **50% to 300%**, in **25% steps**. Confirm resets it to **100%**. The overlay stays centred and automatically shrinks to fit smaller game windows with a margin. Text and shapes are rendered at twice the final pixel resolution and downsampled for smoother edges at every scale. Unchanged pages reuse their rendered image; selections, switches and other visible changes redraw it.
 - **Launch UFC 6 after PC restart:** On by default. Confirm or left/right toggles whether Restart PC reopens UFC 6 at your next Windows sign-in. The Restart PC row and its confirmation show the current On/Off status; the confirmation also points to Settings.

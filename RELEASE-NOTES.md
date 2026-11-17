@@ -1,3 +1,67 @@
+## v0.9.74 — Stable overlay release
+
+- The Parsectagon entry in the F10 menu now opens the same full-size in-game page as UFC 6's Online tab. Back returns to the F10 menu or game, according to where it was opened.
+- Includes the tested Parsectagon room browsing, account linking, and local fight-report capture work through v0.9.73. Parsectagon remains a closed beta; room joining and result review continue in the browser.
+- The public ZIP excludes local diagnostic probes and captures.
+
+## v0.9.73 — Online-tab fullscreen fix
+
+- Detect the Online tab from seven pixels in UFC 6's presented Vulkan frame. The previous desktop-pixel check could open Parsectagon only after minimizing the fullscreen game.
+- Open the existing Parsectagon menu directly in the game frame and keep the native Online page covered while it is open. Verified two consecutive Play → Online visits without minimizing.
+
+## v0.9.72 — Parsectagon on the Online tab
+
+- Opens Parsectagon automatically when UFC 6's Online tab is selected.
+- Covers the game's native Online page with a dark in-frame background while Parsectagon is open.
+- Back closes Parsectagon. Switching away from Online and back opens it again.
+
+## v0.9.71 — Parsectagon browser-approved account linking
+
+- Link or change the fighter account from the in-game Parsectagon Account page using a short-lived code approved on the website. Show linked fighter, rank, pending code and connection errors in the overlay.
+- Keep the credential scoped to fight-report uploads, with in-game unlink/revoke. The browser retains the full sign-in session and room controls.
+- Poll account state away from the Vulkan render thread. Room browsing and menu navigation continue when the server is unreachable.
+
+## v0.9.70 — Fight-report fallback on the proven menu worker
+
+- Keep the v0.9.68 menu worker, which was fast in the same PORTHEON mode after the v0.9.69 slowdown report. The overall-only fallback now returns a distinct helper state and a clear saved-report message through that worker.
+- Bound the optional complete-round scan to 15 seconds when a report is requested. An in-game check confirmed normal menu performance, a saved overall-only JSON report, and a visible completion message. Round records remain unavailable for this particular fight.
+
+## v0.9.69 — Reliable fight-report fallback (held back after a slow launch)
+
+- Save the game's retained match-result response, including both fighters' detailed overall statistics, when its separate per-round Fight Statistics response is unavailable. The report and menu status explicitly say that round details are missing; no round or judge values are invented.
+- Match the fallback to the live finished fight before export. Keep complete cumulative round and judge records whenever the game still exposes them.
+- The export action is labeled “Export fight report” because completeness depends on the available game record.
+
+## v0.9.68 — One-round reports and fighter names
+
+- Capture the complete Fight Statistics response for both one-round and multi-round finishes. The game serializes these responses in different field orders; both were verified in live PS5 Pro fights.
+- Add fighter names and game fighter IDs when the current fighter-profile response is available. Preserve the game's raw finish-method code without guessing its label.
+- Keep the export result visible in the Parsectagon footer after the brief notification expires. A missing stats response should return an explicit error after a shorter scan; v0.9.69 also adds the retained overall-stat fallback and a bounded helper wait.
+
+## v0.9.67 — Complete local fight reports
+
+- Export the game's complete Fight Statistics response: both corners' totals, cumulative round records, and judges' scores, alongside the validated result and Overall summary.
+- Scan the finished fight on a separate helper process so Vulkan presentation and controller navigation remain responsive. Reject stale or incomplete records instead of exporting data from another fight.
+- Keep ranked submission manual. Parsectagon's source validator can retain the extra full-statistics section once its server is restarted; the website does not yet show every field. Fighter names and lobby account identities remain unverified.
+
+## v0.9.66 — Post-fight notice startup retry
+
+- Verify the emulator signature before the controller hook changes that code, then retry the verified offline progression notice hook when its game code page appears. Log the reason for a failed hook attempt.
+- The expanded fight-statistics export is still under investigation; this update does not add unverified round or judge values to reports.
+
+## v0.9.65 — Fight report finish-time correction
+
+- Live-tested the native Parsectagon export against UFC 6's Fight Statistics screen and the lobby's upload validator.
+- Convert the game's displayed round time remaining into elapsed `clockSeconds`, as required by Parsectagon. Reports from v0.9.64 or earlier should be exported again before attachment.
+- Fix overlapping rows and controller hints on the Game input icons page. Add the Parsectagon crest to its main-menu entry.
+- Add bounded post-fight notice diagnostics to the local log so a recurring offline-progression popup can be traced without changing its suppression behavior.
+
+## v0.9.64 — Keyboard and controller icon mappings
+
+- Added Keyboard & mouse game prompts alongside Xbox and original PlayStation icons.
+- Included the updated visual mapping editor for keyboard and controller layouts. It can import nearby PORTHEON/Kyty bindings; custom edits are saved for the overlay's next icon apply.
+- Unified icon backup/state tracking supports verified older Xbox patch installs and restores original game artwork. Applying icons still restarts UFC 6 through the saved launcher.
+
 ## v0.9.63 — More resilient PORTHEON engine checks
 
 - Recognize compatible engine updates by guarded controller routines instead of requiring an identical executable hash. On PS5 Pro / DLSS, locate the controller callbacks even when an update moves them together.

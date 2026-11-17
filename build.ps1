@@ -38,7 +38,7 @@ if (-not $Test) {
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     $manifest = [ordered]@{
-        version = '0.9.63'
+        version = '0.9.74'
         parsec_engine_sha256 = 'd65bb89742d4fbaa6d57fde7a97eab7ed34ff4e6b5b0ae2213d6476d19c7c049'
         engine_revision = '3309ab23f'
         engine_sha256 = '8df294a9c7ef98b1db975f0b9b1628dc061764f3035349d9bff7e1d7af846752'
@@ -62,6 +62,9 @@ if (-not $Test) {
     $manifest.previous_companion_sha256['libwinpthread-1.dll'] += @('24a6575bedb4bc91561a2e31a879613459793fe08cf127ac52b9b253bec53a6d')
     $manifest.previous_companion_sha256['ufc6_menu_layer.dll'] += @('f8b38e46afa08a785bcd35c9a2a32faa9489899a342141b42d2b405a8c278a0b')
     $manifest.previous_companion_sha256['ufc6_menu_restart.exe'] += @('bac16220717756de7141b53e9d14eadc692bdcf633a77f8d9d1d82104697e21e')
+    # The installed 0.9.63 updater is shared by both engine folders. Its hash was
+    # recorded for the new engine but omitted from the original-engine history.
+    $manifest.previous_companion_sha256['ufc6_menu_update.exe'] += @('9bab2d46b9fab5db1dec46f41d7e3297906186f06f99d3b6f3f8e3cdbead7703')
     if ($previousRelease -and $previousRelease.engine_sha256 -eq $manifest.engine_sha256 -and [version]$previousRelease.version -le [version]$manifest.version) {
         $oldCore = @($previousRelease.dll_sha256) + @($previousRelease.previous_dll_sha256)
         $manifest.previous_dll_sha256 = @(@($manifest.previous_dll_sha256) + $oldCore | Where-Object { $_ -match '^[a-fA-F0-9]{64}$' -and $_ -ne $manifest.dll_sha256 } | ForEach-Object { $_.ToLowerInvariant() } | Select-Object -Unique)
@@ -94,6 +97,9 @@ if (-not $Test) {
             'ufc6_menu_layer.dll' = @('c2f164630dbe55632afe8daa26e4c3026211fbaaf2b47aaa6e1be78493a81fd6')
         }
     }
+    # Local 0.9.70 test build installed before the final release package was cut.
+    $manifest.new_engine.previous_dll_sha256 += '198471ed7cee778658f814b0798d140f891c898965f6e12f4d9d1f747489d2b8'
+    $manifest.new_engine.previous_companion_sha256['ufc6_menu_icons.exe'] = @('ad11bdcc4229dae7e91c9571d22f1ecf0ebd58075b0b8fe50aa35962100c19e7')
     if ($previousRelease -and $previousRelease.new_engine) {
         $old = $previousRelease.new_engine
         $manifest.new_engine.previous_dll_sha256 = @(@($manifest.new_engine.previous_dll_sha256) + @($old.dll_sha256) + @($old.previous_dll_sha256) | Where-Object { $_ -match '^[a-fA-F0-9]{64}$' -and $_ -ne $manifest.dll_sha256 } | Select-Object -Unique)

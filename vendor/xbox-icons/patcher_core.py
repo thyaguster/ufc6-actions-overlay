@@ -71,9 +71,12 @@ def validate_game(root, profile):
         raise PatchError('Choose the extracted game folder containing sce_sys/param.json and Data.') from exc
     check(metadata.get('titleId') == profile['title_id'],
           'Unsupported title. This release supports PPSA23566 only.')
-    check(metadata.get('contentVersion') == profile['content_version'],
-          'Unsupported version. This release supports 01.006.000 only.')
     return root
+
+
+def is_game_process(name):
+    name=name.casefold()
+    return name in ('ufc 6.exe','ufc6.exe','kyty.exe','kyty_emulator.exe') or (name.startswith('ufc 6 ') and name.endswith('.exe'))
 
 
 def game_running():
@@ -99,7 +102,7 @@ def game_running():
         entry.size = ctypes.sizeof(entry)
         ok = kernel.Process32FirstW(handle, ctypes.byref(entry))
         while ok:
-            if entry.exe.casefold() in ('ufc 6.exe', 'kyty_emulator.exe', 'ufc 6 parsec.exe', 'ufc 6 novo.exe'):
+            if is_game_process(entry.exe):
                 return True
             ok = kernel.Process32NextW(handle, ctypes.byref(entry))
         return False

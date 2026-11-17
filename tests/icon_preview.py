@@ -55,10 +55,11 @@ parser.add_argument("--lobby-one-room",action="store_true")
 parser.add_argument("--lobby-empty",action="store_true")
 parser.add_argument("--lobby-playstation",action="store_true")
 parser.add_argument("--lobby-staged",action="store_true")
+parser.add_argument("--lobby-account",action="store_true")
 args=parser.parse_args()
 folder=args.folder.resolve()
 lobby_server=None
-if args.lobby_live or args.lobby_one_room or args.lobby_empty or args.lobby_staged:
+if args.lobby_live or args.lobby_one_room or args.lobby_empty or args.lobby_staged or args.lobby_account:
     class LobbyHandler(BaseHTTPRequestHandler):
         def do_POST(self):
             if self.path!="/api/bridge/snapshot":self.send_error(404);return
@@ -67,7 +68,7 @@ if args.lobby_live or args.lobby_one_room or args.lobby_empty or args.lobby_stag
             avatars=["striker","grappler","southpaw","champion","counter","rookie"]
             rooms=[{"id":f"room-{i}","title":"Europe Ranked" if i==1 else f"Fight Room {i}","notes":"Five rounds · any division","host":"Alex" if i==1 else f"Player {i}","hostAvatar":avatars[(i-1)%6],"hostRank":ranks[i-1][0],"hostQualified":i!=7,"hostRating":ranks[i-1][1],"hostWins":i+2,"hostLosses":2,"hostDraws":i%3,"hostActive":True,"players":1,"region":"Europe" if i<4 else "North America","mode":"casual" if i==8 else "ranked","guestFighter":None} for i in range(1,9)]
             if args.lobby_one_room:rooms=rooms[:1];rooms[0].pop("hostDraws")
-            if args.lobby_empty:rooms=[]
+            if args.lobby_empty or args.lobby_account:rooms=[]
             if args.lobby_staged:
                 rooms=[{"id":f"preview-{i}","title":f"Staged Fight {i}","notes":"Five rounds · any division","host":f"SampleHost{i}","hostAvatar":avatars[i-1],"hostRank":ranks[i-1][0],"hostQualified":True,"hostRating":ranks[i-1][1],"hostWins":i+2,"hostLosses":2,"hostDraws":i%3,"hostActive":True,"players":2 if i>4 else 1,"guestFighter":{"name":f"Challenger{i}","avatar":avatars[(i+1)%6],"rating":1100+i*100,"qualified":True,"wins":i,"losses":1} if i>4 else None,"region":"Europe" if i<4 else "North America","mode":"casual" if i==3 else "ranked","preview":True} for i in range(1,7)]
             rooms.extend([{"id":"demo-1","demo":True},{"id":"full-1","hostActive":True,"players":2}])
@@ -151,7 +152,7 @@ try:
     else:
         dll.MenuTestToggle();pump(.3)
     assert dll.MenuTestSnapshot()&0x100
-    if args.lobby_live or args.lobby_one_room or args.lobby_empty or args.lobby_staged:
+    if args.lobby_live or args.lobby_one_room or args.lobby_empty or args.lobby_staged or args.lobby_account:
         dll.MenuTestPage.restype=c.c_int;dll.MenuTestLobbyStatus.restype=c.c_int;dll.MenuTestLobbyCount.restype=c.c_int
         dll.MenuTestLobbyAge.argtypes=[c.c_uint,c.c_int,w.LPWSTR,c.c_int]
         age=c.create_unicode_buffer(64);dll.MenuTestLobbyAge(3,1,age,64);assert age.value=="Rooms updated 3s ago",age.value
@@ -162,7 +163,24 @@ try:
         for _ in range(60):
             if dll.MenuTestLobbyStatus()==1:break
             pump(.1)
-        assert dll.MenuTestPage()==34 and dll.MenuTestLobbyStatus()==1 and dll.MenuTestLobbyCount()==(0 if args.lobby_empty else 1 if args.lobby_one_room else 6 if args.lobby_staged else 8),(dll.MenuTestPage(),dll.MenuTestLobbyStatus(),dll.MenuTestLobbyCount())
+        if dll.MenuTestPage()==36:
+            assert dll.MenuTestLobbyClick(100,850);pump(.05)
+        assert dll.MenuTestPage()==34 and dll.MenuTestLobbyStatus()==1 and dll.MenuTestLobbyCount()==(0 if args.lobby_empty or args.lobby_account else 1 if args.lobby_one_room else 6 if args.lobby_staged else 8),(dll.MenuTestPage(),dll.MenuTestLobbyStatus(),dll.MenuTestLobbyCount())
+        if not args.lobby_staged:
+            # Keep the older compact-layout hit tests; the production entry now
+            # uses the same full viewport as the Online-tab takeover.
+            dll.MenuTestLobbyCompact()
+        if args.lobby_staged:
+            dll.MenuTestLobbyHome();pump(.05);render("parsectagon-home-preview.png");assert dll.MenuTestLobbyClick(100,850);pump(.05)
+            assert dll.MenuTestPage()==34,"Browse All should open the room board"
+        if args.lobby_account:
+            press(0x0010);press(0x0080);press(0x4000)
+            assert dll.MenuTestPage()==35,dll.MenuTestPage()
+            render("parsectagon-account-preview.png")
+            press(0x2000)
+            assert dll.MenuTestPage()==34,dll.MenuTestPage()
+            print("PASS: account page renders without clipping and returns to lobby.")
+            raise SystemExit(0)
         if args.lobby_staged:
             render("parsectagon-staged-rooms.png")
             dll.MenuTestLobbyClick.argtypes=[c.c_int,c.c_int];dll.MenuTestLobbyClick.restype=c.c_int
@@ -247,6 +265,8 @@ try:
             dll.MenuTestButton(0x40,1);dll.MenuTestButton(0x40,0);pump(.06)
         assert dll.MenuTestSnapshot()&15==5
         dll.MenuTestButton(0x4000,1);dll.MenuTestButton(0x4000,0);pump(.08)
+        if dll.MenuTestPage()==36:
+            assert dll.MenuTestLobbyClick(100,850);pump(.05)
         assert dll.MenuTestPage()==34
         for _ in range(60):
             if dll.MenuTestLobbyStatus()==-1:break
@@ -254,10 +274,16 @@ try:
         assert dll.MenuTestLobbyStatus()==-1,"Unreachable lobby must display a connection error"
         render("fight-lobby-unavailable.png")
         dll.MenuTestButton(0x2000,1);dll.MenuTestButton(0x2000,0);pump(.08)
+        if dll.MenuTestPage()==36:
+            dll.MenuTestButton(0x2000,1);dll.MenuTestButton(0x2000,0);pump(.08)
         assert dll.MenuTestPage()==0 and dll.MenuTestSnapshot()&0x100
         dll.MenuTestButton(0x4000,1);dll.MenuTestButton(0x4000,0);pump(.08)
+        if dll.MenuTestPage()==36:
+            assert dll.MenuTestLobbyClick(100,850);pump(.05)
         assert dll.MenuTestPage()==34,"Lobby must reopen after a failed poll"
         dll.MenuTestButton(0x2000,1);dll.MenuTestButton(0x2000,0);pump(.08)
+        if dll.MenuTestPage()==36:
+            dll.MenuTestButton(0x2000,1);dll.MenuTestButton(0x2000,0);pump(.08)
         dll.MenuTestButton(0x40,1);dll.MenuTestButton(0x40,0);pump(.06)
         dll.MenuTestButton(0x4000,1);dll.MenuTestButton(0x4000,0);pump(.08)
         assert dll.MenuTestPage()==16,"Other overlay pages must remain usable when lobby is offline"
@@ -509,17 +535,23 @@ try:
         render("settings-game-icons.png")
         press(0x4000);assert page()==9 and dll.MenuTestSnapshot()&15==2
         render("game-icons-ps.png")
-        press(0x40);press(0x4000);assert page()==10 and dll.MenuTestSnapshot()&15==0
+        press(0x10);press(0x10);press(0x4000);assert page()==10 and dll.MenuTestSnapshot()&15==0
         render("game-icons-xbox-confirm.png")
         press(0x4000);assert page()==9 and dll.MenuTestGameIcons()==1
-        press(0x40);press(0x4000);press(0x40);press(0x4000)
-        assert page()==9 and dll.MenuTestGameIcons()==258
+        press(0x4000)
+        press(0x40)
+        press(0x4000)
+        assert page()==9 and dll.MenuTestGameIcons()==258,(page(),dll.MenuTestGameIcons(),dll.MenuTestSnapshot())
         render("game-icons-xbox.png")
-        press(0x10);press(0x4000);assert page()==10
+        press(0x40);press(0x4000);assert page()==10
+        press(0x40);press(0x4000);assert dll.MenuTestGameIcons()==517
+        render("game-icons-keyboard.png")
+        press(0x40);press(0x4000);assert page()==10
         render("game-icons-restore-confirm.png")
-        press(0x40);press(0x4000);assert dll.MenuTestGameIcons()==513
-        press(0x2000);assert page()==1 and dll.MenuTestSnapshot()&15==10
-        print("PASS: distinct overlay/game icons, status, Cancel-first apply/restore, confirmation, Back; game files and launch mocked; all text rectangles fit their fonts.")
+        press(0x40);press(0x4000);assert dll.MenuTestGameIcons()==769
+        press(0x40);press(0x4000);assert page()==9
+        press(0x40);press(0x4000);assert page()==1 and dll.MenuTestSnapshot()&15==10
+        print("PASS: Xbox, keyboard, and PlayStation icon choices; mapping editor handoff, confirmation, Back, and text layout; game files and launch mocked.")
         raise SystemExit(0)
     elif args.cheats:
         dll.MenuTestCheatStatus.argtypes=[c.c_int,c.c_int]

@@ -146,12 +146,14 @@ def build_report(fields, engine, args):
     elapsed = fields["Online_MatchTimeSecs"][0]
     if not math.isfinite(round_length) or not 30 <= round_length <= 1800:
         raise RuntimeError("The fight's round length could not be verified.")
-    clock_seconds = round(elapsed - (round_number - 1) * round_length)
-    if not 0 <= clock_seconds <= round_length:
+    remaining_seconds = elapsed - (round_number - 1) * round_length
+    if not 0 <= remaining_seconds <= round_length:
         raise RuntimeError("The finish time does not match the finished round.")
-    # Submission (2) is confirmed against this game's result screen. Leave
-    # other method codes unset until their labels are validated in-game.
-    method = "Submission" if fields["Global_MatchResultType"][0] == 2 else None
+    clock_seconds = round(round_length - remaining_seconds)
+    # These codes match the game's PostFightStatsHelper result enum; TKO (1)
+    # was also checked against a live Fight Statistics result.
+    method = {0: "Knockout", 1: "TKO", 2: "Submission"}.get(
+        fields["Global_MatchResultType"][0])
     return {
         "schema": 1,
         "id": str(uuid.uuid4()),
@@ -159,6 +161,7 @@ def build_report(fields, engine, args):
         "engine": engine,
         "capturedAt": int(time.time() * 1000),
         "result": {"winnerCorner": winner, "method": method,
+                   "gameMethodCode": fields["Global_MatchResultType"][0],
                    "round": round_number, "clockSeconds": clock_seconds},
         "fighters": [
             {"corner": "red", "name": args.red_name, "stats": fighter_stats(fields, 1)},

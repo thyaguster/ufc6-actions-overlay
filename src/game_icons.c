@@ -40,7 +40,7 @@ static DWORD WINAPI check_worker(void *unused){
         CloseHandle(pi.hThread);DWORD waited=WaitForSingleObject(pi.hProcess,120000);CloseHandle(pi.hProcess);
         wchar_t message[512];GetPrivateProfileStringW(startup?L"Startup":L"Icons",L"Message",L"Could not verify game icons.",message,512,report);
         int result=(int)GetPrivateProfileIntW(startup?L"Startup":L"Icons",L"State",GAME_ICONS_UNAVAILABLE,report);
-        update_for(startup,waited==WAIT_OBJECT_0&&result>=1&&result<=4?result:GAME_ICONS_UNAVAILABLE,message);
+        update_for(startup,waited==WAIT_OBJECT_0&&result>=1&&result<=GAME_ICONS_KEYBOARD?result:GAME_ICONS_UNAVAILABLE,message);
     }else update_for(startup,GAME_ICONS_UNAVAILABLE,L"The game-icons helper is missing or could not start.");
     if(environment)HeapFree(GetProcessHeap(),0,environment);
     DeleteFileW(report);InterlockedExchange(&busy,0);return 0;
@@ -60,7 +60,7 @@ static DWORD verified_parent(const wchar_t *launcher){
     wchar_t name[1024];DWORD n=1024;BOOL ok=QueryFullProcessImageNameW(p,0,name,&n)&&!lstrcmpiW(name,launcher);CloseHandle(p);return ok?parent:0;
 }
 static BOOL put(const wchar_t *file,const wchar_t *key,const wchar_t *value){return WritePrivateProfileStringW(L"Job",key,value,file);}
-static BOOL apply_assets(HWND game,int xbox,int startup){
+static BOOL apply_assets(HWND game,int style,int startup){
     if(!root[0]||GetFileAttributesW(helper)==INVALID_FILE_ATTRIBUTES||InterlockedCompareExchange(&busy,0,0))return FALSE;
     LaunchConfig launch;if(!launch_config_load(bin,&launch)||!launch_config_valid(&launch))return FALSE;
     wchar_t job[1200],event[128],number[32],exe[1024],command[2400],report[1200];
@@ -71,7 +71,8 @@ static BOOL apply_assets(HWND game,int xbox,int startup){
     HANDLE f=CreateFileW(job,GENERIC_WRITE,0,NULL,CREATE_NEW,0,NULL);if(f==INVALID_HANDLE_VALUE){CloseHandle(ready);return FALSE;}
     WORD bom=0xfeff;DWORD written;BOOL ok=WriteFile(f,&bom,2,&written,NULL)&&written==2;CloseHandle(f);
     GetModuleFileNameW(NULL,exe,1024);swprintf(number,32,L"%lu",GetCurrentProcessId());
-    ok=ok&&put(job,L"PID",number)&&put(job,L"GameExe",exe)&&put(job,L"LaunchExe",launch.executable)&&put(job,L"LaunchArgs",launch.arguments)&&put(job,L"WorkDir",launch.directory)&&put(job,L"GameRoot",root)&&put(job,L"Theme",startup?(xbox?L"startup_on":L"startup_off"):(xbox?L"xbox":L"playstation"))&&put(job,L"Report",report)&&put(job,L"Event",event);
+    const wchar_t *theme=startup?(style?L"startup_on":L"startup_off"):(style==0?L"xbox":style==1?L"keyboard":L"playstation");
+    ok=ok&&put(job,L"PID",number)&&put(job,L"GameExe",exe)&&put(job,L"LaunchExe",launch.executable)&&put(job,L"LaunchArgs",launch.arguments)&&put(job,L"WorkDir",launch.directory)&&put(job,L"GameRoot",root)&&put(job,L"Theme",theme)&&put(job,L"Report",report)&&put(job,L"Event",event);
     swprintf(number,32,L"%lu",launch.wait_parent?verified_parent(launch.executable):0);ok=ok&&put(job,L"Parent",number);WritePrivateProfileStringW(NULL,NULL,NULL,job);
     STARTUPINFOW si={.cb=sizeof(si)};PROCESS_INFORMATION pi={0};BOOL success=FALSE;
     swprintf(command,2400,L"\"%ls\" --apply-job \"%ls\"",helper,job);
@@ -85,7 +86,17 @@ static BOOL apply_assets(HWND game,int xbox,int startup){
     CloseHandle(ready);if(!success)DeleteFileW(job);return success;
 }
 
-BOOL game_icons_apply(HWND game,int xbox){return apply_assets(game,xbox,0);}
+BOOL game_icons_apply(HWND game,int style){return style>=0&&style<=2?apply_assets(game,style,0):FALSE;}
+BOOL game_icons_edit_bindings(HWND game){
+    if(!root[0]||GetFileAttributesW(helper)==INVALID_FILE_ATTRIBUTES)return FALSE;
+    wchar_t command[2400];swprintf(command,2400,L"\"%ls\" --edit-bindings --game-dir \"%ls\"",helper,root);
+    STARTUPINFOW si={.cb=sizeof(si)};PROCESS_INFORMATION pi={0};
+    wchar_t *environment=icons_process_environment();
+    BOOL started=environment&&CreateProcessW(helper,command,NULL,NULL,FALSE,CREATE_UNICODE_ENVIRONMENT,environment,bin,&si,&pi);
+    if(environment)HeapFree(GetProcessHeap(),0,environment);
+    if(started){CloseHandle(pi.hThread);CloseHandle(pi.hProcess);ShowWindow(game,SW_MINIMIZE);}
+    return started;
+}
 BOOL startup_assets_apply(HWND game,int enabled){return apply_assets(game,enabled,1);}
 int startup_assets_status(wchar_t *message,size_t count){AcquireSRWLockShared(&guard);int value=startup_state;if(message&&count)lstrcpynW(message,startup_reason,(int)count);ReleaseSRWLockShared(&guard);return value;}
 void startup_assets_check(void){

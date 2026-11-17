@@ -282,6 +282,7 @@ namespace UFC6OverlaySetup {
         [STAThread] public static int Main(string[] args) {
             try {
                 if (args.Length == 2 && args[0] == "--self-test") { SelfTests.Run(args[1]); return 0; }
+                if (args.Length == 2 && args[0] == "--install") { Bundled().Apply(args[1],false); return 0; }
                 Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
                 var manager = Bundled();
                 using (var form = new SetupForm(manager)) {

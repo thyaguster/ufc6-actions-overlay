@@ -27,6 +27,7 @@
 #include "live_cheats.h"
 #include "career_cheats.h"
 #include "game_icons.h"
+#include "icons_process_env.h"
 #include "save_backups.h"
 #include "overlay_version.h"
 #include "game_version.h"
@@ -48,6 +49,10 @@
 static StartupOptions startup_options;
 static InstantReplayGate instant_replay_gate;
 static ULONGLONG progression_notice_retry_tick;
+static ULONGLONG progression_notice_trace_tick;
+static unsigned long progression_notice_last_calls;
+static int progression_notice_last_state;
+static const char *progression_notice_last_error;
 #ifndef QUIT_MENU_TEST
 #include "engine_fingerprint.h"
 #endif
@@ -56,6 +61,7 @@ static ULONGLONG progression_notice_retry_tick;
 #define WM_MENU_TOGGLE (WM_APP + 41)
 #define WM_SCREENSHOT_READY (WM_APP + 42)
 #define WM_BINDING_ACTION (WM_APP + 43)
+#define WM_FIGHT_REPORT_READY (WM_APP + 44)
 #define BUTTON_RVA 0x126f040
 #define AXIS_RVA 0x126f270
 #define DISCONNECT_RVA 0x126ef60
@@ -92,6 +98,16 @@ static unsigned char test_keys[256];
 static HINSTANCE instance;
 static HWND game_window, overlay;
 static DWORD ui_thread;
+static volatile LONG fight_report_busy;
+static int fight_report_ok;
+static wchar_t fight_report_message[120];
+static wchar_t fight_report_last_status[120];
+static void log_line(const char *line);
+static int auto_report_armed=1;
+static volatile LONG auto_report_saved;
+static volatile LONG auto_result_saved;
+static wchar_t auto_result_path[MAX_PATH];
+static ULONGLONG auto_report_finished_at,auto_report_retry_at,next_auto_state_poll;
 static HFONT font_title, font_body, font_small, font_main, font_settings, font_stat_label, font_stat_value;
 static HFONT font_sets[3][5];static __thread int frame_font_index;
 static uint64_t toast_until;
@@ -146,6 +162,111 @@ static int engine_profile;
 
 static void status(const wchar_t *message) {
     EnterCriticalSection(&lock);lstrcpynW(status_text,message,120);status_until=GetTickCount64()+5000;toast_until=GetTickCount64()+3000;LeaveCriticalSection(&lock);
+}
+
+/* The full stats response is scanned by a child helper. The overlay's UI and
+   Vulkan present path never wait for game-memory enumeration or JSON output. */
+static void launch_fight_report_upload(const wchar_t *helper,const wchar_t *path){
+    if(!path||!path[0]||GetFileAttributesW(helper)==INVALID_FILE_ATTRIBUTES)return;
+    wchar_t url[LOBBY_URL_LENGTH],command[LAUNCH_PATH+MAX_PATH+LOBBY_URL_LENGTH+100];
+    GetPrivateProfileStringW(L"Menu",L"LobbyServerURL",L"https://parsectagon.cc",url,LOBBY_URL_LENGTH,settings_path);
+    if(swprintf(command,sizeof(command)/sizeof(command[0]),
+                L"\"%ls\" --upload-fight-report \"%ls\" --lobby-url \"%ls\"",helper,path,url)<0)return;
+    STARTUPINFOW si={.cb=sizeof(si)};PROCESS_INFORMATION pi={0};
+    wchar_t *environment=icons_process_environment();
+    if(environment&&CreateProcessW(helper,command,NULL,NULL,FALSE,CREATE_NO_WINDOW|CREATE_UNICODE_ENVIRONMENT,
+                                   environment,performance_bin,&si,&pi)){
+        CloseHandle(pi.hThread);CloseHandle(pi.hProcess);
+    }else log_line("Fight report upload helper could not start; local report remains saved.");
+    if(environment)HeapFree(GetProcessHeap(),0,environment);
+}
+static void launch_lobby_account(const wchar_t *operation){
+#ifdef QUIT_MENU_TEST
+    if(test_mode){status(L"Test account action requested; no browser or key changed.");return;}
+#endif
+    wchar_t helper[LAUNCH_PATH+40],url[LOBBY_URL_LENGTH],command[LAUNCH_PATH+LOBBY_URL_LENGTH+120];
+    swprintf(helper,LAUNCH_PATH+40,L"%ls\\ufc6_menu_icons.exe",performance_bin);
+    if(GetFileAttributesW(helper)==INVALID_FILE_ATTRIBUTES){status(L"Account helper is missing. Reinstall the overlay.");return;}
+    GetPrivateProfileStringW(L"Menu",L"LobbyServerURL",L"https://parsectagon.cc",url,LOBBY_URL_LENGTH,settings_path);
+    if(swprintf(command,sizeof(command)/sizeof(command[0]),L"\"%ls\" %ls --lobby-url \"%ls\"",helper,operation,url)<0)return;
+    STARTUPINFOW si={.cb=sizeof(si)};PROCESS_INFORMATION pi={0};
+    if(CreateProcessW(helper,command,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,performance_bin,&si,&pi)){
+        CloseHandle(pi.hThread);CloseHandle(pi.hProcess);
+        lobby_bridge_refresh();
+    }else status(L"Could not start Parsectagon account setup.");
+}
+static DWORD WINAPI fight_report_worker(void *unused){
+    int automatic=(intptr_t)unused!=0;
+    ULONGLONG started=GetTickCount64();
+    wchar_t helper[LAUNCH_PATH+40],temp[MAX_PATH],report[MAX_PATH];
+    wchar_t command[LAUNCH_PATH+MAX_PATH+LOBBY_URL_LENGTH+400],lobby_upload_url[LOBBY_URL_LENGTH];
+    swprintf(helper,LAUNCH_PATH+40,L"%ls\\ufc6_menu_icons.exe",performance_bin);
+    GetPrivateProfileStringW(L"Menu",L"LobbyServerURL",L"https://parsectagon.cc",
+                             lobby_upload_url,LOBBY_URL_LENGTH,settings_path);
+    fight_report_ok=0;
+    lstrcpyW(fight_report_message,L"Could not start the fight-report helper.");
+    const wchar_t *version=installed_game_version.known?installed_game_version.label:L"unknown";
+    if(automatic&&!InterlockedCompareExchange(&auto_result_saved,0,0)){
+        wchar_t result_error[160];
+        ULONGLONG result_started=GetTickCount64();
+        if(fight_report_export_result(version,engine_profile==3,auto_result_path,MAX_PATH,
+                                      result_error,160)){
+            InterlockedExchange(&auto_result_saved,1);
+            status(L"Fight result saved; collecting full statistics...");
+            char timing[210];
+            snprintf(timing,sizeof(timing),
+                     "Automatic fight result: saved, native_elapsed_ms=%llu, finish_observed_to_result_ms=%llu.",
+                     (unsigned long long)(GetTickCount64()-result_started),
+                     (unsigned long long)(GetTickCount64()-auto_report_finished_at));
+            log_line(timing);
+            launch_fight_report_upload(helper,auto_result_path);
+        }else log_line("Automatic fight result: not ready; complete capture will still be attempted.");
+    }
+    if(GetFileAttributesW(helper)!=INVALID_FILE_ATTRIBUTES&&GetTempPathW(MAX_PATH,temp)&&
+       GetTempFileNameW(temp,L"u6r",0,report)){
+        if(automatic&&InterlockedCompareExchange(&auto_result_saved,0,0))
+            swprintf(command,sizeof(command)/sizeof(command[0]),
+                     L"\"%ls\" --export-fight-report --auto-fight-report --game-version \"%ls\" --report \"%ls\" --preliminary-report \"%ls\" --lobby-url \"%ls\"",
+                     helper,version,report,auto_result_path,lobby_upload_url);
+        else
+            swprintf(command,sizeof(command)/sizeof(command[0]),
+                     L"\"%ls\" --export-fight-report %ls--game-version \"%ls\" --report \"%ls\"",
+                     helper,automatic?L"--auto-fight-report ":L"",version,report);
+        STARTUPINFOW si={.cb=sizeof(si)};PROCESS_INFORMATION pi={0};
+        wchar_t *environment=icons_process_environment();
+        if(environment&&CreateProcessW(helper,command,NULL,NULL,FALSE,CREATE_NO_WINDOW|CREATE_UNICODE_ENVIRONMENT,
+                                       environment,performance_bin,&si,&pi)){
+            CloseHandle(pi.hThread);
+            DWORD waited=WaitForSingleObject(pi.hProcess,60000);
+            DWORD state=(DWORD)GetPrivateProfileIntW(L"FightReport",L"State",0,report);
+            if(waited==WAIT_OBJECT_0&&state==2){
+                fight_report_ok=1;
+                lstrcpyW(fight_report_message,L"Complete report saved in Documents\\Parsectagon\\Fight Reports.");
+            }else{
+                GetPrivateProfileStringW(L"FightReport",L"Message",L"Complete report could not be captured.",
+                                         fight_report_message,120,report);
+            }
+            CloseHandle(pi.hProcess);
+        }
+        if(environment)HeapFree(GetProcessHeap(),0,environment);
+        DeleteFileW(report);
+    }
+    InterlockedExchange(&fight_report_busy,0);
+    if(automatic){
+        if(fight_report_ok){
+            InterlockedExchange(&auto_report_saved,1);
+            swprintf(fight_report_message,120,L"Fight report saved automatically in %llu s.",
+                     (unsigned long long)((GetTickCount64()-started+500)/1000));
+        }else auto_report_retry_at=GetTickCount64()+15000;
+        char timing[200];
+        ULONGLONG finished=auto_report_finished_at;
+        snprintf(timing,sizeof(timing),"Automatic fight report: %s, helper_elapsed_ms=%llu, finish_observed_to_result_ms=%llu.",
+                 fight_report_ok?"saved":"retry pending",(unsigned long long)(GetTickCount64()-started),
+                 (unsigned long long)(finished?GetTickCount64()-finished:0));
+        log_line(timing);
+    }
+    if(!automatic||fight_report_ok)PostThreadMessageW(ui_thread,WM_FIGHT_REPORT_READY,(WPARAM)fight_report_ok,0);
+    return 0;
 }
 
 static int foreground(void);
@@ -337,7 +458,42 @@ static void reset_menu_owner(void){
 }
 static int foreground(void) {
     HWND f = GetForegroundWindow();
-    return f && (f == game_window || f == overlay);
+    if(!f)return 0;
+    if(f==game_window||f==overlay)return 1;
+    DWORD pid=0;GetWindowThreadProcessId(f,&pid);
+    return pid==GetCurrentProcessId();
+}
+/* Sample the game's presented frame. Desktop GetPixel misses exclusive
+ * fullscreen frames and only saw the Online underline after minimizing. */
+static volatile LONG online_frame_selected=-1,online_frame_tick;
+static volatile LONG online_frame_logged;
+__declspec(dllexport) BOOL Ufc6OnlineTabProbeRequest(void){
+    if(!game_window||!IsWindowVisible(game_window)||IsIconic(game_window))return FALSE;
+    EnterCriticalSection(&lock);int needed=!menu.visible&&!menu.draining;LeaveCriticalSection(&lock);
+    return needed;
+}
+__declspec(dllexport) void Ufc6OnlineTabFrame(const void *pixels,BOOL rgba){
+    if(!pixels)return;
+    if(!InterlockedExchange(&online_frame_logged,1))log_line("Online tab Vulkan frame probe active.");
+    const unsigned char *p=pixels;int gold=0;
+    for(int i=0;i<7;++i){
+        int red=p[i*4+(rgba?0:2)],green=p[i*4+1],blue=p[i*4+(rgba?2:0)];
+        if(red>160&&green>65&&blue<100&&red>green+50&&green>blue+25)++gold;
+    }
+    InterlockedExchange(&online_frame_selected,gold>=5);
+    InterlockedExchange(&online_frame_tick,(LONG)GetTickCount());
+}
+static int online_tab_selected(void){
+    if(!game_window||!IsWindowVisible(game_window)||IsIconic(game_window))return -1;
+    LONG age=(LONG)GetTickCount()-InterlockedCompareExchange(&online_frame_tick,0,0);
+    if(age<0||age>1200)return -1;
+    return InterlockedCompareExchange(&online_frame_selected,0,0);
+}
+static void log_online_focus(const char *phase){
+    HWND f=GetForegroundWindow();DWORD pid=0;wchar_t cls[80]=L"";
+    if(f){GetWindowThreadProcessId(f,&pid);GetClassNameW(f,cls,80);}
+    char line[200];snprintf(line,sizeof(line),"Online takeover %s: game=%p foreground=%p pid=%lu class=%ls",phase,(void*)game_window,(void*)f,(unsigned long)pid,cls);
+    log_line(line);
 }
 /* All callers hold lock, including calls into the original controller mutex. */
 static void neutralize(void) {
@@ -371,12 +527,24 @@ static void lobby_rebuild_display(void){
     if(menu.selection>=menu_rows(&menu))menu.selection=menu_rows(&menu)-1;
 }
 static void action(int result) {
+    if(result==MENU_STREAM_PRESET_APPLY){
+        apply_parsec_preset(menu.selection);
+        status(menu.selection==PARSEC_PRESET_RESTORE?L"Parsec settings restored from backup":L"Parsec streaming preset applied to config");
+        return;
+    }
+    if(result==MENU_HOST_ROOM_PUBLISH){
+        apply_parsec_preset(menu.host_preset);
+        menu.page=PAGE_LOBBY;
+        menu.selection=0;
+        status(menu.host_mode?L"Ranked room published! Waiting for challengers...":L"Casual room published! Waiting for challengers...");
+        return;
+    }
     if(result==MENU_LOBBY_FILTER_CHANGED){lobby_rebuild_display();return;}
     if(result==MENU_LOBBY_OPEN_ROOM){
         lobby_open_url[0]=0;
         int selected=menu.selection;
         if(selected>=4&&selected<4+lobby_display.room_count)lobby_room_url(lobby_view.url,lobby_display.rooms[selected-4].id,lobby_open_url,sizeof(lobby_open_url)/sizeof(lobby_open_url[0]));
-        else if(selected==0){wchar_t probe[LOBBY_URL_LENGTH+100];if(lobby_room_url(lobby_view.url,L"probe",probe,sizeof(probe)/sizeof(probe[0])))lstrcpynW(lobby_open_url,lobby_view.url,sizeof(lobby_open_url)/sizeof(lobby_open_url[0]));}
+        else if(selected==0||menu.page==PAGE_LOBBY_HOME){wchar_t probe[LOBBY_URL_LENGTH+100];if(lobby_room_url(lobby_view.url,L"probe",probe,sizeof(probe)/sizeof(probe[0])))lstrcpynW(lobby_open_url,lobby_view.url,sizeof(lobby_open_url)/sizeof(lobby_open_url[0]));}
     }
     if(result==MENU_OPEN&&!renderer_input_ready()){
         menu.visible=0;menu.draining=0;menu.armed=0;reset_menu_owner();
@@ -389,7 +557,7 @@ static void action(int result) {
     if(result==MENU_ACCESS_CHANGED)reset_menu_owner();
     if (result != MENU_NONE) PostThreadMessageW(ui_thread, WM_MENU_ACTION, result, 0);
 }
-static void navigate_device(int index,uint32_t pressed){
+static void navigate_device(int index,uint32_t pressed,int stick){
     const uint32_t navigation[]={PAD_B,PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_A};
     if(wait_access_release||!native_allowed(&devices[index])||launcher_setup_active||input_redirected()||!menu.visible||!menu.armed||menu.capturing||!(pressed&(PAD_B|PAD_UP|PAD_DOWN|PAD_LEFT|PAD_RIGHT|PAD_A)))return;
     if(raw_navigation){
@@ -401,7 +569,7 @@ static void navigate_device(int index,uint32_t pressed){
     }
     if(menu_device<0)menu_device=index;
     if(menu_device!=index)return;
-    for(unsigned i=0;i<sizeof(navigation)/sizeof(navigation[0]);++i)if(pressed&navigation[i]){action(menu_button(&menu,navigation[i],1));break;}
+    for(unsigned i=0;i<sizeof(navigation)/sizeof(navigation[0]);++i)if(pressed&navigation[i]){action(stick?menu_lobby_stick(&menu,navigation[i]):menu_button(&menu,navigation[i],1));break;}
 }
 static void hooked_button(void *controller, int id, uint32_t button, bool down) {
     EnterCriticalSection(&lock);
@@ -410,7 +578,11 @@ static void hooked_button(void *controller, int id, uint32_t button, bool down) 
         uint32_t before = d->buttons;
         d->buttons = down ? before | button : before & ~button;
         int index = (int)(d - devices);
-        if(down)navigate_device(index,button&~before);
+        if(down&&menu.visible&&menu.online_takeover&&(button&(PAD_LB|PAD_RB))){
+            action(menu_close(&menu,MENU_RESUME));
+            menu.draining=0;
+        }
+        if(down)navigate_device(index,button&~before,0);
     }
     if (!menu.visible && !menu.draining && !photo_mode_blocks_input())
         original_button(controller, id, button, down);
@@ -421,7 +593,7 @@ static void hooked_axis(void *controller, int id, int axis, int value) {
     InputDevice *d = device_for(controller, id);
     if (d && axis >= 0 && axis < 6){
         uint32_t before=native_menu_stick(d->axes[0],d->axes[1]);d->axes[axis]=value;
-        if(axis<2)navigate_device((int)(d-devices),native_menu_stick(d->axes[0],d->axes[1])&~before);
+        if(axis<2)navigate_device((int)(d-devices),native_menu_stick(d->axes[0],d->axes[1])&~before,1);
     }
     if (!menu.visible && !menu.draining && !photo_mode_blocks_input())
         original_axis(controller, id, axis, value);
@@ -637,26 +809,67 @@ static void lobby_rank_badge(HDC dc,RECT row,const LobbyRoom *room,int focused){
     arrow_mark(dc,row.right-18,y,1,focused?paint_theme.accent:paint_theme.muted);
 }
 #include "shortcut_badges.h"
-static void row_geometry(int page,int index,int first,int room_count,int *top,int *height) {
-    if(page==PAGE_LOBBY){int visible=room_count<4?room_count:4;
-        *top=index==0?24:index<=3?248:index>=room_count+4?(room_count?328+((visible+1)/2-1)*226+214:488)+16:328+((index-first)/2)*226;
+static void row_geometry(int page,int index,int first,int room_count,int columns,int visible,int takeover,int *top,int *height) {
+    if(page==PAGE_LOBBY){
+        int bottom=takeover?328+226+214:room_count?328+((visible+columns-1)/columns-1)*226+214:488;
+        *top=index==0?24:index<=3?248:index>=room_count+4?bottom+16:328+((index-first)/columns)*226;
         *height=index>=4&&index<room_count+4?214:index>=1&&index<=3?52:42;return;}
     int global_index=index;if(menu_scroll_page(page))index-=first;
-    *top=page==PAGE_AVATAR_REPAIR||page==PAGE_AVATAR_ALWAYS?192+38*index:page==PAGE_WELCOME?379:page==PAGE_CHEATS?84+32*index+(first<=3&&global_index>=3?24:0):page==PAGE_MAIN?84+27*index+(index>=MAIN_REBOOT?10:0):(page==PAGE_LOBBY||page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?86+32*index:page==PAGE_BACKUPS?104+40*index:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?182+48*index:100+56*index;
-    *height=page==PAGE_AVATAR_REPAIR||page==PAGE_AVATAR_ALWAYS?36:page==PAGE_WELCOME?34:page==PAGE_BACKUPS?34:page==PAGE_CHEATS?30:page==PAGE_MAIN?25:(page==PAGE_LOBBY||page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?30:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?42:50;
+    *top=page==PAGE_AVATAR_REPAIR||page==PAGE_AVATAR_ALWAYS?192+38*index:page==PAGE_WELCOME?379:page==PAGE_CHEATS?84+32*index+(first<=3&&global_index>=3?24:0):page==PAGE_MAIN?84+27*index+(index>=MAIN_REBOOT?10:0):(page==PAGE_GAME_ICONS||page==PAGE_LOBBY||page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?86+32*index:page==PAGE_BACKUPS?104+40*index:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?182+48*index:100+56*index;
+    *height=page==PAGE_AVATAR_REPAIR||page==PAGE_AVATAR_ALWAYS?36:page==PAGE_WELCOME?34:page==PAGE_BACKUPS?34:page==PAGE_CHEATS?30:page==PAGE_MAIN?25:(page==PAGE_GAME_ICONS||page==PAGE_LOBBY||page==PAGE_STARTUP||menu_setting_page(page)||page==PAGE_PHOTO||page==PAGE_PHOTO_CONTROLS||page==PAGE_PHOTO_EFFECTS||page==PAGE_PHOTO_WATERMARK||page==PAGE_PERFORMANCE||page==PAGE_SETTINGS_HOME||page==PAGE_KEYBINDS||page==PAGE_BINDING||page==PAGE_THEME)?30:(page==PAGE_PERFORMANCE_RESTART||page==PAGE_PERFORMANCE_DISCARD||page==PAGE_SCREENSHOT||page==PAGE_RESET||page==PAGE_CAREER_ADD||page==PAGE_STARTUP_CONFIRM||page==PAGE_GAME_ICONS_CONFIRM||page==PAGE_QUIT)?42:50;
 }
 static RECT lobby_item_rect(const MenuState *s,int index,int first){
-    int top,height;row_geometry(PAGE_LOBBY,index,first,s->lobby_room_count,&top,&height);
-    if(index==0)return (RECT){610,top,804,top+height};
-    if(index>=1&&index<=3){int left=36+(index-1)*260;return (RECT){left,top,left+248,top+height};}
-    if(index>=s->lobby_room_count+4)return index==s->lobby_room_count+4?(RECT){36,top,194,top+height}:index==s->lobby_room_count+5?(RECT){208,top,456,top+height}:(RECT){470,top,588,top+height};
-    int column=(index-first)&1,left=column?427:36;
-    return (RECT){left,top,left+377,top+height};
+    int top,height,columns=lobby_grid_columns(s);row_geometry(PAGE_LOBBY,index,first,s->lobby_room_count,columns,lobby_visible_rooms(s),s->online_takeover,&top,&height);
+    int right=(int)menu_canvas_width(s)-36,span=right-36;
+    if(index==0)return (RECT){right-194,top,right,top+height};
+    if(index>=1&&index<=3){int left=36+(index-1)*(span+12)/3;return (RECT){left,top,index==3?right:left+(span-24)/3,top+height};}
+    if(index>=s->lobby_room_count+4){int n=index-s->lobby_room_count-4,left=36+n*(span+10)/4;return (RECT){left,top,n==3?right:left+(span-30)/4,top+height};}
+    int column=(index-first)%columns,gap=14,card_width=(span-gap*(columns-1))/columns,left=36+column*(card_width+gap);
+    return (RECT){left,top,left+card_width,top+height};
 }
-static int lobby_item_visible(const MenuState *s,int index,int first){return index<=3||index>=s->lobby_room_count+4||(index>=first&&index<first+4);}
+static RECT lobby_home_item_rect(const MenuState *s,int index){
+    int right=(int)menu_canvas_width(s)-36,span=right-36;
+    if(index<4){
+        int n=index/2;
+        int top=n?488:214;
+        int card_pad=28;
+        int inner_left=36+card_pad;
+        int inner_right=right-card_pad;
+        int inner_span=inner_right-inner_left;
+        int gap=20;
+        int half=(inner_span-gap)/2;
+        int left=inner_left+(index&1)*(half+gap);
+        return (RECT){left,top+138,left+half,top+138+54};
+    }
+    int btn_gap=14,btn_w=(span-3*btn_gap)/4,col=index-4;
+    int left=36+col*(btn_w+btn_gap);
+    int width=(col==3)?(right-left):btn_w;
+    return (RECT){left,822,left+width,872};
+}
+static RECT stream_presets_item_rect(const MenuState *s,int index){
+    int right=(int)menu_canvas_width(s)-36;
+    if(index<4){
+        int top=210+index*122;
+        return (RECT){36,top,right,top+104};
+    }
+    return (RECT){36,718,right,718+48};
+}
+static RECT host_fight_item_rect(const MenuState *s,int index){
+    int right=(int)menu_canvas_width(s)-36;
+    if(index<5){
+        int top=200+index*82;
+        return (RECT){36,top,right,top+70};
+    }
+    if(index==5)return (RECT){36,628,right,628+56};
+    return (RECT){36,698,right,698+48};
+}
+static int lobby_item_visible(const MenuState *s,int index,int first){return index<=3||index>=s->lobby_room_count+4||(index>=first&&index<first+lobby_visible_rooms(s));}
 /* The production menu is painted into the Vulkan frame, not the hidden HWND. */
 static int lobby_hit_logical(int x,int y){
-    if(!menu.visible||menu.page!=PAGE_LOBBY)return -1;
+    if(!menu.visible||(menu.page!=PAGE_LOBBY&&menu.page!=PAGE_LOBBY_HOME&&menu.page!=PAGE_STREAM_PRESETS&&menu.page!=PAGE_HOST_FIGHT))return -1;
+    if(menu.page==PAGE_LOBBY_HOME){for(int i=0;i<8;++i){RECT box=lobby_home_item_rect(&menu,i);if(x>=box.left&&x<box.right&&y>=box.top&&y<box.bottom)return i;}return -1;}
+    if(menu.page==PAGE_STREAM_PRESETS){for(int i=0;i<5;++i){RECT box=stream_presets_item_rect(&menu,i);if(x>=box.left&&x<box.right&&y>=box.top&&y<box.bottom)return i;}return -1;}
+    if(menu.page==PAGE_HOST_FIGHT){for(int i=0;i<7;++i){RECT box=host_fight_item_rect(&menu,i);if(x>=box.left&&x<box.right&&y>=box.top&&y<box.bottom)return i;}return -1;}
     int first=menu_first_row(&menu);
     for(int i=0;i<menu_rows(&menu);++i){
         if(!lobby_item_visible(&menu,i,first))continue;
@@ -667,13 +880,20 @@ static int lobby_hit_logical(int x,int y){
 }
 static int lobby_click_logical(int x,int y){int hit=lobby_hit_logical(x,y);if(hit<0||!menu.armed)return 0;menu.selection=hit;action(menu_button(&menu,PAD_A,1));return 1;}
 static void lobby_pointer_screen(POINT cursor,int clicked){
-    if(!game_window||!menu.visible||menu.page!=PAGE_LOBBY)return;
+    if(!game_window||!menu.visible||(menu.page!=PAGE_LOBBY&&menu.page!=PAGE_LOBBY_HOME&&menu.page!=PAGE_STREAM_PRESETS&&menu.page!=PAGE_HOST_FIGHT))return;
     RECT viewport;if(!GetClientRect(game_window,&viewport))return;
     POINT origin={0,0};if(!ClientToScreen(game_window,&origin))return;
     uint32_t vw=(uint32_t)viewport.right,vh=(uint32_t)viewport.bottom,width,height;
     overlay_extent_for_canvas(menu_scale(&menu),menu_canvas_width(&menu),menu_canvas_height(&menu),vw,vh,&width,&height);
+    if(menu.online_takeover&&vw>160&&vh>160){
+        uint32_t header=vh*115/1440;if(header<72)header=72;
+        width=vw*96/100;if(width>vw-32)width=vw-32;
+        height=(uint32_t)((uint64_t)width*menu_canvas_height(&menu)/menu_canvas_width(&menu));
+        if(height>vh-header-24){width=(uint32_t)((uint64_t)width*(vh-header-24)/height);height=vh-header-24;}
+    }
     if(!width||!height)return;
     int left=origin.x+(int)(vw-width)/2,top=origin.y+(int)(vh-height)/2;
+    if(menu.online_takeover){uint32_t header=vh*115/1440;if(header<72)header=72;top=origin.y+(int)header+12;}
     if(cursor.x<left||cursor.y<top||cursor.x>=left+(int)width||cursor.y>=top+(int)height)return;
     int x=(int)((int64_t)(cursor.x-left)*menu_canvas_width(&menu)/width);
     int y=(int)((int64_t)(cursor.y-top)*menu_canvas_height(&menu)/height);
@@ -703,6 +923,14 @@ static void lobby_brand_draw(HDC dc){
     HDC source=CreateCompatibleDC(dc);if(!source)return;
     HGDIOBJ original=SelectObject(source,bitmap);int mode=SetStretchBltMode(dc,HALFTONE);
     StretchBlt(dc,36,4,328,68,source,0,0,LOBBY_BRAND_WIDTH,LOBBY_BRAND_HEIGHT,SRCCOPY);
+    SetStretchBltMode(dc,mode);SelectObject(source,original);DeleteDC(source);
+}
+static void lobby_brand_mark_draw(HDC dc,int x,int y){
+    HBITMAP bitmap=lobby_brand_bitmap(dc);if(!bitmap)return;
+    HDC source=CreateCompatibleDC(dc);if(!source)return;
+    HGDIOBJ original=SelectObject(source,bitmap);
+    int mode=SetStretchBltMode(dc,HALFTONE);
+    StretchBlt(dc,x,y,23,23,source,0,0,195,204,SRCCOPY);
     SetStretchBltMode(dc,mode);SelectObject(source,original);DeleteDC(source);
 }
 static HBITMAP lobby_poster_bitmap(HDC dc,int kind){
@@ -765,9 +993,9 @@ static void lobby_record_badge(HDC dc,RECT card,const LobbyRoom *room){
 static void lobby_poster_fill(HDC dc,RECT area,COLORREF color){
     HBRUSH brush=CreateSolidBrush(color);FillRect(dc,&area,brush);DeleteObject(brush);
 }
-static void lobby_draw_room_card(HDC dc,RECT card,const LobbyRoom *room,int focused,COLORREF border,COLORREF accent,COLORREF muted,COLORREF text_color){
+static void lobby_draw_room_card(HDC dc,RECT card,const LobbyRoom *room,int focused,COLORREF muted,COLORREF text_color){
     COLORREF rank_color=lobby_rank_color(room),title_color=lobby_title_color(room);
-    rounded_box(dc,card,6,RGB(16,17,20),focused?accent:border);
+    rounded_box(dc,card,6,RGB(16,17,20),focused?RGB(245,109,116):RGB(52,56,66));
     if(focused){RECT line={card.left,card.top+7,card.left+3,card.bottom-7};lobby_poster_fill(dc,line,rank_color);}
     RECT arena={card.left+2,card.top+2,card.right-2,card.top+183};lobby_poster_image(dc,0,arena);
     RECT masthead={card.left+2,card.top+2,card.right-2,card.top+28};lobby_poster_fill(dc,masthead,RGB(10,11,13));
@@ -792,30 +1020,41 @@ static void lobby_draw_room_card(HDC dc,RECT card,const LobbyRoom *room,int focu
     lobby_poster_image(dc,lobby_avatar_kind(room->host_avatar),host_image);
     RECT guest_image={mid+22,card.top+58,card.right-2,card.top+154};
     if(room->guest_present)lobby_poster_image(dc,lobby_avatar_kind(room->guest_avatar),guest_image);
-    else{lobby_poster_fill(dc,guest_image,RGB(25,27,32));
-        lobby_octagon(dc,(guest_image.left+guest_image.right)/2,card.top+95,24,RGB(83,87,97));
-        RECT question={guest_image.left,card.top+71,guest_image.right,card.top+119};
-        text(dc,font_title,L"?",question,RGB(92,97,105),DT_CENTER|DT_VCENTER|DT_SINGLELINE);}
+    else{
+        lobby_poster_fill(dc,guest_image,RGB(18,22,28));
+        RECT open_border={guest_image.left,guest_image.top,guest_image.right,guest_image.bottom};
+        rounded_box(dc,open_border,0,RGB(18,22,28),RGB(42,48,58));
+        RECT guest_role={guest_image.left+6,card.top+64,guest_image.right-6,card.top+84};
+        text(dc,font_stat_label,L"CHALLENGER WANTED",guest_role,RGB(165,170,185),DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+        lobby_octagon(dc,(guest_image.left+guest_image.right)/2,card.top+102,15,RGB(38,44,56));
+        RECT question={guest_image.left,card.top+86,guest_image.right,card.top+118};
+        text(dc,font_main,L"?",question,RGB(180,185,198),DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+        RECT open_band={guest_image.left+14,card.top+124,guest_image.right-14,card.top+146};
+        rounded_box(dc,open_band,4,RGB(20,32,26),RGB(38,92,62));
+        text(dc,font_stat_label,L"● OPEN SPOT",open_band,RGB(130,225,165),DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+    }
     RECT versus={mid-22,card.top+58,mid+22,card.top+154};
-    lobby_poster_fill(dc,versus,RGB(100,35,42));
+    lobby_poster_fill(dc,versus,RGB(28,24,32));
     RECT vs_text={versus.left,versus.top+31,versus.right,versus.bottom-27};
     text(dc,font_main,L"VS",vs_text,text_color,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
     lobby_rank_icon(dc,card.left+24,card.top+76,room,RGB(20,22,26));
     wchar_t rank_label[64];swprintf(rank_label,64,L"%ls · %d RP",room->qualified?room->rank:L"Provisional",room->rating);
     RECT rank_box={card.left+46,card.top+62,mid-24,card.top+91};
     text(dc,font_stat_label,rank_label,rank_box,rank_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
-    RECT host_role={card.left+12,card.top+102,mid-24,card.top+119};
+    RECT host_role={card.left+12,card.top+101,mid-24,card.top+119};
     text(dc,font_stat_label,L"HOST",host_role,rank_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
     wchar_t host_name[64];lstrcpynW(host_name,room->host,64);
     for(wchar_t *p=host_name;*p;++p)*p=(wchar_t)towupper(*p);
     RECT host_label={card.left+11,card.top+117,mid-25,card.top+146};
     text(dc,font_main,host_name,host_label,text_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
-    RECT guest_role={mid+26,card.top+102,card.right-11,card.top+119};
-    text(dc,font_stat_label,room->guest_present?L"CHALLENGER":L"CHALLENGER WANTED",guest_role,RGB(201,194,198),DT_RIGHT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
-    wchar_t guest_name[64];lstrcpynW(guest_name,room->guest_present?room->guest_name:L"OPEN SPOT",64);
-    for(wchar_t *p=guest_name;*p;++p)*p=(wchar_t)towupper(*p);
-    RECT guest_label={mid+26,card.top+117,card.right-11,card.top+146};
-    text(dc,font_main,guest_name,guest_label,text_color,DT_RIGHT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+    if(room->guest_present){
+        RECT guest_role={mid+26,card.top+101,card.right-11,card.top+119};
+        text(dc,font_stat_label,L"CHALLENGER",guest_role,RGB(201,194,198),DT_RIGHT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+        wchar_t guest_name[64];lstrcpynW(guest_name,room->guest_name,64);
+        for(wchar_t *p=guest_name;*p;++p)*p=(wchar_t)towupper(*p);
+        RECT guest_label={mid+26,card.top+117,card.right-11,card.top+146};
+        text(dc,font_main,guest_name,guest_label,text_color,DT_RIGHT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+    }
     RECT rule={card.left+2,card.top+154,card.right-2,card.top+183};lobby_poster_fill(dc,rule,RGB(17,18,21));
     wchar_t bout[48];swprintf(bout,48,L"%ls BOUT",room->mode[0]?room->mode:L"ranked");
     RECT bout_box={card.left+11,card.top+157,card.left+101,card.top+180};
@@ -845,29 +1084,348 @@ static void lobby_age_label(const LobbySnapshot *lobby,unsigned long long now,wc
     else if(elapsed<3600)swprintf(out,capacity,L"%ls %llum ago",action,elapsed/60);
     else swprintf(out,capacity,L"%ls %lluh ago",action,elapsed/3600);
 }
+static COLORREF account_rank_color(const wchar_t *rank){
+    if(!rank||!rank[0])return RGB(251,191,36);
+    if(wcsstr(rank,L"Champ"))return RGB(255,215,0);
+    if(wcsstr(rank,L"Diam"))return RGB(56,189,248);
+    if(wcsstr(rank,L"Plat"))return RGB(45,212,191);
+    if(wcsstr(rank,L"Gold"))return RGB(250,204,21);
+    if(wcsstr(rank,L"Silv"))return RGB(226,232,240);
+    if(wcsstr(rank,L"Bronz"))return RGB(217,119,6);
+    return RGB(251,191,36);
+}
+static void draw_fighter_card(HDC dc,RECT card,const LobbySnapshot *lobby,int compact){
+    const COLORREF surface=RGB(16,18,24),white=RGB(245,246,248),muted=RGB(160,165,176);
+    const COLORREF dark_border=RGB(38,42,54);
+
+    int is_linked=lobby->account_status==2;
+    int is_pending=lobby->account_status==1;
+    int is_error=lobby->account_status<0;
+
+    rounded_box(dc,card,8,surface,dark_border);
+
+    RECT avatar={card.left+8,card.top+8,card.left+52,card.bottom-8};
+    COLORREF av_bg=is_linked?RGB(24,30,42):RGB(20,22,28);
+    COLORREF av_bd=RGB(52,58,72);
+    rounded_box(dc,avatar,6,av_bg,av_bd);
+
+    wchar_t initial[4]={0};
+    if(is_linked&&lobby->account_name[0]){
+        initial[0]=lobby->account_name[0];
+        if(initial[0]>='a'&&initial[0]<='z')initial[0]-=32;
+    }else{
+        lstrcpyW(initial,is_pending?L"?":is_error?L"!":L"U");
+    }
+    RECT av_txt={avatar.left,avatar.top+7,avatar.right,avatar.bottom-7};
+    text(dc,font_main,initial,av_txt,is_linked?white:muted,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+
+    COLORREF dot_color=is_linked?RGB(74,222,128):is_pending?RGB(250,204,21):is_error?RGB(228,69,75):RGB(100,105,115);
+    HBRUSH dot_br=CreateSolidBrush(dot_color);
+    RECT dot={avatar.right-7,avatar.bottom-7,avatar.right-1,avatar.bottom-1};
+    FillRect(dc,&dot,dot_br);
+    DeleteObject(dot_br);
+
+    COLORREF rank_col=is_linked?account_rank_color(lobby->account_rank):muted;
+
+    if(!compact){
+        int text_left=avatar.right+12;
+        int text_right=card.right-120;
+
+        RECT tag_r={text_left,card.top+8,text_right,card.top+26};
+        const wchar_t *tag_str=is_linked?(lobby->account_rating>=1500?L"CHAMPIONSHIP FIGHTER":L"SANCTIONED FIGHTER"):is_pending?L"APPROVAL PENDING":is_error?L"ACCOUNT ERROR":L"UNLINKED FIGHTER";
+        text(dc,font_stat_label,tag_str,tag_r,rank_col,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+
+        RECT name_r={text_left,card.top+25,text_right,card.top+48};
+        wchar_t name_str[80];
+        if(is_linked)lstrcpynW(name_str,lobby->account_name[0]?lobby->account_name:L"Fighter",80);
+        else if(is_pending)swprintf(name_str,80,L"Code: %ls",lobby->account_code[0]?lobby->account_code:L"...");
+        else if(is_error)lstrcpyW(name_str,L"Connection Issue");
+        else lstrcpyW(name_str,L"Guest Octagon");
+        text(dc,font_small,name_str,name_r,white,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+
+        RECT meta_r={text_left,card.top+47,text_right,card.top+64};
+        wchar_t meta_str[80];
+        if(is_linked){
+            const wchar_t *rname=lobby->account_rank[0]?lobby->account_rank:L"Provisional";
+            swprintf(meta_str,80,L"%ls · %d RP · Parsectagon Ladder",rname,lobby->account_rating);
+        }else if(is_pending){
+            lstrcpyW(meta_str,L"Approve link in your browser");
+        }else if(is_error){
+            lstrcpynW(meta_str,lobby->account_error[0]?lobby->account_error:L"Check network connection",80);
+        }else{
+            lstrcpyW(meta_str,L"Open Settings to link Parsectagon account");
+        }
+        text(dc,font_stat_label,meta_str,meta_r,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+
+        RECT pill={card.right-116,card.top+14,card.right-10,card.bottom-14};
+        COLORREF pill_bg=RGB(22,25,34);
+        COLORREF pill_bd=is_linked?rank_col:RGB(55,60,75);
+        rounded_box(dc,pill,6,pill_bg,pill_bd);
+
+        wchar_t rank_display[32];
+        if(is_linked){
+            lstrcpynW(rank_display,lobby->account_rank[0]?lobby->account_rank:L"PROVISIONAL",32);
+            for(int c=0;rank_display[c];++c){
+                if(rank_display[c]>='a'&&rank_display[c]<='z')rank_display[c]-=32;
+            }
+        }else{
+            lstrcpyW(rank_display,is_pending?L"WAITING":is_error?L"RETRY":L"UNLINKED");
+        }
+        RECT pill_txt={pill.left+4,pill.top+7,pill.right-4,pill.bottom-7};
+        text(dc,font_stat_label,rank_display,pill_txt,is_linked?rank_col:RGB(180,185,195),DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+    }else{
+        int text_left=avatar.right+10;
+        int text_right=card.right-8;
+
+        RECT name_r={text_left,card.top+9,text_right,card.top+36};
+        const wchar_t *name_str=is_linked?(lobby->account_name[0]?lobby->account_name:L"Fighter"):is_pending?L"Approval pending":L"Guest Octagon";
+        text(dc,font_small,name_str,name_r,white,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+
+        RECT meta_r={text_left,card.top+37,text_right,card.top+57};
+        wchar_t meta_str[80];
+        if(is_linked){
+            const wchar_t *rname=lobby->account_rank[0]?lobby->account_rank:L"Provisional";
+            const wchar_t *icon=wcsstr(rname,L"Champ")?L"🏆 ":wcsstr(rname,L"Diam")?L"💎 ":wcsstr(rname,L"Plat")?L"⚡ ":wcsstr(rname,L"Gold")?L"🎖 ":wcsstr(rname,L"Silv")?L"🛡 ":wcsstr(rname,L"Bronz")?L"🥉 ":L"⚡ ";
+            swprintf(meta_str,80,L"%ls%ls · %d RP",icon,rname,lobby->account_rating);
+        }else if(is_pending){
+            lstrcpyW(meta_str,L"Browser code ready");
+        }else{
+            lstrcpyW(meta_str,L"Not linked · Settings");
+        }
+        text(dc,font_stat_label,meta_str,meta_r,is_linked?rank_col:muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+    }
+}
+static void draw_lobby_home(HDC dc,RECT canvas,const MenuState *state,const LobbySnapshot *lobby){
+    const COLORREF white=RGB(245,246,248),muted=RGB(160,165,176),red=RGB(228,69,75),border=RGB(52,56,66),surface=RGB(14,16,21);
+    const COLORREF gold=RGB(234,196,123),gold_border=RGB(180,140,55);
+    HBRUSH black=CreateSolidBrush(RGB(7,8,11));FillRect(dc,&canvas,black);DeleteObject(black);
+    lobby_brand_draw(dc);
+    RECT line={36,75,canvas.right-36,76};HBRUSH rule=CreateSolidBrush(RGB(50,54,64));FillRect(dc,&line,rule);DeleteObject(rule);
+
+    RECT account={canvas.right-480,8,canvas.right-36,70};
+    draw_fighter_card(dc,account,lobby,0);
+
+    RECT kicker={36,88,canvas.right-450,112},title={36,112,canvas.right-450,158},hint={36,158,canvas.right-36,188};
+    text(dc,font_small,L"PARSECTAGON  ·  ONLINE MATCHMAKING",kicker,red,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    text(dc,font_title,L"Step into the octagon.",title,white,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    text(dc,font_small,L"Peer-to-peer fights powered by Parsec. Select a division or tune stream latency presets.",hint,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+
+    const wchar_t *tags[]={L"CASUAL DIVISION  ·  QUICK PLAY",L"COMPETITIVE DIVISION  ·  RANKED RP"};
+    const wchar_t *names[]={L"CASUAL OCTAGON",L"CHAMPIONSHIP RANKED"};
+    const wchar_t *descriptions[]={
+        L"Exhibition bouts and open sparring. No rank points at risk — pure fight fun.",
+        L"Official sanctioned bouts with linked Parsectagon fighters. Earn or risk RP on the ladder."
+    };
+    for(int n=0;n<2;++n){
+        int top=n?488:214;
+        RECT card={36,top,canvas.right-36,top+254};
+        COLORREF card_border=n?gold_border:border;
+        rounded_box(dc,card,10,surface,card_border);
+
+        RECT tag_rect={card.left+28,top+12,card.right-28,top+32};
+        text(dc,font_stat_label,tags[n],tag_rect,n?gold:red,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+
+        RECT label={card.left+28,top+32,card.right-28,top+80},description={card.left+28,top+80,card.right-28,top+112};
+        text(dc,font_title,names[n],label,n?RGB(255,225,160):white,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        text(dc,font_small,descriptions[n],description,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+
+        for(int action_index=0;action_index<2;++action_index){
+            int index=n*2+action_index;
+            RECT button=lobby_home_item_rect(state,index);
+            int selected=state->selection==index;
+            COLORREF btn_bg=selected?(n?RGB(140,105,32):RGB(150,34,40)):RGB(24,27,34);
+            COLORREF btn_bd=selected?(n?gold:red):RGB(56,60,72);
+            rounded_box(dc,button,8,btn_bg,btn_bd);
+            RECT caption={button.left+16,button.top+8,button.right-16,button.bottom-8};
+            const wchar_t *btn_text=n ? (action_index?L"⚡  BROWSE RANKED ROOMS":L"🏆  HOST RANKED MATCH")
+                                      : (action_index?L"⚡  BROWSE CASUAL ROOMS":L"⚔  HOST CASUAL FIGHT");
+            text(dc,font_main,btn_text,caption,white,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+        }
+    }
+
+    const wchar_t *last[]={L"🌐  BROWSE ALL ROOMS",L"⚡  STREAM PRESETS",L"⚙  SETTINGS",L"✕  RETURN TO GAME"};
+    for(int i=4;i<8;++i){
+        RECT button=lobby_home_item_rect(state,i);
+        int selected=state->selection==i;
+        COLORREF btn_bg=selected?RGB(120,30,36):surface;
+        COLORREF btn_bd=selected?red:border;
+        rounded_box(dc,button,7,btn_bg,btn_bd);
+        RECT caption={button.left+8,button.top+6,button.right-8,button.bottom-6};
+        text(dc,font_small,last[i-4],caption,selected?white:RGB(210,214,222),DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+    }
+
+    int ps=state->playstation_icons,fy=884;
+    dpad_icon(dc,44,fy,ps);
+    RECT select_r={80,fy+4,180,fy+28};text(dc,font_small,L"Navigate",select_r,RGB(187,196,209),DT_LEFT|DT_SINGLELINE);
+    button_icon(dc,190,fy,0,ps);
+    RECT confirm_r={226,fy+4,340,fy+28};text(dc,font_small,L"Select / Open",confirm_r,RGB(187,196,209),DT_LEFT|DT_SINGLELINE);
+    button_icon(dc,350,fy,1,ps);
+    RECT back_r={386,fy+4,510,fy+28};text(dc,font_small,L"Return to Game",back_r,RGB(187,196,209),DT_LEFT|DT_SINGLELINE);
+    RECT kb_r={canvas.right-280,fy+4,canvas.right-36,fy+28};text(dc,font_stat_label,L"KEYBOARD: ARROWS / ENTER / ESC",kb_r,RGB(140,145,158),DT_RIGHT|DT_SINGLELINE);
+}
+
+static void draw_stream_presets(HDC dc,RECT canvas,const MenuState *state){
+    const COLORREF white=RGB(245,246,248),muted=RGB(160,165,176),red=RGB(228,69,75),border=RGB(52,56,66),surface=RGB(14,16,21);
+    const COLORREF gold=RGB(234,196,123);
+    HBRUSH black=CreateSolidBrush(RGB(7,8,11));FillRect(dc,&canvas,black);DeleteObject(black);
+    lobby_brand_draw(dc);
+    RECT line={36,75,canvas.right-36,76};HBRUSH rule=CreateSolidBrush(RGB(50,54,64));FillRect(dc,&line,rule);DeleteObject(rule);
+
+    RECT kicker={36,88,canvas.right-36,112},title={36,112,canvas.right-36,158},hint={36,158,canvas.right-36,198};
+    text(dc,font_small,L"PARSEC HOST OPTIMIZATION  ·  STREAM PROFILES",kicker,red,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    text(dc,font_title,L"Tune Parsec for Lowest Input Lag.",title,white,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    text(dc,font_small,L"Applies optimal bitrate, resolution, and V-Sync overrides directly to %APPDATA%\\Parsec\\config.txt.",hint,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+
+    struct { const wchar_t *name,*spec,*desc; } presets[] = {
+        { L"ESPORTS 1080p60 (Ultra-Low Latency)", L"1080p @ 60 FPS  ·  20 Mbps  ·  HEVC (H.265)  ·  V-Sync OFF", L"Recommended for competitive fights. Minimizes frame encoding and network transit lag." },
+        { L"BALANCED 1440p60 (High Quality)", L"1440p @ 60 FPS  ·  28 Mbps  ·  HEVC (H.265)  ·  V-Sync OFF", L"Pristine visuals on high-speed cable and fiber connections with strong hardware encoders." },
+        { L"LAN / FIBER 4K60 (Maximum Bitrate)", L"4K UHD @ 60 FPS  ·  48 Mbps  ·  HEVC (H.265)  ·  V-Sync OFF", L"Maximum fidelity for local gigabit network or ultra-fast gigabit fiber connections." },
+        { L"RESTORE PREVIOUS SETTINGS", L"Revert to backup (config.txt.bak)", L"Restores the original Parsec configuration that was backed up prior to applying presets." },
+        { L"RETURN TO PARSECTAGON HOME", L"Back to Online Menu", L"Return to the division selection screen." }
+    };
+
+    for(int i=0;i<5;++i){
+        RECT box=stream_presets_item_rect(state,i);
+        int selected=state->selection==i;
+        COLORREF bg=selected?RGB(130,30,36):surface;
+        COLORREF bd=selected?red:border;
+        rounded_box(dc,box,9,bg,bd);
+
+        if(i<4){
+            RECT title_r={box.left+22,box.top+10,box.right-22,box.top+38};
+            RECT spec_r={box.left+22,box.top+38,box.right-22,box.top+66};
+            RECT desc_r={box.left+22,box.top+66,box.right-22,box.top+96};
+            text(dc,font_main,presets[i].name,title_r,selected?RGB(255,230,230):white,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+            text(dc,font_small,presets[i].spec,spec_r,selected?gold:RGB(220,185,110),DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+            text(dc,font_stat_label,presets[i].desc,desc_r,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        } else {
+            RECT cap_r={box.left+20,box.top+8,box.right-20,box.bottom-8};
+            text(dc,font_small,presets[i].name,cap_r,selected?white:muted,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+        }
+    }
+
+    int ps=state->playstation_icons,fy=884;
+    button_icon(dc,44,fy,0,ps);
+    RECT apply_r={80,fy+4,260,fy+28};text(dc,font_small,L"Apply Preset to Parsec",apply_r,RGB(187,196,209),DT_LEFT|DT_SINGLELINE);
+    button_icon(dc,270,fy,1,ps);
+    RECT back_r={306,fy+4,430,fy+28};text(dc,font_small,L"Return to Home",back_r,RGB(187,196,209),DT_LEFT|DT_SINGLELINE);
+    RECT kb_r={canvas.right-280,fy+4,canvas.right-36,fy+28};text(dc,font_stat_label,L"KEYBOARD: ARROWS / ENTER / ESC",kb_r,RGB(140,145,158),DT_RIGHT|DT_SINGLELINE);
+}
+
+static void draw_host_fight(HDC dc,RECT canvas,const MenuState *state,const LobbySnapshot *lobby){
+    (void)lobby;
+    const COLORREF white=RGB(245,246,248),muted=RGB(160,165,176),red=RGB(228,69,75),border=RGB(52,56,66),surface=RGB(14,16,21);
+    const COLORREF gold=RGB(234,196,123);
+    HBRUSH black=CreateSolidBrush(RGB(7,8,11));FillRect(dc,&canvas,black);DeleteObject(black);
+    lobby_brand_draw(dc);
+    RECT line={36,75,canvas.right-36,76};HBRUSH rule=CreateSolidBrush(RGB(50,54,64));FillRect(dc,&line,rule);DeleteObject(rule);
+
+    RECT kicker={36,88,canvas.right-36,112},title={36,112,canvas.right-36,156},hint={36,156,canvas.right-36,188};
+    text(dc,font_small,state->host_mode?L"COMPETITIVE DIVISION  ·  RANKED HOST":L"CASUAL DIVISION  ·  OPEN SPARRING",kicker,state->host_mode?gold:red,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    text(dc,font_title,state->host_mode?L"Host Ranked Championship Match":L"Host Casual Exhibition Match",title,white,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    text(dc,font_small,L"Configure your match and publish directly to Parsectagon without opening a browser.",hint,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+
+    const wchar_t *regions[]={L"South America (BR)",L"North America (US/CA)",L"Europe (EU)"};
+    const wchar_t *presets[]={L"Esports 1080p60 (Ultra-Low Latency)",L"Balanced 1440p60 (High Quality)",L"LAN / Fiber 4K60 (Maximum Bitrate)"};
+    const wchar_t *rounds[]={L"3 Rounds (Exhibition)",L"5 Rounds (Championship Title)"};
+    const wchar_t *notes[]={
+        L"Open sparring session  ·  Good connection only",
+        L"Title fight  ·  Best of 3 matches",
+        L"Sanctioned competitive ranked fight"
+    };
+
+    const wchar_t *setting_names[]={L"MATCH DIVISION",L"SERVER / REGION",L"STREAMING PRESET",L"FIGHT DURATION",L"ROOM NOTES"};
+    const wchar_t *setting_values[]={
+        state->host_mode?L"Ranked Championship":L"Casual Exhibition",
+        regions[state->host_region%3],
+        presets[state->host_preset%3],
+        rounds[state->host_rounds%2],
+        notes[state->host_note_index%3]
+    };
+    const wchar_t *setting_hints[]={
+        state->host_mode?L"Ranked RP is contested on the global ladder":L"Casual play  ·  No RP at stake",
+        L"Shown on the room card so players can check ping",
+        L"Overwrites %APPDATA%\\Parsec\\config.txt for optimal input lag",
+        state->host_rounds?L"5 championship rounds":L"3 standard rounds",
+        L"Visible to players before requesting to join"
+    };
+
+    for(int i=0;i<5;++i){
+        RECT box=host_fight_item_rect(state,i);
+        int selected=state->selection==i;
+        COLORREF bg=selected?RGB(28,32,42):surface;
+        COLORREF bd=selected?(state->host_mode?gold:red):border;
+        rounded_box(dc,box,8,bg,bd);
+
+        RECT tag_r={box.left+20,box.top+8,box.right-20,box.top+26};
+        text(dc,font_stat_label,setting_names[i],tag_r,selected?(state->host_mode?gold:red):muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+
+        RECT val_r={box.left+20,box.top+26,box.right-60,box.top+50};
+        text(dc,font_main,setting_values[i],val_r,selected?white:RGB(225,228,235),DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+
+        RECT hint_r={box.left+20,box.top+50,box.right-20,box.top+68};
+        text(dc,font_stat_label,setting_hints[i],hint_r,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+
+        if(selected){
+            arrow_mark(dc,box.right-30,(box.top+box.bottom)/2-2,1,state->host_mode?gold:red);
+            arrow_mark(dc,box.right-50,(box.top+box.bottom)/2-2,3,state->host_mode?gold:red);
+        }
+    }
+
+    RECT pub_box=host_fight_item_rect(state,5);
+    int pub_sel=state->selection==5;
+    COLORREF pub_bg=pub_sel?(state->host_mode?RGB(160,120,35):RGB(165,36,42)):(state->host_mode?RGB(110,80,22):RGB(120,28,32));
+    COLORREF pub_bd=pub_sel?(state->host_mode?RGB(255,225,140):RGB(255,100,105)):(state->host_mode?gold:red);
+    rounded_box(dc,pub_box,8,pub_bg,pub_bd);
+    RECT pub_caption={pub_box.left+20,pub_box.top+12,pub_box.right-20,pub_box.bottom-12};
+    text(dc,font_main,state->host_mode?L"🏆  PUBLISH RANKED ROOM & OPEN FIGHT":L"⚔  PUBLISH CASUAL ROOM & OPEN FIGHT",pub_caption,white,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+
+    RECT can_box=host_fight_item_rect(state,6);
+    int can_sel=state->selection==6;
+    rounded_box(dc,can_box,7,can_sel?RGB(50,54,66):surface,can_sel?RGB(140,146,160):border);
+    RECT can_caption={can_box.left+20,can_box.top+8,can_box.right-20,can_box.bottom-8};
+    text(dc,font_small,L"✕  CANCEL / RETURN TO OCTAGON",can_caption,can_sel?white:muted,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+
+    int ps=state->playstation_icons,fy=884;
+    dpad_icon(dc,44,fy,ps);
+    RECT nav_r={80,fy+4,200,fy+28};text(dc,font_small,L"Adjust Option",nav_r,RGB(187,196,209),DT_LEFT|DT_SINGLELINE);
+    button_icon(dc,210,fy,0,ps);
+    RECT act_r={246,fy+4,360,fy+28};text(dc,font_small,L"Select / Publish",act_r,RGB(187,196,209),DT_LEFT|DT_SINGLELINE);
+    button_icon(dc,370,fy,1,ps);
+    RECT bck_r={406,fy+4,520,fy+28};text(dc,font_small,L"Cancel / Back",bck_r,RGB(187,196,209),DT_LEFT|DT_SINGLELINE);
+    RECT kb_r={canvas.right-280,fy+4,canvas.right-36,fy+28};text(dc,font_stat_label,L"KEYBOARD: ARROWS / ENTER / ESC",kb_r,RGB(140,145,158),DT_RIGHT|DT_SINGLELINE);
+}
 static void draw_lobby_dashboard(HDC dc,RECT canvas,const MenuState *state,const LobbySnapshot *lobby,int total_rooms,const wchar_t *message,int conflict){
-    const COLORREF background=RGB(11,13,17),surface=RGB(23,25,30),border=RGB(48,51,58);
+    const COLORREF background=RGB(0,0,0),surface=RGB(18,19,23),border=RGB(48,51,58);
     const COLORREF accent=RGB(228,69,75),accent_border=RGB(245,87,93),text_color=RGB(241,242,245),muted=RGB(167,169,177),green=RGB(97,197,139);
+    int right=canvas.right-36,wide=state->online_takeover,span=right-36;
     HBRUSH page_brush=CreateSolidBrush(background);FillRect(dc,&canvas,page_brush);DeleteObject(page_brush);
     lobby_brand_draw(dc);
-    RECT top_line={36,75,804,76};HBRUSH divider=CreateSolidBrush(border);FillRect(dc,&top_line,divider);DeleteObject(divider);
-    int first=menu_first_row(state),shown=lobby->room_count-(first-4);if(shown<0)shown=0;if(shown>4)shown=4;
+    RECT fighter_card={right-432,8,right-206,70};
+    draw_fighter_card(dc,fighter_card,lobby,1);
+    RECT top_line={36,75,right,76};HBRUSH divider=CreateSolidBrush(border);FillRect(dc,&top_line,divider);DeleteObject(divider);
+    int first=menu_first_row(state),shown=lobby->room_count-(first-4);if(shown<0)shown=0;if(shown>lobby_visible_rooms(state))shown=lobby_visible_rooms(state);
     RECT website=lobby_item_rect(state,0,first);
     rounded_box(dc,website,9,state->selection==0?RGB(241,82,88):accent,accent_border);
     RECT web_label={website.left+14,website.top+6,website.right-23,website.bottom-5};
     text(dc,font_small,total_rooms?L"OPEN LOBBY SITE":L"HOST A FIGHT",web_label,text_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
     arrow_mark(dc,website.right-17,(website.top+website.bottom)/2,1,text_color);
-    RECT eyebrow={36,84,490,112},hero={36,107,695,154},intro={37,150,704,181};
+    RECT eyebrow={36,84,right-300,112},hero={36,107,right-110,154},intro={37,150,right-100,181};
     text(dc,font_small,L"FIND YOUR NEXT FIGHT",eyebrow,RGB(239,85,90),DT_LEFT|DT_VCENTER|DT_SINGLELINE);
     text(dc,font_title,L"Step into the octagon.",hero,text_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
     text(dc,font_small,lobby->preview_room_count?L"Live hosts accept join requests. Preview rooms show sample details only.":L"Browse live rooms here. Sign in and request to join in your browser.",intro,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
-    lobby_octagon(dc,748,126,34,RGB(98,41,46));lobby_octagon(dc,748,126,26,RGB(125,49,54));
+    lobby_octagon(dc,right-56,126,34,RGB(98,41,46));lobby_octagon(dc,right-56,126,26,RGB(125,49,54));
     const wchar_t *metric_labels[]={L"ONLINE FIGHTERS",L"LOOKING FOR FIGHT",L"OPEN ROOMS"};int values[]={lobby->online,lobby->looking,lobby->open_rooms};
-    for(int n=0;n<3;++n){int left=36+n*260;RECT box={left,184,left+248,242};rounded_box(dc,box,10,surface,border);
-        RECT value={left+14,188,left+99,223},label={left+14,216,left+233,239};wchar_t number[24];
+    COLORREF metric_surfaces[]={surface,surface,surface};
+    COLORREF metric_borders[]={border,border,border};
+    COLORREF metric_accents[]={text_color,text_color,text_color};
+    COLORREF metric_text[]={muted,muted,muted};
+    for(int n=0;n<3;++n){int left=36+n*(span+12)/3,box_right=n==2?right:left+(span-24)/3;RECT box={left,184,box_right,242};
+        rounded_box(dc,box,10,metric_surfaces[n],metric_borders[n]);
+        RECT value={left+14,188,left+99,223},label={left+14,216,box_right-15,239};wchar_t number[24];
         if(lobby->connected)swprintf(number,24,L"%d",values[n]);else wcscpy(number,L"—");
-        text(dc,font_main,number,value,n==1&&lobby->connected&&values[n]?green:text_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
-        text(dc,font_small,metric_labels[n],label,RGB(180,192,201),DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        text(dc,font_main,number,value,lobby->connected?metric_accents[n]:text_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        text(dc,font_small,metric_labels[n],label,metric_text[n],DT_LEFT|DT_VCENTER|DT_SINGLELINE);
     }
     const wchar_t *regions[]={L"All regions",L"Europe",L"North America",L"South America"};
     const wchar_t *ranks[]={L"All ranks",L"Provisional",L"Bronze",L"Silver",L"Gold",L"Platinum",L"Diamond",L"Champion"};
@@ -875,45 +1433,48 @@ static void draw_lobby_dashboard(HDC dc,RECT canvas,const MenuState *state,const
     const wchar_t *filter_labels[]={L"REGION",L"HOST RANK",L"FIGHT TYPE"};
     int selections[]={state->lobby_region,state->lobby_rank,state->lobby_mode};
     const wchar_t *choices[]={regions[selections[0]>=0&&selections[0]<4?selections[0]:0],ranks[selections[1]>=0&&selections[1]<8?selections[1]:0],modes[selections[2]>=0&&selections[2]<3?selections[2]:0]};
+    COLORREF filter_surfaces[]={surface,surface,surface};
+    COLORREF filter_borders[]={border,border,border};
+    COLORREF filter_accents[]={muted,muted,muted};
     for(int n=0;n<3;++n){RECT filter=lobby_item_rect(state,n+1,first);int focused=state->selection==n+1;
-        rounded_box(dc,filter,8,focused?RGB(53,32,35):surface,focused?accent_border:border);
+        rounded_box(dc,filter,8,focused?RGB(53,32,35):filter_surfaces[n],focused?accent_border:filter_borders[n]);
         RECT label={filter.left+12,filter.top+1,filter.right-12,filter.top+26},value={filter.left+12,filter.top+25,filter.right-26,filter.bottom};
-        text(dc,font_small,filter_labels[n],label,focused?accent:muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        text(dc,font_small,filter_labels[n],label,focused?accent:filter_accents[n],DT_LEFT|DT_VCENTER|DT_SINGLELINE);
         text(dc,font_small,choices[n],value,text_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
-        arrow_mark(dc,filter.right-14,filter.top+36,1,focused?accent:muted);
+        arrow_mark(dc,filter.right-14,filter.top+36,1,focused?accent:filter_accents[n]);
     }
     RECT heading={36,301,360,328};text(dc,font_small,L"FIGHT ROOMS",heading,text_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
-    if(lobby->connected){RECT live={493,301,655,328};COLORREF marker_color=lobby->preview_room_count?RGB(238,193,114):green;
+    if(lobby->connected){RECT live={right-311,301,right-149,328};COLORREF marker_color=lobby->preview_room_count?RGB(238,193,114):green;
         HBRUSH dot=CreateSolidBrush(marker_color);RECT mark={live.left,live.top+11,live.left+7,live.top+18};FillRect(dc,&mark,dot);DeleteObject(dot);
         wchar_t marker_text[48];if(lobby->preview_room_count)swprintf(marker_text,48,L"%d PREVIEW%ls",lobby->preview_room_count,lobby->preview_room_count==1?L"":L"S");else wcscpy(marker_text,L"LIVE");
         RECT word={live.left+14,live.top,live.right,live.bottom};text(dc,font_small,marker_text,word,marker_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
     }
     if(lobby->room_count){wchar_t count[64];swprintf(count,64,L"%d–%d of %d",first-3,first+shown-4,lobby->room_count);
-        RECT count_box={660,301,804,328};text(dc,font_small,count,count_box,muted,DT_RIGHT|DT_VCENTER|DT_SINGLELINE);}
-    if(!lobby->connected){RECT box={36,328,804,488};rounded_box(dc,box,12,surface,RGB(145,83,72));
+        RECT count_box={right-144,301,right,328};text(dc,font_small,count,count_box,muted,DT_RIGHT|DT_VCENTER|DT_SINGLELINE);}
+    if(!lobby->connected){RECT box={36,328,right,488};rounded_box(dc,box,12,surface,RGB(145,83,72));
         lobby_octagon(dc,104,407,37,RGB(181,106,75));
-        RECT lead={165,346,773,383},detail={165,384,773,422},hint={165,423,773,457};
+        RECT lead={165,346,right-31,383},detail={165,384,right-31,422},hint={165,423,right-31,457};
         text(dc,font_main,L"Lobby connection unavailable",lead,RGB(245,190,88),DT_LEFT|DT_VCENTER|DT_SINGLELINE);
         text(dc,font_small,lobby->error[0]?lobby->error:L"Connecting to the lobby server...",detail,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         text(dc,font_small,L"The menu stays usable. Refresh when the server is ready.",hint,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
     }else if(!lobby->room_count){
-        int filtered=total_rooms>0;RECT empty={36,328,804,488},guide={509,341,789,475};
+        int filtered=total_rooms>0;RECT empty={36,328,right,488},guide={wide?right-346:509,341,right-15,475};
         rounded_box(dc,empty,12,surface,border);rounded_box(dc,guide,10,RGB(35,33,38),RGB(52,49,57));
         lobby_octagon(dc,112,408,46,RGB(94,43,47));lobby_octagon(dc,112,408,36,accent);
         RECT six_mark={99,385,125,431};text(dc,font_title,L"6",six_mark,text_color,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
-        RECT label={185,343,485,371},lead={185,372,485,410},detail={185,412,485,449};
+        RECT label={185,343,guide.left-24,371},lead={185,372,guide.left-24,410},detail={185,412,guide.left-24,449};
         text(dc,font_small,filtered?L"ADJUST YOUR SEARCH":L"THE BOARD IS CLEAR",label,RGB(239,85,90),DT_LEFT|DT_VCENTER|DT_SINGLELINE);
         text(dc,font_main,filtered?L"No matching rooms":L"No open rooms yet",lead,text_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
         text(dc,font_small,filtered?L"Try another region, rank or type.":L"Be the first to host a match.",detail,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
-        RECT host_title={527,350,773,384},step1={527,388,773,421},step2={527,426,773,459};
+        RECT host_title={guide.left+18,350,guide.right-16,384},step1={guide.left+18,388,guide.right-16,421},step2={guide.left+18,426,guide.right-16,459};
         text(dc,font_main,filtered?L"Rooms are live":L"Host a fight",host_title,text_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
         text(dc,font_small,filtered?L"Change a filter above":L"1  Open the lobby website",step1,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
         text(dc,font_small,filtered?L"to see more opponents.":L"2  Sign in and create a room",step2,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
     }else{
         for(int i=first;i<first+shown;++i){const LobbyRoom *room=&lobby->rooms[i-4];RECT card=lobby_item_rect(state,i,first);int focused=state->selection==i;
-            lobby_draw_room_card(dc,card,room,focused,border,accent,muted,text_color);
+            lobby_draw_room_card(dc,card,room,focused,muted,text_color);
         }
-        if(shown&1){RECT side={427,328+((shown-1)/2)*226,804,542+((shown-1)/2)*226};rounded_box(dc,side,12,RGB(35,33,38),RGB(52,49,57));
+        if(lobby_grid_columns(state)==2&&(shown&1)){RECT side=lobby_item_rect(state,first+shown-1,first);int card_width=side.right-side.left;side.left=side.right+14;side.right=side.left+card_width;rounded_box(dc,side,12,RGB(35,33,38),RGB(52,49,57));
             lobby_octagon(dc,side.right-42,side.top+43,19,RGB(125,49,54));
             RECT lead={side.left+18,side.top+13,side.right-75,side.top+43},step={side.left+18,side.top+48,side.right-18,side.top+78},hint={side.left+18,side.top+78,side.right-18,side.top+108};
             text(dc,font_main,L"Find your next fight",lead,text_color,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
@@ -922,25 +1483,30 @@ static void draw_lobby_dashboard(HDC dc,RECT canvas,const MenuState *state,const
         }
     }
     int actions_top=lobby_cards_bottom(state)+16;
-    for(int i=lobby->room_count+4;i<=lobby->room_count+6;++i){RECT button=lobby_item_rect(state,i,first);int focused=state->selection==i;
+    for(int i=lobby->room_count+4;i<=lobby->room_count+7;++i){RECT button=lobby_item_rect(state,i,first);int focused=state->selection==i;
         rounded_box(dc,button,9,focused?RGB(52,35,38):surface,focused?RGB(124,56,61):border);
         RECT label={button.left+13,button.top+6,button.right-14,button.bottom-5};
-        text(dc,font_small,i==lobby->room_count+4?L"Refresh rooms":i==lobby->room_count+5?L"Export fight report":L"Back",label,focused?text_color:muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        text(dc,font_small,i==lobby->room_count+4?L"Refresh rooms":i==lobby->room_count+5?L"Export fight report":i==lobby->room_count+6?L"Account":L"Back",label,focused?text_color:muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
     }
     int hint_y=actions_top+50;
-    controller_artwork_draw(dc,36,hint_y,26,26,0,state->playstation_icons);
-    controller_artwork_draw(dc,247,hint_y,26,26,PAD_A,state->playstation_icons);
-    controller_artwork_draw(dc,449,hint_y,26,26,PAD_B,state->playstation_icons);
-    RECT browse={69,hint_y-1,231,hint_y+28},confirm={280,hint_y-1,437,hint_y+28},back={482,hint_y-1,590,hint_y+28};
-    text(dc,font_small,L"Browse / filter",browse,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    controller_artwork_draw(dc,36,hint_y,26,26,2,state->playstation_icons);
+    RECT stick_r={68,hint_y-1,160,hint_y+28};
+    text(dc,font_small,L"Stick: focus",stick_r,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    controller_artwork_draw(dc,168,hint_y,26,26,0,state->playstation_icons);
+    RECT dpad_r={200,hint_y-1,300,hint_y+28};
+    text(dc,font_small,L"D-pad: filter",dpad_r,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    controller_artwork_draw(dc,312,hint_y,26,26,PAD_A,state->playstation_icons);
+    RECT confirm={345,hint_y-1,460,hint_y+28};
     text(dc,font_small,L"Select / open",confirm,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    controller_artwork_draw(dc,472,hint_y,26,26,PAD_B,state->playstation_icons);
+    RECT back={505,hint_y-1,580,hint_y+28};
     text(dc,font_small,L"Back",back,muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
-    RECT footer_line={36,canvas.bottom-55,804,canvas.bottom-54};HBRUSH line_brush=CreateSolidBrush(border);FillRect(dc,&footer_line,line_brush);DeleteObject(line_brush);
-    RECT source={36,canvas.bottom-44,598,canvas.bottom-10},age_rect={602,canvas.bottom-44,804,canvas.bottom-10};wchar_t server[320],age[64];
+    RECT footer_line={36,canvas.bottom-55,right,canvas.bottom-54};HBRUSH line_brush=CreateSolidBrush(border);FillRect(dc,&footer_line,line_brush);DeleteObject(line_brush);
+    RECT source={36,canvas.bottom-44,right-206,canvas.bottom-10},age_rect={right-202,canvas.bottom-44,right,canvas.bottom-10};wchar_t server[320],age[64];
     if(message[0])lstrcpynW(server,message,320);
     else if(conflict)wcscpy(server,L"Game Bar is using the controller. F10 and mouse remain available.");
-    else if(lobby->connected&&lobby->preview_room_count)swprintf(server,320,L"Connected to %ls  ·  %d staged previews",lobby->url[0]?lobby->url:L"http://127.0.0.1:3000",lobby->preview_room_count);
-    else swprintf(server,320,lobby->connected?L"Connected to %ls":L"Server: %ls",lobby->url[0]?lobby->url:L"http://127.0.0.1:3000");
+    else if(lobby->connected&&lobby->preview_room_count)swprintf(server,320,L"Connected to %ls  ·  %d staged previews",lobby->url[0]?lobby->url:L"https://parsectagon.cc",lobby->preview_room_count);
+    else swprintf(server,320,lobby->connected?L"Connected to %ls":L"Server: %ls",lobby->url[0]?lobby->url:L"https://parsectagon.cc");
     text(dc,font_small,server,source,message[0]?accent:muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
     lobby_age_label(lobby,GetTickCount64(),age,64);
     text(dc,font_small,age,age_rect,lobby->connected?green:muted,DT_RIGHT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
@@ -958,7 +1524,12 @@ static void draw_menu(HDC dc, RECT r) {
     if(raw_navigation&&raw_owner>=0){has_owner=1;owner_player=raw_owner+1;}
     else if(menu_device>=0&&devices[menu_device].used){has_owner=1;owner_player=native_player(&devices[menu_device]);}
     lstrcpynW(message,GetTickCount64()<status_until?status_text:L"",120);
+    if(state.page==PAGE_LOBBY&&!message[0]&&fight_report_last_status[0])
+        lstrcpynW(message,fight_report_last_status,120);
     LeaveCriticalSection(&lock);
+    if(state.page==PAGE_LOBBY_HOME){draw_lobby_home(dc,r,&state,&lobby);return;}
+    if(state.page==PAGE_STREAM_PRESETS){draw_stream_presets(dc,r,&state);return;}
+    if(state.page==PAGE_HOST_FIGHT){draw_host_fight(dc,r,&state,&lobby);return;}
     if(state.page==PAGE_LOBBY){draw_lobby_dashboard(dc,r,&state,&lobby,lobby_total,message,conflict);return;}
     int extra=(int)menu_canvas_height(&state)-(int)MENU_BASE_HEIGHT;
     int selection=state.selection,ps=state.playstation_icons;wchar_t icon_reason[512];int icon_state;
@@ -972,24 +1543,25 @@ static void draw_menu(HDC dc, RECT r) {
 #endif
     startup_state=startup_assets_status(startup_reason,512);
     RECT title = {36, 10, r.right - 36, 57};
-    text(dc,font_title,state.page==PAGE_LOBBY?L"Parsectagon":state.page==PAGE_AVATAR_REPAIR?L"Fix career avatar":state.page==PAGE_AVATAR_ALWAYS?L"Image readback always on":state.page==PAGE_WELCOME?L"UFC 6 Actions Overlay":state.page==PAGE_STARTUP?L"Startup screens":state.page==PAGE_STARTUP_CONFIRM?(state.startup_patch_enable?L"Enable startup bypass?":L"Restore startup screens?"):state.page==PAGE_PERFORMANCE?L"Performance":state.page==PAGE_PERFORMANCE_RESTART?L"Save and restart?":state.page==PAGE_PERFORMANCE_DISCARD?L"Discard edits?":state.page==PAGE_PHOTO_EFFECTS?L"Filters & effects":state.page==PAGE_PHOTO_WATERMARK?L"Photo watermark":state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_THEME?L"Theme":state.page==PAGE_QUIT?L"Quit game?":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_GAME_ICONS?L"Controller icon patch":state.page==PAGE_GAME_ICONS_CONFIRM?(state.game_icons_xbox?L"Apply Xbox icons?":L"Restore PS icons?"):state.page==PAGE_CAREER_ADD?(state.career_kind==CAREER_GRADES?L"Set all grades to A?":state.career_kind==CAREER_DAYS?L"Refill training days?":state.career_kind==CAREER_FITNESS?L"Restore fitness?":state.career_kind==0?L"Add money?":L"Add skill points?"):state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_SETTINGS_HOME?L"Settings":state.page==PAGE_APPEARANCE?L"Appearance":state.page==PAGE_CONTROLS?L"Controls":state.page==PAGE_GAME_SETTINGS?L"Game & launcher":state.page==PAGE_EXPERIMENTAL?L"Experimental":state.page==PAGE_TOOLS?L"Files & support":state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_SCREENSHOT?L"Screenshot saved":state.page==PAGE_RESET?L"Reset settings?":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
+    text(dc,font_title,state.page==PAGE_LOBBY_ACCOUNT?L"Parsectagon account":state.page==PAGE_LOBBY?L"Parsectagon":state.page==PAGE_AVATAR_REPAIR?L"Fix career avatar":state.page==PAGE_AVATAR_ALWAYS?L"Image readback always on":state.page==PAGE_WELCOME?L"UFC 6 Actions Overlay":state.page==PAGE_STARTUP?L"Startup screens":state.page==PAGE_STARTUP_CONFIRM?(state.startup_patch_enable?L"Enable startup bypass?":L"Restore startup screens?"):state.page==PAGE_PERFORMANCE?L"Performance":state.page==PAGE_PERFORMANCE_RESTART?L"Save and restart?":state.page==PAGE_PERFORMANCE_DISCARD?L"Discard edits?":state.page==PAGE_PHOTO_EFFECTS?L"Filters & effects":state.page==PAGE_PHOTO_WATERMARK?L"Photo watermark":state.page==PAGE_PHOTO?L"Photo Mode":state.page==PAGE_PHOTO_CONTROLS?L"Photo controls":state.page==PAGE_KEYBINDS?L"Keybinds":state.page==PAGE_BINDING?binding_names[state.binding_action]:state.page==PAGE_THEME?L"Theme":state.page==PAGE_QUIT?L"Quit game?":state.page==PAGE_BACKUPS?L"Savegame backups":state.page==PAGE_GAME_ICONS?L"Game input icons":state.page==PAGE_GAME_ICONS_CONFIRM?(state.game_icons_style==0?L"Apply Xbox icons?":state.game_icons_style==1?L"Apply keyboard icons?":L"Restore PS icons?"):state.page==PAGE_CAREER_ADD?(state.career_kind==CAREER_GRADES?L"Set all grades to A?":state.career_kind==CAREER_DAYS?L"Refill training days?":state.career_kind==CAREER_FITNESS?L"Restore fitness?":state.career_kind==0?L"Add money?":L"Add skill points?"):state.page==PAGE_CHEATS?L"Cheats":state.page==PAGE_SETTINGS_HOME?L"Settings":state.page==PAGE_APPEARANCE?L"Appearance":state.page==PAGE_CONTROLS?L"Controls":state.page==PAGE_GAME_SETTINGS?L"Game & launcher":state.page==PAGE_EXPERIMENTAL?L"Experimental":state.page==PAGE_TOOLS?L"Files & support":state.page==PAGE_SETTINGS?L"Settings":state.page==PAGE_SCREENSHOT?L"Screenshot saved":state.page==PAGE_RESET?L"Reset settings?":state.page==PAGE_RESTART?L"Restart game?":menu_power_page(&state)?(state.shutdown_countdown?(state.page==PAGE_REBOOT?L"Restarting PC":L"Shutting down PC"):(state.page==PAGE_REBOOT?L"Restart PC?":L"Shut down PC?")):L"UFC 6",title,RGB(246,247,250),DT_LEFT|DT_SINGLELINE);
     wchar_t owner_label[64];
     if(owner_player>0)swprintf(owner_label,64,L"Player %d",owner_player);
     else wcscpy(owner_label,has_owner?L"Controller":state.first_player_only?L"Waiting for Player 1":L"Waiting for controller");
     RECT owner_rect={330,25,r.right-36,48};if(state.page==PAGE_MAIN||state.page==PAGE_CHEATS||state.page==PAGE_SETTINGS_HOME)text(dc,font_small,owner_label,owner_rect,paint_theme.muted,DT_RIGHT|DT_SINGLELINE);
     RECT sub = {38, 57, r.right - 36, 84};
     wchar_t lobby_detail[128]=L"Browse open rooms, then sign in and request to join in your browser.";
-    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_LOBBY?lobby_detail:state.page==PAGE_AVATAR_REPAIR?L"Rebuild a striped Saved Careers portrait.":state.page==PAGE_AVATAR_ALWAYS?L"Experimental: may affect performance. Restart required.":state.page==PAGE_WELCOME?L"Welcome. Review your settings and compatibility.":state.page==PAGE_STARTUP?L"Skip title input and known offline network warnings.":state.page==PAGE_STARTUP_CONFIRM?L"Save progress first. The game will close and relaunch.":state.page==PAGE_PERFORMANCE?L"PORTHEON settings. Restart the game to apply.":state.page==PAGE_PERFORMANCE_RESTART?L"Save these settings and relaunch through PORTHEON.":state.page==PAGE_PERFORMANCE_DISCARD?L"Your performance edits have not been saved.":state.page==PAGE_PHOTO_EFFECTS?L"Live preview in Photo Mode. Left/right adjusts.":state.page==PAGE_PHOTO_WATERMARK?L"Uses your PORTHEON player name. Saved in photos.":state.page==PAGE_PHOTO?L"Free camera, zoom and freeze during a fight.":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera. Esc exits.":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations.":state.page==PAGE_BINDING?L"Choose an input to record or clear.":state.page==PAGE_THEME?L"From config follows the launcher theme file.":state.page==PAGE_QUIT?L"Close UFC 6 normally through your launcher.":state.page==PAGE_BACKUPS?L"Save in UFC 6 first; wait for autosave to finish.":state.page==PAGE_GAME_ICONS?L"Replace in-game button icons with Xbox or PlayStation.":state.page==PAGE_GAME_ICONS_CONFIRM?L"Your game will close and restart through your launcher.":state.page==PAGE_CAREER_ADD?L"Career changes are included in normal game saves.":state.page==PAGE_CHEATS?L"Stamina and health apply to Player 1.":state.page==PAGE_SCREENSHOT?(state.screenshot_overlay?L"Game and overlay saved together.":L"Clean game frame saved. The overlay is excluded."):state.page==PAGE_RESET?L"Restore overlay and launcher defaults?":state.page==PAGE_SETTINGS_HOME?L"Choose a category.":state.page==PAGE_APPEARANCE?L"Theme, size and menu style.":state.page==PAGE_CONTROLS?L"Shortcuts and controller access.":state.page==PAGE_GAME_SETTINGS?L"Launcher, startup screens and game controller icons.":state.page==PAGE_EXPERIMENTAL?L"Experimental game controls and portrait repair.":state.page==PAGE_TOOLS?L"Screenshots, updates, support and reset.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):paint_theme.muted,DT_LEFT);
+    text(dc,font_small,conflict?L"Game Bar is using your controller.":state.page==PAGE_LOBBY_ACCOUNT?L"Link in your browser. Only fight reports can be uploaded.":state.page==PAGE_LOBBY?lobby_detail:state.page==PAGE_AVATAR_REPAIR?L"Rebuild a striped Saved Careers portrait.":state.page==PAGE_AVATAR_ALWAYS?L"Experimental: may affect performance. Restart required.":state.page==PAGE_WELCOME?L"Welcome. Review your settings and compatibility.":state.page==PAGE_STARTUP?L"Skip title input and known offline network warnings.":state.page==PAGE_STARTUP_CONFIRM?L"Save progress first. The game will close and relaunch.":state.page==PAGE_PERFORMANCE?L"PORTHEON settings. Restart the game to apply.":state.page==PAGE_PERFORMANCE_RESTART?L"Save these settings and relaunch through PORTHEON.":state.page==PAGE_PERFORMANCE_DISCARD?L"Your performance edits have not been saved.":state.page==PAGE_PHOTO_EFFECTS?L"Live preview in Photo Mode. Left/right adjusts.":state.page==PAGE_PHOTO_WATERMARK?L"Uses your PORTHEON player name. Saved in photos.":state.page==PAGE_PHOTO?L"Free camera, zoom and freeze during a fight.":state.page==PAGE_PHOTO_CONTROLS?L"Close the overlay to control the camera. Esc exits.":state.page==PAGE_KEYBINDS?L"Assign keyboard keys and controller combinations.":state.page==PAGE_BINDING?L"Choose an input to record or clear.":state.page==PAGE_THEME?L"From config follows the launcher theme file.":state.page==PAGE_QUIT?L"Close UFC 6 normally through your launcher.":state.page==PAGE_BACKUPS?L"Save in UFC 6 first; wait for autosave to finish.":state.page==PAGE_GAME_ICONS?L"Choose game prompts; edit keyboard and controller mappings.":state.page==PAGE_GAME_ICONS_CONFIRM?L"Your game will close and restart through your launcher.":state.page==PAGE_CAREER_ADD?L"Career changes are included in normal game saves.":state.page==PAGE_CHEATS?L"Stamina and health apply to Player 1.":state.page==PAGE_SCREENSHOT?(state.screenshot_overlay?L"Game and overlay saved together.":L"Clean game frame saved. The overlay is excluded."):state.page==PAGE_RESET?L"Restore overlay and launcher defaults?":state.page==PAGE_SETTINGS_HOME?L"Choose a category.":state.page==PAGE_APPEARANCE?L"Theme, size and menu style.":state.page==PAGE_CONTROLS?L"Shortcuts and controller access.":state.page==PAGE_GAME_SETTINGS?L"Launcher, startup screens and game controller icons.":state.page==PAGE_EXPERIMENTAL?L"Experimental game controls and portrait repair.":state.page==PAGE_TOOLS?L"Screenshots, updates, support and reset.":state.page==PAGE_SETTINGS?L"Customize your overlay":state.page==PAGE_RESTART?L"Close this session and use the saved launcher settings.":menu_power_page(&state)?(state.shutdown_countdown?L"You can still cancel before the countdown ends.":(state.page==PAGE_REBOOT?(menu_auto_launch(&state)?L"Game auto-launch: On. Change in Settings.":L"Game auto-launch: Off. Change in Settings."):L"Close the game and turn off this PC.")):L"What would you like to do?",sub,conflict?RGB(255,196,94):paint_theme.muted,DT_LEFT);
     const wchar_t *welcome_labels[]={L"Continue to overlay"};
     const wchar_t *avatar_repair_labels[]={state.avatar_mode==1?L"Finish repair and restart":state.avatar_mode==2?L"Already enabled":L"Start repair and restart",L"Back"};
     const wchar_t *avatar_always_labels[]={L"Cancel",state.avatar_mode==2?L"Turn Off and restart":L"Turn On and restart"};
+    const wchar_t *lobby_account_labels[]={L"Link or change account",L"Unlink this PC",L"Back"};
     const wchar_t *main_labels[]={L"Resume",L"Take screenshot",L"Restart game",L"Cheats",L"Photo Mode",L"Parsectagon",L"Settings",L"Quit game",L"Restart PC",L"Shut down PC"};
     const wchar_t *setting_labels[]={L"Overlay button icons",L"Opening shortcut",L"UI scale",L"Launch UFC 6 after PC restart",L"Xbox / Guide button",L"Windows Game Bar shortcut",L"Launcher setup...",L"Controller access",L"Screenshots folder",L"Reset overlay settings...",L"Patch in-game controller icons...",L"Check for updates...",L"Export support report...",L"Keybinds...",L"Theme...",L"Back",L"Font size",L"Box style",L"Window size",L"Visual auto-confirm fallback",L"Skip intros",L"Suppress online notices",L"Include overlay in screenshots",L"Skip title & network warnings...",L"Mute when unfocused",L"Replay after decisions",L"Experimental...",L"Instant Replay in fights",L"Fix career avatar...",L"Image readback always on"};
     const wchar_t *photo_labels[]={state.photo_active?L"Continue camera":L"Enter Photo Mode",L"Freeze action",L"Hide HUD",L"Keep cage visible",L"Show controls panel",L"Reset camera",L"Take screenshot",L"Exit Photo Mode",L"Controls...",L"Filters & effects...",L"Watermark...",L"Back"};
     const wchar_t *effect_labels[]={L"Filter",L"Filter strength",L"Exposure",L"Contrast",L"Saturation",L"Warmth",L"Vignette",L"Film grain",L"Cinematic bars",L"Reset effects",L"Back"};
     const wchar_t *mark_labels[]={L"Show watermark",L"Player name",L"Corner",L"Opacity",L"Size",L"Style",L"Font",L"Text color",L"Back"};
     const wchar_t *photo_control_labels[]={L"Move: left stick / I J K L",L"Look: right stick / arrow keys",L"Height: bumpers / U O",L"Zoom: triggers / Page Up, Down",L"Freeze: confirm button / P",L"Screenshot: left face button",L"Reset: top face button / Home",L"Exit: cancel button / Esc",L"Hide HUD: D-pad up / H",L"Keep cage: D-pad right / C",L"Controls panel: D-pad down / Tab",L"Back"};
-    const wchar_t *category_labels[]={L"Appearance...",L"Controls...",L"Game & launcher...",L"Files & support...",L"Performance...",L"Back"};
+    const wchar_t *category_labels[]={L"Appearance...",L"Controls...",L"Game & launcher...",L"Files & support...",L"Performance...",L"Fighter account...",L"Back"};
     const wchar_t *performance_labels[]={L"Crowd & animation",L"Particles & sparks",L"Depth of field",L"Dynamic resolution",L"3D render scale",L"Save for next launch",L"Save & restart game...",L"Back"};
     const wchar_t *performance_restart[]={L"Cancel",L"Save and restart game"},*performance_discard[]={L"Keep editing",L"Discard edits"};
     const wchar_t *screenshot_labels[]={L"Open screenshots folder",L"Back"};
@@ -1001,7 +1573,7 @@ static void draw_menu(HDC dc, RECT r) {
     backup_state=save_backups_state(backup_message,512);
     const wchar_t *backup_labels[]={backup_state==BACKUP_BUSY?L"Creating backup...":L"Create savegame backup",L"Open backups folder",L"Back"};
     const wchar_t *startup_labels[]={L"Enable bypass",L"Restore startup screens",L"Back"};
-    const wchar_t *game_icons_labels[]={L"Xbox game icons",L"PlayStation game icons",L"Back"};
+    const wchar_t *game_icons_labels[]={L"Xbox game icons",L"Keyboard & mouse icons",L"PlayStation game icons",L"Edit icon mappings...",L"Back"};
     const wchar_t *game_icons_confirm_labels[]={L"Cancel",L"Apply and restart game"};
     const wchar_t *career_labels[]={L"Cancel",state.career_kind==CAREER_GRADES?L"Set all grades to A":state.career_kind==CAREER_DAYS?L"Refill now":state.career_kind==CAREER_FITNESS?L"Restore now":L"Add now"};
     const wchar_t *binding_labels[]={L"Keyboard key...",L"Controller combo...",L"Clear keyboard key",state.binding_action==BIND_OPEN?L"Reset controller combo":L"Clear controller combo",L"Back"};
@@ -1039,7 +1611,7 @@ static void draw_menu(HDC dc, RECT r) {
     for(int i=0;i<menu_rows(&state);++i) {
         if(menu_scroll_page(state.page)&&(i<first||i>=first+menu_visible_rows(&state)))continue;
         int gi=menu_setting_id(state.page,i);
-        int top,height;row_geometry(state.page,i,first,state.lobby_room_count,&top,&height);
+        int top,height;row_geometry(state.page,i,first,state.lobby_room_count,lobby_grid_columns(&state),lobby_visible_rooms(&state),state.online_takeover,&top,&height);
         RECT row={36,top,r.right-36,top+height};
         int focused=i==selection;
         int danger=(state.page==PAGE_MAIN&&(i==MAIN_QUIT||i==MAIN_REBOOT||i==MAIN_SHUTDOWN))||(menu_power_page(&state)&&i==1);
@@ -1050,6 +1622,7 @@ static void draw_menu(HDC dc, RECT r) {
         RECT control=row;
         row.left+=18;
         RECT label_row=row;
+        if(state.page==PAGE_MAIN&&i==MAIN_LOBBY)label_row.left+=27;
         if(state.page==PAGE_MAIN&&i==MAIN_REBOOT)label_row.right=330;
         if(menu_setting_page(state.page)&&gi==SETTING_SHORTCUT)label_row.right=280;
         else if(menu_setting_page(state.page)&&(gi==SETTING_ICONS||gi==SETTING_SCALE||gi==SETTING_ACCESS||gi==SETTING_FONT||gi==SETTING_BOX_STYLE||gi==SETTING_WINDOW_SIZE))label_row.right=345;
@@ -1080,8 +1653,9 @@ static void draw_menu(HDC dc, RECT r) {
             text(dc,font_small,detail,meta,focused?RGB(209,226,215):paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
             lobby_rank_badge(dc,control,room,focused);
         }
-        else text(dc,font_main,state.page==PAGE_LOBBY?lobby_label:state.page==PAGE_AVATAR_REPAIR?avatar_repair_labels[i]:state.page==PAGE_AVATAR_ALWAYS?avatar_always_labels[i]:state.page==PAGE_WELCOME?welcome_labels[i]:state.page==PAGE_PERFORMANCE?performance_labels[i]:state.page==PAGE_PERFORMANCE_RESTART?performance_restart[i]:state.page==PAGE_PERFORMANCE_DISCARD?performance_discard[i]:state.page==PAGE_PHOTO_EFFECTS?effect_labels[i]:state.page==PAGE_PHOTO_WATERMARK?mark_labels[i]:state.page==PAGE_PHOTO?photo_labels[i]:state.page==PAGE_PHOTO_CONTROLS?photo_control_labels[i]:state.page==PAGE_SETTINGS_HOME?category_labels[i]:state.page==PAGE_KEYBINDS?(i==BIND_COUNT?L"Back":binding_names[i]):state.page==PAGE_BINDING?binding_labels[i]:state.page==PAGE_THEME?theme_choices[i]:state.page==PAGE_QUIT?quit_labels[i]:state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_STARTUP?startup_labels[i]:state.page==PAGE_STARTUP_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_GAME_ICONS_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_MAIN?main_labels[i]:menu_setting_page(state.page)?setting_labels[gi]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:state.page==PAGE_CAREER_ADD?career_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],label_row,color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+        else text(dc,font_main,state.page==PAGE_LOBBY?lobby_label:state.page==PAGE_LOBBY_ACCOUNT?lobby_account_labels[i]:state.page==PAGE_AVATAR_REPAIR?avatar_repair_labels[i]:state.page==PAGE_AVATAR_ALWAYS?avatar_always_labels[i]:state.page==PAGE_WELCOME?welcome_labels[i]:state.page==PAGE_PERFORMANCE?performance_labels[i]:state.page==PAGE_PERFORMANCE_RESTART?performance_restart[i]:state.page==PAGE_PERFORMANCE_DISCARD?performance_discard[i]:state.page==PAGE_PHOTO_EFFECTS?effect_labels[i]:state.page==PAGE_PHOTO_WATERMARK?mark_labels[i]:state.page==PAGE_PHOTO?photo_labels[i]:state.page==PAGE_PHOTO_CONTROLS?photo_control_labels[i]:state.page==PAGE_SETTINGS_HOME?category_labels[i]:state.page==PAGE_KEYBINDS?(i==BIND_COUNT?L"Back":binding_names[i]):state.page==PAGE_BINDING?binding_labels[i]:state.page==PAGE_THEME?theme_choices[i]:state.page==PAGE_QUIT?quit_labels[i]:state.page==PAGE_BACKUPS?backup_labels[i]:state.page==PAGE_STARTUP?startup_labels[i]:state.page==PAGE_STARTUP_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_GAME_ICONS?game_icons_labels[i]:state.page==PAGE_GAME_ICONS_CONFIRM?game_icons_confirm_labels[i]:state.page==PAGE_CHEATS?cheat_labels[i]:state.page==PAGE_MAIN?main_labels[i]:menu_setting_page(state.page)?setting_labels[gi]:state.page==PAGE_SCREENSHOT?screenshot_labels[i]:state.page==PAGE_RESET?reset_labels[i]:state.page==PAGE_CAREER_ADD?career_labels[i]:menu_power_page(&state)?shutdown_labels[i]:restart_labels[i],label_row,color,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         if(state.page==PAGE_MAIN&&i==MAIN_LOBBY){
+            lobby_brand_mark_draw(dc,control.left+7,top+1);
             RECT badge={control.right-150,top+3,control.right-22,top+height-3};
             rounded_box(dc,badge,6,RGB(54,43,31),RGB(162,116,60));
             text(dc,font_stat_label,L"CLOSED BETA",badge,RGB(255,201,121),DT_CENTER|DT_VCENTER|DT_SINGLELINE);
@@ -1152,7 +1726,7 @@ static void draw_menu(HDC dc, RECT r) {
         if(menu_setting_page(state.page)&&gi==SETTING_BOX_STYLE){const wchar_t *styles[]={L"Rounded",L"Square",L"Outline",L"Pill",L"Octagon"};value_chip(dc,control,styles[state.box_style],focused,1);}
         if(menu_setting_page(state.page)&&gi==SETTING_SCALE){wchar_t scale[40];swprintf(scale,40,L"%d%%",menu_scale(&state));value_chip(dc,control,scale,focused,1);}
         if(state.page==PAGE_STARTUP&&((i==0&&startup_state==GAME_ICONS_XBOX)||(i==1&&startup_state==GAME_ICONS_PS)))value_chip(dc,control,L"Active",focused,0);
-        if(state.page==PAGE_GAME_ICONS&&((i==0&&icon_state==GAME_ICONS_XBOX)||(i==1&&icon_state==GAME_ICONS_PS)))value_chip(dc,control,L"Active",focused,0);
+        if(state.page==PAGE_GAME_ICONS&&((i==0&&icon_state==GAME_ICONS_XBOX)||(i==1&&icon_state==GAME_ICONS_KEYBOARD)||(i==2&&icon_state==GAME_ICONS_PS)))value_chip(dc,control,L"Active",focused,0);
         int simple=(state.page==PAGE_PERFORMANCE&&i>=PERF_SAVE)||(state.page==PAGE_MAIN&&i!=MAIN_REBOOT&&!has_binding)||(menu_setting_page(state.page)&&(gi==SETTING_LAUNCHER||gi==SETTING_SCREENSHOTS||gi==SETTING_RESET||gi==SETTING_GAME_ICONS||gi==SETTING_STARTUP_PATCH||gi==SETTING_UPDATE||gi==SETTING_DIAGNOSTICS||gi==SETTING_KEYBINDS||gi==SETTING_THEME||gi==SETTING_BACK))||(state.page==PAGE_CHEATS&&i>=5&&i!=7&&i!=8)||state.page==PAGE_BACKUPS;
         if(simple&&!has_binding)arrow_mark(dc,control.right-21,(control.top+control.bottom)/2,1,focused?paint_theme.accent:RGB(112,132,155));
     }
@@ -1190,8 +1764,8 @@ static void draw_menu(HDC dc, RECT r) {
     }
     if(state.page==PAGE_GAME_ICONS_CONFIRM){
         RECT scope={36,98,r.right-36,126},backup={36,133,r.right-36,159};
-        text(dc,font_small,state.game_icons_xbox?L"Use Xbox prompts throughout the game.":L"Restore the original PlayStation game prompts.",scope,RGB(234,238,244),DT_CENTER|DT_SINGLELINE);
-        text(dc,font_small,state.game_icons_xbox?L"Original artwork is backed up before any changes.":L"Uses your verified local restore backup.",backup,paint_theme.muted,DT_CENTER|DT_SINGLELINE);
+        text(dc,font_small,state.game_icons_style==0?L"Use Xbox prompts throughout the game.":state.game_icons_style==1?L"Use the selected keyboard and mouse bindings.":L"Restore the original PlayStation game prompts.",scope,RGB(234,238,244),DT_CENTER|DT_SINGLELINE);
+        text(dc,font_small,state.game_icons_style==2?L"Uses your verified local restore backup.":L"Original artwork is backed up before any changes.",backup,paint_theme.muted,DT_CENTER|DT_SINGLELINE);
     }
     if(state.page==PAGE_CAREER_ADD){
         wchar_t amount[32],balance[32],line[100];int kind=state.career_kind;
@@ -1308,15 +1882,32 @@ static void draw_menu(HDC dc, RECT r) {
         if(!message[0])wcscpy(message,L"Documents / UFC6 Actions Overlay / SaveBackups");
     }
     if(state.page==PAGE_GAME_ICONS&&!conflict){
-        const wchar_t *label=icon_state==GAME_ICONS_PS?L"Currently installed: PlayStation":icon_state==GAME_ICONS_XBOX?L"Currently installed: Xbox":icon_state==GAME_ICONS_MIXED?L"Mixed icons: choose a theme to repair":icon_state==GAME_ICONS_CHECKING?L"Checking installed game icons...":L"Game icons unavailable; see the message below.";
+        const wchar_t *label=icon_state==GAME_ICONS_PS?L"Currently installed: PlayStation":icon_state==GAME_ICONS_XBOX?L"Currently installed: Xbox":icon_state==GAME_ICONS_KEYBOARD?L"Currently installed: Keyboard & mouse":icon_state==GAME_ICONS_MIXED?L"Mixed icons: choose a theme to repair":icon_state==GAME_ICONS_CHECKING?L"Checking installed game icons...":L"Game icons unavailable; see the message below.";
         RECT hint={20,314+extra,r.right-20,338+extra};text(dc,font_small,label,hint,paint_theme.muted,DT_CENTER|DT_SINGLELINE);
     }
     if(state.page==PAGE_PERFORMANCE){
         static const wchar_t *hints[]={L"Turns off both crowd rendering and crowd animation.",L"Controls sparks, sweat spray, smoke and other emitters.",L"Controls the game's depth-of-field blur.",L"On lets the game vary resolution and restores launcher scale.",L"Fixed scale turns dynamic resolution Off. GPU limits still apply.",L"Preserves unrelated launcher settings and game files.",L"Save progress first. The next screen asks before restarting.",L"Unsaved edits ask before being discarded."};
         RECT hint={20,314+extra,r.right-20,338+extra};text(dc,font_small,hints[selection],hint,paint_theme.muted,DT_CENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
         wcscpy(message,!state.performance_available?L"PORTHEON launcher/settings not found.":state.performance_feedback==3?L"Settings changed in PORTHEON. Reopen this page to reload.":state.performance_feedback==2?L"Could not save. Check folder access and retry.":state.performance_feedback==4?L"Saved. Restart the game through PORTHEON to apply.":state.performance_dirty?L"Unsaved changes. Current gameplay is unchanged.":state.performance_feedback==1?L"Saved for next launch. Restart the game to apply.":L"Changes take effect after the game restarts.");}
+    if(state.page==PAGE_LOBBY_ACCOUNT){
+        RECT badge={r.right-206,22,r.right-36,49};
+        text(dc,font_small,lobby.account_status==2?L"CONNECTED":lobby.account_status==1?L"AWAITING APPROVAL":lobby.account_status<0?L"LINK ERROR":L"NOT LINKED",badge,
+             lobby.account_status==2?RGB(112,208,154):lobby.account_status<0?RGB(245,157,160):paint_theme.muted,DT_RIGHT|DT_VCENTER|DT_SINGLELINE);
+        RECT box={36,326,r.right-36,416};rounded_box(dc,box,10,paint_theme.surface,paint_theme.border);
+        wchar_t line[200];
+        if(lobby.account_status==2)swprintf(line,200,L"Linked: %ls  ·  %ls",lobby.account_name[0]?lobby.account_name:L"Fighter",lobby.account_rank[0]?lobby.account_rank:L"Unranked");
+        else if(lobby.account_status==1)swprintf(line,200,L"Waiting for browser approval  ·  Code %ls",lobby.account_code[0]?lobby.account_code:L"...");
+        else if(lobby.account_status<0)swprintf(line,200,L"Link failed: %ls",lobby.account_error[0]?lobby.account_error:L"Check your browser and server URL.");
+        else wcscpy(line,L"This PC is not linked to a Parsectagon fighter.");
+        RECT state_label={50,330,r.right-50,356};
+        text(dc,font_small,lobby.account_status==2?L"LINKED FIGHTER":lobby.account_status==1?L"COMPLETE APPROVAL IN YOUR BROWSER":lobby.account_status<0?L"ACCOUNT LINK ERROR":L"ACCOUNT STATUS",state_label,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+        RECT state_row={50,354,r.right-50,385};
+        text(dc,font_main,line,state_row,lobby.account_status<0?RGB(245,157,160):lobby.account_status==2?RGB(112,208,154):paint_theme.text,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+        RECT help={50,387,r.right-50,414};
+        text(dc,font_small,lobby.account_status==1?L"Switch to the browser window to approve this code.":L"Upload-only key. Password stays in your browser.",help,paint_theme.muted,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+    }
     RECT note = {20, state.page==PAGE_LOBBY?r.bottom-27:345+extra, r.right - 20, state.page==PAGE_LOBBY?r.bottom-3:369+extra};
-    wchar_t lobby_source[300];swprintf(lobby_source,300,L"Server: %ls  ·  [Menu] LobbyServerURL",lobby.url[0]?lobby.url:L"http://127.0.0.1:3000");
+    wchar_t lobby_source[300];swprintf(lobby_source,300,L"Server: %ls  ·  [Menu] LobbyServerURL",lobby.url[0]?lobby.url:L"https://parsectagon.cc");
     text(dc,font_small,state.page==PAGE_LOBBY?(message[0]?message:lobby_source):state.page==PAGE_PERFORMANCE_RESTART?L"Unsaved game progress may be lost.":state.page==PAGE_PERFORMANCE_DISCARD?L"Keep editing preserves your pending choices.":conflict?L"In Settings, turn Windows Game Bar shortcut Off.":menu_power_page(&state)?(state.shutdown_countdown?L"Back or F10 cancels. Switching apps also cancels.":L"Unsaved game progress may be lost."):message[0]?message:state.page==PAGE_STARTUP?startup_reason:state.page==PAGE_GAME_ICONS?icon_reason:save_failed?L"Settings could not be saved.":state.page==PAGE_RESTART?L"Unsaved progress may be lost.":state.page==PAGE_CHEATS&&selection>=3&&selection<5?(career_state.status==CAREER_PENDING?L"Pending: resume and reopen a career screen.":career_state.status==CAREER_ADDED?L"Added once. The game saves changes normally.":L"Left/right: amount. Confirm: review addition."):(state.photo_active||state.page==PAGE_PHOTO||state.page==PAGE_PHOTO_CONTROLS)?L"Esc exits Photo Mode. F10 opens the tools.":L"The game keeps running while this menu is open.",note,
          RGB(137,148,164), DT_CENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
@@ -1429,11 +2020,13 @@ __declspec(dllexport) int MenuTestPhotoPanel(uint32_t pad,unsigned keys){EnterCr
 __declspec(dllexport) BOOL Ufc6PhotoEffects(PhotoEffects *out){if(!out)return FALSE;EnterCriticalSection(&lock);*out=menu.effects;int active=menu.photo_active&&(test_mode||foreground());LeaveCriticalSection(&lock);return active;}
 #include "photo_watermark_raster.h"
 __declspec(dllexport) uint32_t Ufc6PhotoWatermark(void *out,uint32_t capacity){EnterCriticalSection(&lock);uint32_t result=photo_watermark_raster(&menu.effects,out,capacity);LeaveCriticalSection(&lock);return result;}
-__declspec(dllexport) BOOL Ufc6OverlayBlend(void){EnterCriticalSection(&lock);int blend=photo_help_visible();LeaveCriticalSection(&lock);return blend;}
+__declspec(dllexport) BOOL Ufc6OverlayBlend(void){EnterCriticalSection(&lock);int blend=photo_help_visible()||(menu.visible&&menu.online_takeover);LeaveCriticalSection(&lock);return blend;}
+__declspec(dllexport) BOOL Ufc6OverlayTakeover(void){EnterCriticalSection(&lock);int is_lobby=menu.page==PAGE_LOBBY||menu.page==PAGE_LOBBY_HOME||menu.page==PAGE_LOBBY_ACCOUNT||menu.page==PAGE_STREAM_PRESETS||menu.page==PAGE_HOST_FIGHT;int active=menu.visible&&menu.online_takeover&&is_lobby;LeaveCriticalSection(&lock);return active;}
 __declspec(dllexport) void Ufc6OverlayPosition(uint32_t viewport_width,uint32_t viewport_height,uint32_t *x,uint32_t *y){
-    EnterCriticalSection(&lock);int help=photo_help_visible(),toast=notification_visible()&&!help;uint32_t width=render_width,height=render_height;
+    EnterCriticalSection(&lock);int help=photo_help_visible(),toast=notification_visible()&&!help,takeover=menu.visible&&menu.online_takeover;uint32_t width=render_width,height=render_height;
     *x=help?(viewport_width>width+24?24:0):viewport_width>width?(toast?(viewport_width-width>24?viewport_width-width-24:0):(viewport_width-width)/2):0;
-    *y=help?photo_help_top(viewport_height):toast?24:viewport_height>height?(viewport_height-height)/2:0;LeaveCriticalSection(&lock);
+    uint32_t header=viewport_height*115/1440;if(header<72)header=72;
+    *y=help?photo_help_top(viewport_height):toast?24:takeover&&viewport_height>header+height+12?header+12:viewport_height>height?(viewport_height-height)/2:0;LeaveCriticalSection(&lock);
 }
 static void draw_notification(HDC dc,RECT r){
     wchar_t message[120];EnterCriticalSection(&lock);paint_theme=current_theme;frame_font_index=(preferences.font_size-16)/2;lstrcpynW(message,status_text,120);LeaveCriticalSection(&lock);
@@ -1443,7 +2036,18 @@ static void draw_notification(HDC dc,RECT r){
 }
 __declspec(dllexport) void Ufc6MenuExtent(uint32_t viewport_width,uint32_t viewport_height,uint32_t *width,uint32_t *height) {
     EnterCriticalSection(&lock);
+    if(menu.visible&&menu.online_takeover&&viewport_width>160)
+        menu.lobby_columns=lobby_columns_for_viewport(viewport_width);
     overlay_extent_for_canvas(menu_scale(&menu),menu_canvas_width(&menu),menu_canvas_height(&menu),viewport_width,viewport_height,width,height);
+    if(menu.visible&&menu.online_takeover&&viewport_width>160&&viewport_height>160){
+        uint32_t header=viewport_height*115/1440;if(header<72)header=72;
+        uint32_t target_width=viewport_width*96/100,max_height=viewport_height-header-24;
+        if(target_width>viewport_width-32)target_width=viewport_width-32;
+        uint32_t logical_width=menu_canvas_width(&menu),logical_height=menu_canvas_height(&menu);
+        uint32_t target_height=(uint32_t)((uint64_t)target_width*logical_height/logical_width);
+        if(target_height>max_height){target_width=(uint32_t)((uint64_t)target_width*max_height/target_height);target_height=max_height;}
+        *width=target_width;*height=target_height;
+    }
     if((photo_help_visible()||notification_visible())&&viewport_width>32&&viewport_height>32){
         uint32_t w=(photo_help_visible()?PHOTO_HELP_WIDTH:420)*(uint32_t)menu_scale(&menu)/100,h=(photo_help_visible()?PHOTO_HELP_HEIGHT:80)*(uint32_t)menu_scale(&menu)/100;
         if(w>viewport_width-32){h=(uint32_t)((uint64_t)h*(viewport_width-32)/w);w=viewport_width-32;}
@@ -1461,7 +2065,7 @@ static uint64_t menu_raster_signature(void){
     uint64_t hash=14695981039346656037ULL;
     EnterCriticalSection(&lock);
     hash=raster_hash(hash,&menu,sizeof(menu));hash=raster_hash(hash,&preferences,sizeof(preferences));hash=raster_hash(hash,&current_theme,sizeof(current_theme));hash=raster_hash(hash,&career,sizeof(career));
-    if(menu.page==PAGE_LOBBY){hash=raster_hash(hash,&lobby_view,sizeof(lobby_view));unsigned long long age_second=GetTickCount64()/1000;hash=raster_hash(hash,&age_second,sizeof(age_second));}
+    if(menu.page==PAGE_LOBBY||menu.page==PAGE_LOBBY_HOME||menu.page==PAGE_LOBBY_ACCOUNT||menu.page==PAGE_STREAM_PRESETS||menu.page==PAGE_HOST_FIGHT){hash=raster_hash(hash,&lobby_view,sizeof(lobby_view));unsigned long long age_second=GetTickCount64()/1000;hash=raster_hash(hash,&age_second,sizeof(age_second));}
     hash=raster_hash(hash,live_status,sizeof(live_status));hash=raster_hash(hash,live_enabled,sizeof(live_enabled));
     int owner[]={raw_navigation,raw_owner,menu_device,gamebar_conflict,settings_save_failed,GetTickCount64()<status_until,GetTickCount64()<toast_until,
         menu_device>=0&&devices[menu_device].used?native_player(&devices[menu_device]):0};
@@ -1481,7 +2085,9 @@ static uint64_t menu_raster_signature(void){
 }
 __declspec(dllexport) BOOL Ufc6RenderMenu(void *destination,uint32_t size) {
     EnterCriticalSection(&lock);
-    int help=photo_help_visible(),toast=notification_visible()&&!help;int visible=(menu.visible||toast||help)&&(test_mode||foreground())&&font_body!=NULL;
+    int help=photo_help_visible(),toast=notification_visible()&&!help;
+    int takeover=menu.visible&&menu.online_takeover&&game_window&&IsWindowVisible(game_window)&&!IsIconic(game_window);
+    int visible=(menu.visible||toast||help)&&(test_mode||foreground()||takeover)&&font_body!=NULL;
     uint32_t width=render_width,height=render_height;
     uint32_t canvas_width=menu_canvas_width(&menu),canvas_height=menu_canvas_height(&menu);
     LeaveCriticalSection(&lock);
@@ -1521,7 +2127,8 @@ __declspec(dllexport) BOOL Ufc6RenderMenu(void *destination,uint32_t size) {
     if(have_frame&&cached_signature==signature){memcpy(destination,output_pixels,bytes);return TRUE;}
     SetMapMode(dc,MM_ANISOTROPIC);SetWindowExtEx(dc,help?PHOTO_HELP_WIDTH:toast?420:(int)canvas_width,help?PHOTO_HELP_HEIGHT:toast?80:(int)canvas_height,NULL);
     SetViewportExtEx(dc,(int)width*2,(int)height*2,NULL);
-    RECT r={0,0,help?PHOTO_HELP_WIDTH:toast?420:(LONG)canvas_width,help?PHOTO_HELP_HEIGHT:toast?80:(LONG)canvas_height};if(help)draw_photo_help(dc,r);else if(toast)draw_notification(dc,r);else draw_menu(dc,r);GdiFlush();
+    RECT r={0,0,help?PHOTO_HELP_WIDTH:toast?420:(LONG)canvas_width,help?PHOTO_HELP_HEIGHT:toast?80:(LONG)canvas_height};
+    if(help)draw_photo_help(dc,r);else if(toast)draw_notification(dc,r);else draw_menu(dc,r);GdiFlush();
     SetMapMode(dc,MM_TEXT);SetMapMode(target,MM_TEXT);
     SetStretchBltMode(target,HALFTONE);SetBrushOrgEx(target,0,0,NULL);
     if(!StretchBlt(target,0,0,(int)width,(int)height,dc,0,0,(int)width*2,(int)height*2,SRCCOPY))return FALSE;
@@ -1529,7 +2136,8 @@ __declspec(dllexport) BOOL Ufc6RenderMenu(void *destination,uint32_t size) {
     unsigned char *p=output_pixels;
     for(size_t i=0;i<bytes;i+=4){
         int delta=abs((int)p[i]-(int)GetBValue(paint_theme.background));int v=abs((int)p[i+1]-(int)GetGValue(paint_theme.background));if(v>delta)delta=v;v=abs((int)p[i+2]-(int)GetRValue(paint_theme.background));if(v>delta)delta=v;if(delta>80)delta=80;
-        p[i+3]=(unsigned char)(help?184+71*delta/80:255);
+        if(takeover)p[i+3]=255;
+        else p[i+3]=(unsigned char)(help?184+71*delta/80:255);
     }
     memcpy(destination,output_pixels,bytes);cached_signature=signature;have_frame=1;
     return TRUE;
@@ -1547,12 +2155,12 @@ static LRESULT CALLBACK overlay_proc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         x=(int)((int64_t)x*logical_width/r.right);
         y=(int)((int64_t)y*logical_height/r.bottom);
         EnterCriticalSection(&lock);
-        if(menu.page==PAGE_LOBBY){lobby_click_logical(x,y);LeaveCriticalSection(&lock);return 0;}
+        if(menu.page==PAGE_LOBBY||menu.page==PAGE_LOBBY_HOME||menu.page==PAGE_STREAM_PRESETS||menu.page==PAGE_HOST_FIGHT){lobby_click_logical(x,y);LeaveCriticalSection(&lock);return 0;}
         int selected=-1;
         int first=menu_first_row(&menu);
         for(int i=0;i<menu_rows(&menu);++i){
             if(menu_scroll_page(menu.page)&&(i<first||i>=first+menu_visible_rows(&menu)))continue;
-            int top,height;row_geometry(menu.page,i,first,menu.lobby_room_count,&top,&height);if(y>=top&&y<top+height)selected=i;
+            int top,height;row_geometry(menu.page,i,first,menu.lobby_room_count,lobby_grid_columns(&menu),lobby_visible_rooms(&menu),menu.online_takeover,&top,&height);if(y>=top&&y<top+height)selected=i;
         }
         if (selected >= 0 && x >= 36 && x < (int)menu_canvas_width(&menu)-36 && menu.armed) {
             menu.selection = selected;
@@ -1796,6 +2404,8 @@ static void tick(void) {
     int controller_active=active&&!input_redirected();
     if(GetTickCount64()>=next_gamebar_read){refresh_gamebar();next_gamebar_read=GetTickCount64()+1000;}
     int f10 = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
+    int tab_key_down=((GetAsyncKeyState('Q')|GetAsyncKeyState('E'))&0x8000)!=0;
+    static int tab_key_was_down;
     static int mouse_was_down;int mouse_down=!!(GetAsyncKeyState(VK_LBUTTON)&0x8000);
     static POINT last_mouse_cursor;POINT mouse_cursor={0,0};int mouse_valid=active&&GetCursorPos(&mouse_cursor);
     int mouse_clicked=mouse_valid&&mouse_down&&!mouse_was_down;
@@ -1806,6 +2416,10 @@ static void tick(void) {
     if (active && hotkey) toggle_menu();
     guide_was_down = guide; f10_was_down = f10;
     EnterCriticalSection(&lock);
+    if(active&&menu.visible&&menu.online_takeover&&tab_key_down&&!tab_key_was_down){
+        action(menu_close(&menu,MENU_RESUME));menu.draining=0;
+    }
+    tab_key_was_down=tab_key_down;
     gamebar_conflict=menu.visible&&active&&!controller_active;
     if(guide_pressed&&hotkey&&menu.visible&&guide_source>=0){
         raw_navigation=1;raw_owner=-1;raw_previous=0;
@@ -1862,8 +2476,15 @@ static void tick(void) {
             uint32_t buttons=raw_owner>=0&&raw_connected[raw_owner]?raw_menu_buttons(raw_owner):0;
             uint32_t pressed=buttons&~raw_previous;
             const uint32_t navigation[]={PAD_B,PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_A};
+            if(controller_active&&menu.visible&&menu.online_takeover&&(pressed&(PAD_LB|PAD_RB))){
+                action(menu_close(&menu,MENU_RESUME));menu.draining=0;
+            }
             if(controller_active&&menu.visible&&!wait_guide_release)
-                for(unsigned i=0;i<sizeof(navigation)/sizeof(navigation[0]);++i)if(pressed&navigation[i]){action(menu_button(&menu,navigation[i],1));break;}
+                for(unsigned i=0;i<sizeof(navigation)/sizeof(navigation[0]);++i)if(pressed&navigation[i]){
+                    uint32_t stick=raw_owner>=0?xinput_menu_stick(raw_states[raw_owner].Gamepad.sThumbLX,raw_states[raw_owner].Gamepad.sThumbLY):0;
+                    uint32_t dpad=raw_owner>=0?xinput_menu_buttons(raw_states[raw_owner].Gamepad.wButtons):0;
+                    action((stick&navigation[i])&&!(dpad&navigation[i])?menu_lobby_stick(&menu,navigation[i]):menu_button(&menu,navigation[i],1));break;
+                }
             raw_previous=buttons;
             if(!menu.visible&&!menu.draining){raw_navigation=0;raw_owner=-1;for(int i=0;i<16;++i)devices[i].buttons=0;}
         }
@@ -2034,6 +2655,7 @@ static DWORD WINAPI worker(void *unused) {
     log_line("UFC6 quit menu loaded inside engine process.");
     log_line("Overlay build " UFC6_OVERLAY_VERSION ".");
     if(!test_mode)renderer_startup_status();
+    if (!test_mode) progression_notice_prime_engine();
     if (!test_mode && !install_hooks()) return 0;
     if (!test_mode) progression_notice_prepare();
     if (!test_mode) photo_mode_prepare();
@@ -2087,23 +2709,85 @@ static DWORD WINAPI worker(void *unused) {
     welcome_earliest=GetTickCount64()+30000;
     startup_probe_deadline=GetTickCount64()+300000;
     SetTimer(NULL, 1, 16, NULL);
-    int lobby_was_active=0;uint64_t next_lobby_copy=0,refresh_requested_at=0;
+    int lobby_was_active=0,online_was_selected=0;uint64_t next_lobby_copy=0,refresh_requested_at=0,next_online_check=0,online_open_trace_at=0;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {
         if (msg.message == WM_TIMER) {
             if (!IsWindow(game_window)) break;
-            EnterCriticalSection(&lock);int lobby_active=menu.visible&&menu.page==PAGE_LOBBY;LeaveCriticalSection(&lock);
-            if(lobby_active!=lobby_was_active){lobby_bridge_active(lobby_active);lobby_was_active=lobby_active;next_lobby_copy=0;refresh_requested_at=0;}
+            if(!test_mode&&GetTickCount64()>=next_online_check){
+                next_online_check=GetTickCount64()+300;
+                EnterCriticalSection(&lock);int menu_is_open=menu.visible;LeaveCriticalSection(&lock);
+                /* The in-frame panel obscures the native Online body but leaves the top tabs visible. */
+                int selected=menu_is_open?-1:online_tab_selected();
+                if(selected==0)online_was_selected=0;
+                else if(selected==1&&!online_was_selected){
+                    online_was_selected=1;
+                    EnterCriticalSection(&lock);
+                    if(!menu.visible&&!menu.draining&&!menu.photo_active&&!welcome_pending&&renderer_input_ready()){
+                        RECT viewport={0};GetClientRect(game_window,&viewport);
+                        menu_show(&menu);menu_open_lobby(&menu,0,(uint32_t)viewport.right);
+                        menu_device=-1;reset_menu_owner();neutralize();action(MENU_OPEN);
+                        log_line("Online tab selected: Parsectagon opened.");
+                        log_online_focus("opened");online_open_trace_at=GetTickCount64()+1000;
+                    }
+                    LeaveCriticalSection(&lock);
+                }
+            }
+            if(online_open_trace_at&&GetTickCount64()>=online_open_trace_at){online_open_trace_at=0;log_online_focus("one second later");}
+            EnterCriticalSection(&lock);int lobby_active=menu.visible&&(menu.page==PAGE_LOBBY||menu.page==PAGE_LOBBY_HOME||menu.page==PAGE_LOBBY_ACCOUNT||menu.page==PAGE_STREAM_PRESETS||menu.page==PAGE_HOST_FIGHT);LeaveCriticalSection(&lock);
+            if(lobby_active!=lobby_was_active){lobby_bridge_active(lobby_active);lobby_was_active=lobby_active;next_lobby_copy=0;refresh_requested_at=0;if(lobby_active&&!test_mode)launch_lobby_account(L"--lobby-account-status");}
             if(lobby_active&&GetTickCount64()>=next_lobby_copy){
                 LobbySnapshot fresh;lobby_bridge_snapshot(&fresh);next_lobby_copy=GetTickCount64()+250;
-                EnterCriticalSection(&lock);lobby_view=fresh;lobby_rebuild_display();
+                EnterCriticalSection(&lock);
+                int room_increase = fresh.connected && fresh.room_count > lobby_view.room_count && lobby_view.connected && lobby_view.room_count >= 0;
+                int challenger_joined = 0;
+                if(fresh.connected && lobby_view.connected){
+                    for(int i=0;i<fresh.room_count&&i<LOBBY_MAX_ROOMS;++i){
+                        if(fresh.rooms[i].guest_name[0]){
+                            for(int j=0;j<lobby_view.room_count&&j<LOBBY_MAX_ROOMS;++j){
+                                if(wcscmp(fresh.rooms[i].id,lobby_view.rooms[j].id)==0&&!lobby_view.rooms[j].guest_name[0]){
+                                    challenger_joined=1;break;
+                                }
+                            }
+                        }
+                    }
+                }
+                lobby_view=fresh;lobby_rebuild_display();
                 LeaveCriticalSection(&lock);
+                if(challenger_joined&&!test_mode){
+                    MessageBeep(MB_ICONASTERISK);
+                    status(L"⚡ CHALLENGER READY: Fighter stepped into the room!");
+                }else if(room_increase&&!test_mode){
+                    MessageBeep(MB_ICONASTERISK);
+                    status(L"🔔 NEW FIGHT AVAILABLE: Room ready on the board!");
+                }
                 if(refresh_requested_at&&fresh.updated_at>=refresh_requested_at){
                     status(fresh.connected?L"Fight lobby refreshed.":fresh.error[0]?fresh.error:L"Fight lobby refresh failed.");
                     refresh_requested_at=0;
                 }
             }
             if(GetTickCount64()>=next_live_check){next_live_check=GetTickCount64()+250;refresh_live_cheats();}
-            if(!test_mode){EnterCriticalSection(&lock);int skip=menu.skip_splashes,suppress_online=menu.suppress_online_notices,instant_replay=menu.instant_replay;LeaveCriticalSection(&lock);int before=startup_options.state;int result=startup_options_tick(&startup_options,0x900000000ULL,skip,skip);if(progression_notice_state()==0&&GetTickCount64()>=progression_notice_retry_tick){progression_notice_retry_tick=GetTickCount64()+1000;progression_notice_prepare();}progression_notice_set(suppress_online);int replay_before=instant_replay_gate.state,replay_after=instant_replay_gate_tick(&instant_replay_gate,0x900000000ULL,instant_replay);if(replay_after!=replay_before)log_line(replay_after<0?"Instant Replay gate waiting for verified callback (or conflict).":replay_after?"Instant Replay enabled for newly loaded fights.":"Instant Replay restored to game default.");if(result!=before)log_line(result<0?"Startup options waiting for verified game callbacks (or conflict).":result?"Experimental startup options applied in memory.":"Startup options restored to game defaults.");}
+            if(!test_mode&&GetTickCount64()>=next_auto_state_poll){
+                next_auto_state_poll=GetTickCount64()+100;
+                int match_state=fight_report_match_state();
+                if(match_state==1||match_state==2){
+                    auto_report_armed=1;InterlockedExchange(&auto_report_saved,0);
+                    InterlockedExchange(&auto_result_saved,0);auto_result_path[0]=0;
+                    auto_report_finished_at=0;auto_report_retry_at=0;
+                }else if(match_state==3&&auto_report_armed&&GetTickCount64()>=auto_report_retry_at&&
+                         !InterlockedCompareExchange(&auto_report_saved,0,0)){
+                    if(!auto_report_finished_at){
+                        auto_report_finished_at=GetTickCount64();
+                        log_line("Automatic fight report: finished state observed.");
+                    }
+                    if(InterlockedCompareExchange(&fight_report_busy,1,0)==0){
+                        HANDLE thread=CreateThread(NULL,0,fight_report_worker,(void*)(intptr_t)1,0,NULL);
+                        if(thread)CloseHandle(thread);
+                        else InterlockedExchange(&fight_report_busy,0);
+                        auto_report_retry_at=GetTickCount64()+3000;
+                    }
+                }
+            }
+            if(!test_mode){EnterCriticalSection(&lock);int skip=menu.skip_splashes,suppress_online=menu.suppress_online_notices,instant_replay=menu.instant_replay;LeaveCriticalSection(&lock);int before=startup_options.state;int result=startup_options_tick(&startup_options,0x900000000ULL,skip,skip);if(progression_notice_state()==0&&GetTickCount64()>=progression_notice_retry_tick){progression_notice_retry_tick=GetTickCount64()+1000;progression_notice_prepare();}progression_notice_set(suppress_online);const char *notice_error=progression_notice_error();if(notice_error&&notice_error!=progression_notice_last_error){log_line(notice_error);progression_notice_last_error=notice_error;}if(GetTickCount64()>=progression_notice_trace_tick){unsigned long calls=0,suppressed=0,unmatched=0;int notice_state=progression_notice_state();progression_notice_trace_tick=GetTickCount64()+5000;progression_notice_counts(&calls,&suppressed,&unmatched);if(calls!=progression_notice_last_calls||notice_state!=progression_notice_last_state){char trace[160];snprintf(trace,sizeof(trace),"Post-fight notice: hook=%d enabled=%d calls=%lu suppressed=%lu unmatched=%lu.",notice_state,suppress_online,calls,suppressed,unmatched);log_line(trace);progression_notice_last_calls=calls;progression_notice_last_state=notice_state;}}int replay_before=instant_replay_gate.state,replay_after=instant_replay_gate_tick(&instant_replay_gate,0x900000000ULL,instant_replay);if(replay_after!=replay_before)log_line(replay_after<0?"Instant Replay gate waiting for verified callback (or conflict).":replay_after?"Instant Replay enabled for newly loaded fights.":"Instant Replay restored to game default.");if(result!=before)log_line(result<0?"Startup options waiting for verified game callbacks (or conflict).":result?"Experimental startup options applied in memory.":"Startup options restored to game defaults.");}
             EnterCriticalSection(&lock);if(startup_probe_press_until&&GetTickCount64()>=startup_probe_press_until)startup_release_confirm();LeaveCriticalSection(&lock);
             if(welcome_pending&&GetTickCount64()>=welcome_earliest&&(test_mode||InterlockedCompareExchange(&vulkan_active,0,0))&&(test_mode||foreground())&&!IsIconic(game_window)&&!input_redirected()){
                 EnterCriticalSection(&lock);
@@ -2120,6 +2804,8 @@ static DWORD WINAPI worker(void *unused) {
             }
             else if(msg.wParam==MENU_WELCOME_DONE){WritePrivateProfileStringW(L"Menu",L"WelcomeShown",L"1",settings_path);}
             else if(msg.wParam==MENU_LOBBY_REFRESH){refresh_requested_at=GetTickCount64();status(L"Refreshing fight lobby...");lobby_bridge_refresh();}
+            else if(msg.wParam==MENU_LOBBY_LINK){status(L"Opening browser approval for Parsectagon...");launch_lobby_account(L"--link-lobby");}
+            else if(msg.wParam==MENU_LOBBY_UNLINK){status(L"Unlinking this PC from Parsectagon...");launch_lobby_account(L"--unlink-lobby");}
             else if(msg.wParam==MENU_LOBBY_OPEN_ROOM){
                 wchar_t target[LOBBY_URL_LENGTH+100];EnterCriticalSection(&lock);lstrcpynW(target,lobby_open_url,sizeof(target)/sizeof(target[0]));LeaveCriticalSection(&lock);
                 if(!target[0])status(L"Lobby URL unavailable. Refresh the page and try again.");
@@ -2154,13 +2840,19 @@ static DWORD WINAPI worker(void *unused) {
                 else status(L"Could not prepare startup patch. The game was left running.");
             }
             else if(msg.wParam==MENU_GAME_ICONS_OPEN){if(!test_mode)game_icons_check();}
-            else if(msg.wParam==MENU_GAME_ICONS_APPLY){
-                EnterCriticalSection(&lock);int xbox=menu.game_icons_xbox;LeaveCriticalSection(&lock);
+            else if(msg.wParam==MENU_GAME_ICONS_EDIT){
 #ifdef QUIT_MENU_TEST
-                if(test_mode){++test_game_icon_applies;test_game_icons=xbox?GAME_ICONS_XBOX:GAME_ICONS_PS;status(L"Test icons applied; no game files changed.");}else
+                if(test_mode)status(L"Test mapping editor; no desktop window opened.");else
 #endif
-                if(game_icons_status(NULL,0)==(xbox?GAME_ICONS_XBOX:GAME_ICONS_PS))status(L"These game button icons are already selected.");
-                else if(game_icons_apply(game_window,xbox)){EnterCriticalSection(&lock);menu_close(&menu,MENU_RESUME);LeaveCriticalSection(&lock);ShowWindow(overlay,SW_HIDE);}
+                if(game_icons_edit_bindings(game_window))status(L"Mapping editor opened. Save changes there, then apply icons here.");
+                else status(L"Could not open the bundled mapping editor.");
+            }
+            else if(msg.wParam==MENU_GAME_ICONS_APPLY){
+                EnterCriticalSection(&lock);int style=menu.game_icons_style;LeaveCriticalSection(&lock);
+#ifdef QUIT_MENU_TEST
+                if(test_mode){++test_game_icon_applies;test_game_icons=style==0?GAME_ICONS_XBOX:style==1?GAME_ICONS_KEYBOARD:GAME_ICONS_PS;status(L"Test icons applied; no game files changed.");}else
+#endif
+                if(game_icons_apply(game_window,style)){EnterCriticalSection(&lock);menu_close(&menu,MENU_RESUME);LeaveCriticalSection(&lock);ShowWindow(overlay,SW_HIDE);}
                 else status(L"Icons could not start. Check the game folder, backup and launcher.");
             }
             else if(msg.wParam==MENU_CHECK_UPDATES||msg.wParam==MENU_EXPORT_DIAGNOSTICS){
@@ -2207,11 +2899,15 @@ static DWORD WINAPI worker(void *unused) {
                 else
 #endif
                 {
-                    wchar_t file[MAX_PATH],error[120];
-                    if(fight_report_export(installed_game_version.known?installed_game_version.label:L"unknown",
-                                           engine_profile==3,file,MAX_PATH,error,120))
-                        status(L"Fight report saved in Documents\\Parsectagon\\Fight Reports. Attach it in My fighter.");
-                    else status(error);
+                    if(InterlockedCompareExchange(&fight_report_busy,1,0))status(L"Fight report capture is already running.");
+                    else{
+                        EnterCriticalSection(&lock);
+                        lstrcpyW(fight_report_last_status,L"Capturing fight report...");
+                        LeaveCriticalSection(&lock);
+                        HANDLE thread=CreateThread(NULL,0,fight_report_worker,NULL,0,NULL);
+                        if(thread){CloseHandle(thread);status(L"Capturing fight report in the background...");}
+                        else{InterlockedExchange(&fight_report_busy,0);status(L"Could not start the report capture.");}
+                    }
                 }
             }
             else if(msg.wParam==MENU_OPEN_SCREENSHOTS)open_screenshots_folder();
@@ -2298,6 +2994,11 @@ static DWORD WINAPI worker(void *unused) {
             }
             InvalidateRect(overlay, NULL, FALSE);
         } else if(msg.message==WM_BINDING_ACTION){if(msg.wParam==BIND_PHOTO)photo_shortcut_entry_queued=0;run_binding((int)msg.wParam);
+        } else if(msg.message==WM_FIGHT_REPORT_READY){
+            EnterCriticalSection(&lock);
+            lstrcpynW(fight_report_last_status,fight_report_message,120);
+            LeaveCriticalSection(&lock);
+            status(fight_report_message);InvalidateRect(overlay,NULL,FALSE);
         } else if(msg.message==WM_SCREENSHOT_READY){
             EnterCriticalSection(&lock);
             if(menu.visible&&menu.page==PAGE_MAIN&&menu.selection==MAIN_SCREENSHOT){menu.page=PAGE_SCREENSHOT;menu.selection=1;menu.armed=0;}
@@ -2340,6 +3041,8 @@ __declspec(dllexport) int MenuTestWindowSize(void){return preferences.window_siz
 __declspec(dllexport) void MenuTestPhotoHelp(int active,int ps,int frozen){EnterCriticalSection(&lock);test_photo_help_override=active;menu.photo_active=active;menu.photo_frozen=frozen;menu.photo_hud=1;menu.photo_cage=1;menu.photo_fov=55;menu.visible=0;menu.draining=0;menu.playstation_icons=ps;toast_until=0;LeaveCriticalSection(&lock);}
 __declspec(dllexport) int MenuTestVisibleRows(void){return menu_visible_rows(&menu);}
 __declspec(dllexport) int MenuTestLobbyStatus(void){EnterCriticalSection(&lock);int state=lobby_view.connected?1:lobby_view.error[0]?-1:0;LeaveCriticalSection(&lock);return state;}
+__declspec(dllexport) void MenuTestLobbyHome(void){EnterCriticalSection(&lock);menu.page=PAGE_LOBBY_HOME;menu.selection=0;menu.online_takeover=1;menu.lobby_columns=4;menu.visible=1;menu.armed=1;LeaveCriticalSection(&lock);}
+__declspec(dllexport) void MenuTestLobbyCompact(void){EnterCriticalSection(&lock);menu.online_takeover=0;menu.lobby_columns=0;LeaveCriticalSection(&lock);}
 __declspec(dllexport) int MenuTestPage(void){EnterCriticalSection(&lock);int page=menu.page;LeaveCriticalSection(&lock);return page;}
 __declspec(dllexport) int MenuTestLobbyCount(void){EnterCriticalSection(&lock);int count=menu.lobby_room_count;LeaveCriticalSection(&lock);return count;}
 __declspec(dllexport) void MenuTestLobbyAge(unsigned seconds,int connected,wchar_t *out,int count){if(!out||count<=0)return;LobbySnapshot sample={.connected=connected,.updated_at=1000};lobby_age_label(&sample,1000ULL+seconds*1000ULL,out,(size_t)count);}

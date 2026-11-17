@@ -31,7 +31,7 @@ report = exporter.build_report(fields, "ps5-pro", args)
 assert report["result"]["winnerCorner"] == "red"
 assert report["result"]["method"] == "Submission"
 assert report["result"]["round"] == 2
-assert report["result"]["clockSeconds"] == 97
+assert report["result"]["clockSeconds"] == 203
 red, blue = report["fighters"]
 assert red["stats"]["totalStrikesAttempted"] == 34
 assert red["stats"]["totalStrikesLanded"] == 12

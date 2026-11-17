@@ -147,10 +147,27 @@ int lobby_room_url(const wchar_t *base,const wchar_t *room_id,wchar_t *out,size_
     if(n+wcslen(room_id)+9>=count)return 0;
     wmemcpy(out,base,n);out[n]=0;wcscat(out,L"/?room=");wcscat(out,room_id);return 1;
 }
-static void lobby_publish(const LobbySnapshot *state){AcquireSRWLockExclusive(&lobby_guard);lobby_current=*state;ReleaseSRWLockExclusive(&lobby_guard);}
+static void lobby_account_read(LobbySnapshot *state){
+    wchar_t home[MAX_PATH],path[MAX_PATH];DWORD length=GetEnvironmentVariableW(L"USERPROFILE",home,MAX_PATH);
+    if(!length||length>=MAX_PATH||wcslen(home)+32>=MAX_PATH)return;
+    swprintf(path,MAX_PATH,L"%ls\\.parsectagon-overlay-link.json",home);
+    FILE *file=_wfopen(path,L"rb");if(!file)return;
+    char body[2048];size_t used=fread(body,1,sizeof(body)-1,file);fclose(file);body[used]=0;
+    Json j={.text=body,.length=used};int root=json_value(&j,0);json_space(&j);
+    if(root!=0||j.pos!=used||j.token[0].type!='{')return;
+    wchar_t status[32]={0};
+    if(!json_string(&j,json_member(&j,0,"status"),status,32))return;
+    state->account_status=!wcscmp(status,L"linked")?2:!wcscmp(status,L"pending")?1:!wcscmp(status,L"error")?-1:0;
+    json_string(&j,json_member(&j,0,"name"),state->account_name,64);
+    json_string(&j,json_member(&j,0,"rank"),state->account_rank,32);
+    json_int(&j,json_member(&j,0,"rating"),&state->account_rating);
+    json_string(&j,json_member(&j,0,"code"),state->account_code,16);
+    json_string(&j,json_member(&j,0,"message"),state->account_error,160);
+}
+static void lobby_publish(LobbySnapshot *state){lobby_account_read(state);AcquireSRWLockExclusive(&lobby_guard);lobby_current=*state;ReleaseSRWLockExclusive(&lobby_guard);}
 static void lobby_error(const wchar_t *url,const wchar_t *message){LobbySnapshot state={0};lstrcpynW(state.url,url,LOBBY_URL_LENGTH);lstrcpynW(state.error,message,160);state.updated_at=GetTickCount64();lobby_publish(&state);}
 static void lobby_poll(void){
-    wchar_t url[LOBBY_URL_LENGTH],request_path[128];GetPrivateProfileStringW(L"Menu",L"LobbyServerURL",L"http://127.0.0.1:3000",url,LOBBY_URL_LENGTH,lobby_settings);
+    wchar_t url[LOBBY_URL_LENGTH],request_path[128];GetPrivateProfileStringW(L"Menu",L"LobbyServerURL",L"https://parsectagon.cc",url,LOBBY_URL_LENGTH,lobby_settings);
     if(!lobby_url_valid(url)){lobby_error(url,L"Invalid server URL. Edit LobbyServerURL in overlay settings.");return;}
     URL_COMPONENTS parts={.dwStructSize=sizeof(parts)};parts.dwHostNameLength=(DWORD)-1;parts.dwUrlPathLength=(DWORD)-1;
     if(!WinHttpCrackUrl(url,0,0,&parts)){lobby_error(url,L"Invalid server URL.");return;}

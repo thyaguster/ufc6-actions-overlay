@@ -12,6 +12,27 @@ import sys
 ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1] / 'vendor' / 'xbox-icons'))
 sys.path.insert(0, str(ROOT))
 import patcher_core as core
+import input_icons
+from keyboard_bindings import defaults, load
+
+
+def bindings_path():
+    # Keep the player's editor choices beside the installed helper, outside game archives.
+    return (Path(sys.executable).parent if getattr(sys, 'frozen', False)
+            else Path(__file__).resolve().parents[1] / 'dist') / 'ufc6-input-bindings.json'
+
+
+def selected_bindings(root=None):
+    saved = bindings_path()
+    if saved.is_file():
+        return load(saved)
+    if root:
+        root = Path(root)
+        for parent in (root, *list(root.parents)[:4]):
+            for candidate in (parent / 'UFC6.ini', parent / 'games' / 'UFC6' / 'UFC6.ini'):
+                if candidate.is_file():
+                    return load(candidate)
+    return defaults()
 
 
 def report(path, state, message, success=True, section="Icons"):
@@ -27,19 +48,10 @@ def report(path, state, message, success=True, section="Icons"):
 
 
 def state(root, profile):
-    root = core.validate_game(root, profile)
-    backup = root / core.BACKUP_NAME
-    if not backup.exists():
-        core.run('status', root, profile)  # Also rejects legacy installs without a restore backup.
-        return 1
-    saved = core.read_backup(backup, profile)
-    with core.GameFiles(root, core.paths_for(profile), False) as files:
-        spans = core.verify_backup_state(files, saved)
-        if all(core.sha256(actual) == e['original_sha256'] for e, old, actual, installed in spans):
-            return 1
-        if all(installed for e, old, actual, installed in spans):
-            return 2
-        return 3
+    result = input_icons.run('status', root, profile)
+    mode = result.split('Current icons: ', 1)[1].split('. All ', 1)[0]
+    return {'playstation': 1, 'xbox': 2, 'xbox / previous install': 2,
+            'keyboard': 5}.get(mode, 3)
 
 
 def set_theme(theme, root, profile):
@@ -47,13 +59,12 @@ def set_theme(theme, root, profile):
         import startup_assets
         value = startup_assets.run('install' if theme == 'startup_on' else 'restore', root, startup_assets.load_profile(ROOT / 'profiles'))
         return 'Startup bypass enabled and verified.' if value == 2 else 'Original startup screens restored and verified.'
-    before = state(root, profile)
-    desired = 2 if theme == 'xbox' else 1
-    if before == desired:
-        return 'The selected game icons are already installed.'
-    core.run('install' if theme == 'xbox' else 'restore', root, profile)
+    desired = {'playstation': 1, 'xbox': 2, 'keyboard': 5}[theme]
+    input_icons.run('restore' if theme == 'playstation' else 'install', root, profile,
+                    style=theme, bindings=selected_bindings(root))
     core.check(state(root, profile) == desired, 'Icon read-back verification failed.')
-    return 'Xbox game icons installed.' if desired == 2 else 'Original PlayStation game icons restored.'
+    return {'xbox': 'Xbox game icons installed.', 'keyboard': 'Keyboard and mouse icons installed.',
+            'playstation': 'Original PlayStation game icons restored.'}[theme]
 
 
 class Processes:
@@ -106,7 +117,7 @@ def load_job(path):
         core.check(key in job and Path(job[key]).is_absolute() and '\n' not in job[key] and '\r' not in job[key], 'Invalid job path.')
     core.check(Path(job['gameexe']).name.casefold() in ('ufc 6.exe', 'ufc 6 parsec.exe', 'ufc 6 novo.exe'), 'Unsupported engine filename.')
     core.check(Path(job['launchexe']).is_file() and Path(job['workdir']).is_dir(), 'The configured launcher is unavailable.')
-    core.check(job['theme'] in ('xbox', 'playstation', 'startup_on', 'startup_off'), 'Invalid game icon theme.')
+    core.check(job['theme'] in ('xbox', 'keyboard', 'playstation', 'startup_on', 'startup_off'), 'Invalid game icon theme.')
     core.check('\n' not in job['launchargs'] and '\r' not in job['launchargs'], 'Invalid launcher arguments.')
     return job
 
@@ -119,6 +130,14 @@ def launch_environment():
            and key.upper() != 'PYINSTALLER_RESET_ENVIRONMENT'}
     env['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
     return env
+
+
+def start_report_upload(path, url):
+    command = ([sys.executable] if getattr(sys, 'frozen', False)
+               else [sys.executable, str(Path(__file__).resolve())])
+    command += ['--upload-fight-report', str(path), '--lobby-url', url]
+    subprocess.Popen(command, close_fds=True, creationflags=0x08000000 if os.name == 'nt' else 0,
+                     env=launch_environment())
 
 
 def launch_game(job):
@@ -142,8 +161,8 @@ def launch_game(job):
 
 def handoff(path, processes=None, patch=set_theme, launch=None):
     job = load_job(path)
-    profile = core.load_profile(ROOT)
-    core.validate_game(job['gameroot'], profile)
+    profile = input_icons.load_profile(ROOT)
+    core.validate_game(job['gameroot'], profile['base'])
     # Resolve the launcher exactly as saved by the overlay; no shell is involved.
     if launch is None:
         launch = launch_game
@@ -160,7 +179,7 @@ def handoff(path, processes=None, patch=set_theme, launch=None):
         core.check(path.exists(), "The overlay cancelled this icons request; no game files were changed.")
         try:
             message = patch(job['theme'], Path(job['gameroot']), profile)
-            report(job['report'], 2 if job['theme'] in ('xbox','startup_on') else 1, message, section='Startup' if job['theme'].startswith('startup_') else 'Icons')
+            report(job['report'], {'xbox': 2, 'keyboard': 5, 'startup_on': 2}.get(job['theme'], 1), message, section='Startup' if job['theme'].startswith('startup_') else 'Icons')
         except Exception as exc:
             report(job['report'], 4, exc, False, section='Startup' if job['theme'].startswith('startup_') else 'Icons')
             if 'rollback was incomplete' in str(exc).lower():
@@ -184,9 +203,85 @@ def main():
     parser.add_argument('--game-dir', type=Path)
     parser.add_argument('--report', type=Path)
     parser.add_argument('--apply-job', type=Path)
+    parser.add_argument('--edit-bindings', action='store_true')
+    parser.add_argument('--export-fight-report', action='store_true')
+    parser.add_argument('--auto-fight-report', action='store_true')
+    parser.add_argument('--preliminary-report', type=Path)
+    parser.add_argument('--upload-fight-report', type=Path)
+    parser.add_argument('--link-lobby', action='store_true')
+    parser.add_argument('--unlink-lobby', action='store_true')
+    parser.add_argument('--lobby-account-status', action='store_true')
+    parser.add_argument('--lobby-url', default='https://parsectagon.cc')
+    parser.add_argument('--game-version', default='unknown')
     args = parser.parse_args()
     try:
-        if args.backup_saves:
+        if args.link_lobby:
+            from lobby_account import link
+            return link(args.lobby_url)
+        if args.unlink_lobby:
+            from lobby_account import unlink
+            return unlink(args.lobby_url)
+        if args.lobby_account_status:
+            from lobby_account import check
+            return check(args.lobby_url)
+        if args.upload_fight_report:
+            from upload_fight_report import run
+            return run(args.upload_fight_report, args.lobby_url)
+        if args.export_fight_report:
+            if not args.report:
+                parser.error('--export-fight-report needs --report.')
+            from export_complete_fight_report import capture, save_report
+            from fight_report_export import game_process
+            from read_postfight_capture import read_capture, build_complete_report
+            pid, engine = game_process()
+            try:
+                # The UI keeps its own complete totals/rounds record while
+                # Fight Statistics is open. Validate it against live bindings.
+                stats = read_capture(pid, 8)
+                fight = build_complete_report(pid, engine, stats, args.game_version)
+            except (RuntimeError, OSError, ValueError):
+                if args.auto_fight_report:
+                    raise
+                # Older installations have no UI capture. Preserve their
+                # existing read-only result/overall export path.
+                fight = capture(None, 15, args.game_version)
+            if args.preliminary_report and fight['fightStatisticsComplete']:
+                import json
+                try:
+                    previous = json.loads(args.preliminary_report.read_text(encoding='utf-8'))
+                    before = previous.get('result', {})
+                    after = fight['result']
+                    same_fight = (previous.get('reportStage') == 'result' and
+                                  all(before.get(key) == after.get(key) for key in
+                                      ('winnerCorner', 'gameMethodCode', 'round')) and
+                                  abs(before.get('clockSeconds', -999) -
+                                      after.get('clockSeconds', 999)) <= 1)
+                    if same_fight:
+                        fight['id'] = previous['id']
+                        fight['resultCapturedAt'] = previous['capturedAt']
+                        fight['preliminaryReport'] = args.preliminary_report.name
+                except (OSError, ValueError, KeyError, TypeError):
+                    pass
+            destination = None
+            if args.preliminary_report:
+                destination = args.preliminary_report.with_name(
+                    f"fight-complete-{fight['id'][:8]}.json")
+            saved = save_report(fight, destination)
+            if args.auto_fight_report:
+                start_report_upload(saved, args.lobby_url)
+            if fight['fightStatisticsComplete']:
+                report(args.report, 2, f'Complete fight report saved: {saved}', section='FightReport')
+            else:
+                # The proven v0.9.68 UI reads helper messages for every state
+                # except 2. Keep the filename and the missing-round warning
+                # visible without changing its native worker.
+                report(args.report, 3, 'Overall stats saved; round details unavailable. See Documents\\Parsectagon\\Fight Reports.',
+                       section='FightReport')
+        elif args.edit_bindings:
+            from input_gui import gui
+            from xbox_icons import license_text
+            gui(ROOT, '1.1.0', license_text, overlay_bindings_path=bindings_path(), initial_game_dir=args.game_dir)
+        elif args.backup_saves:
             from save_backups import create_backup
             if not args.save_root or not args.backup_dir or not args.report:
                 parser.error('--backup-saves needs --save-root, --backup-dir and --report.')
@@ -199,14 +294,14 @@ def main():
             current = startup_assets.run('status', args.game_dir, startup_assets.load_profile(ROOT / 'profiles'))
             report(args.report, current, {1:'Original startup screens', 2:'Title and offline-warning bypass enabled', 3:'Mixed verified startup patch; enable or restore to repair.'}[current], section='Startup')
         elif args.status and args.game_dir and args.report:
-            current = state(args.game_dir, core.load_profile(ROOT))
-            report(args.report, current, {1: 'PlayStation game icons', 2: 'Xbox game icons', 3: 'Mixed verified icons; choose a theme to repair.'}[current])
+            current = state(args.game_dir, input_icons.load_profile(ROOT))
+            report(args.report, current, {1: 'PlayStation game icons', 2: 'Xbox game icons', 3: 'Mixed verified icons; choose a theme to repair.', 5: 'Keyboard and mouse game icons'}[current])
         else:
             parser.error('Use --status with --game-dir/--report, or --apply-job.')
         return 0
     except Exception as exc:
         if args.report:
-            report(args.report, 4, exc, False, section="Backup" if args.backup_saves else "Startup" if args.startup_status else "Icons")
+            report(args.report, 4, exc, False, section="FightReport" if args.export_fight_report else "Backup" if args.backup_saves else "Startup" if args.startup_status else "Icons")
         return 1
 
 

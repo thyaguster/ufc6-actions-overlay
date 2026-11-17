@@ -2,7 +2,9 @@
 import configparser
 import importlib.util
 from pathlib import Path
+import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
@@ -56,7 +58,7 @@ class HandoffTests(unittest.TestCase):
         def launch(job):
             self.events.append(('launch',job['launchargs']))
             self.assertEqual(job['launchexe'],str(self.exe))
-        with patch.object(helper.core,'load_profile',return_value={}),patch.object(helper.core,'validate_game',return_value=self.root):
+        with patch.object(helper.input_icons,'load_profile',return_value={'base':{}}),patch.object(helper.core,'validate_game',return_value=self.root):
             helper.handoff(self.job,FakeProcesses(self.events,fail),apply,launch)
     def test_waits_for_both_processes_then_patches_and_launches_once(self):
         self.run_job()
@@ -70,6 +72,11 @@ class HandoffTests(unittest.TestCase):
         self.assertLess(self.events.index(('wait',11)),self.events.index(('patch','startup_on')))
         ini=configparser.ConfigParser();ini.read(self.report,encoding='utf-16')
         self.assertEqual(ini['Startup']['State'],'2');self.assertNotIn('Icons',ini)
+    def test_keyboard_handoff_reports_distinct_installed_style(self):
+        self.config['Job']['theme']='keyboard';self.write_job();self.run_job()
+        ini=configparser.ConfigParser();ini.read(self.report,encoding='utf-16')
+        self.assertEqual(ini['Icons']['State'],'5')
+        self.assertIn(('patch','keyboard'),self.events)
     def test_identity_failure_and_timeout_never_patch_or_relaunch(self):
         for fail in ['identity','timeout']:
             self.write_job();self.events.clear()
@@ -94,6 +101,31 @@ class HandoffTests(unittest.TestCase):
             if handle==11:self.job.unlink()
         with patch.object(FakeProcesses,'wait',wait),self.assertRaises(helper.core.PatchError):self.run_job()
         self.assertFalse(any(e[0] in ('patch','launch') for e in self.events))
+
+
+class InputStyleTests(unittest.TestCase):
+    def test_status_distinguishes_keyboard_and_legacy_xbox(self):
+        with patch.object(helper.input_icons,'run',side_effect=[
+            'Current icons: keyboard. All 816 ranges verified.',
+            'Current icons: xbox / previous install. All 816 ranges verified.']):
+            self.assertEqual(helper.state(Path('unused'),{}),5)
+            self.assertEqual(helper.state(Path('unused'),{}),2)
+
+
+class FightReportStatusTests(unittest.TestCase):
+    def test_overall_only_report_is_saved_with_explicit_missing_round_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report_file=Path(directory)/'report.ini'
+            exporter=types.ModuleType('export_complete_fight_report')
+            exporter.capture=lambda *_: {'fightStatisticsComplete':False}
+            exporter.save_report=lambda _:Path(directory)/'saved-fight.json'
+            with patch.dict(sys.modules,{'export_complete_fight_report':exporter}), patch.object(
+                sys,'argv',['helper','--export-fight-report','--report',str(report_file)]):
+                self.assertEqual(helper.main(),0)
+            ini=configparser.ConfigParser();ini.read(report_file,encoding='utf-16')
+            self.assertEqual(ini['FightReport']['State'],'3')
+            self.assertEqual(ini['FightReport']['Success'],'1')
+            self.assertIn('round details unavailable',ini['FightReport']['Message'])
 
 
 if __name__=='__main__':unittest.main()
