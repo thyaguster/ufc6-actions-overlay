@@ -1,3 +1,8 @@
+## v0.9.75 — Complete fight-report runtime files
+
+- Include the complete fight-report reader and decoder in the public source, helper build, and source ZIP. These files were present in the local v0.9.74 build but missing from a clean checkout.
+- Correct the installer test fixture so the independent Windows build verifies the overall-only fallback without needing a running game.
+
 ## v0.9.74 — Stable overlay release
 
 - The Parsectagon entry in the F10 menu now opens the same full-size in-game page as UFC 6's Online tab. Back returns to the F10 menu or game, according to where it was opened.

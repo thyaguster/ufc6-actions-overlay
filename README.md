@@ -43,6 +43,10 @@ This download contains the overlay, asset-free controller-icon patcher, and inst
 
 **The [UFC 6 Xbox Icons mod](https://github.com/thyaguster/ufc6-xbox-icons) is already included in this overlay.** You do not need to download or install it separately. Use **Settings → Game & launcher → Patch in-game controller icons...** to change the game’s button prompts between Xbox and the original PlayStation icons.
 
+## New in v0.9.75
+
+- **Stable release packaging fix:** the complete fight-report reader and decoder are included in clean builds and the source ZIP. The overlay features and UI are the same as v0.9.74.
+
 ## New in v0.9.74
 
 - **Stable overlay release:** F10 → Parsectagon and UFC 6's Online tab use the same full-size in-game lobby page. Parsectagon is a **closed beta**; joining rooms and reviewing match results still use its website.

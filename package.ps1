@@ -19,7 +19,7 @@ Get-ChildItem -LiteralPath 'docs/screenshots' -File | ForEach-Object { Copy-Item
 if (Test-Path -LiteralPath 'scripts') {
     $scriptPackage = Join-Path $package 'scripts'
     New-Item -ItemType Directory -Force -Path $scriptPackage | Out-Null
-    foreach ($name in @('fight_report_export.py','lobby_account.py','upload_fight_report.py','generate_photo_blend_shaders.py','generate_photo_effects_shaders.py','new_engine_probe.ps1')) {
+    foreach ($name in @('fight_report_export.py','decode_fight_stats_blob.py','export_complete_fight_report.py','read_postfight_capture.py','lobby_account.py','upload_fight_report.py','generate_photo_blend_shaders.py','generate_photo_effects_shaders.py','new_engine_probe.ps1')) {
         Copy-Item -LiteralPath (Join-Path 'scripts' $name) -Destination $scriptPackage -Force
     }
 }

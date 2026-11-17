@@ -113,15 +113,29 @@ class InputStyleTests(unittest.TestCase):
 
 
 class FightReportStatusTests(unittest.TestCase):
+    def test_complete_report_runtime_modules_are_present(self):
+        scripts=Path(__file__).resolve().parents[1]/'scripts'
+        for name in ('decode_fight_stats_blob.py','export_complete_fight_report.py','read_postfight_capture.py'):
+            with self.subTest(name=name):
+                self.assertTrue((scripts/name).is_file())
+
     def test_overall_only_report_is_saved_with_explicit_missing_round_status(self):
         with tempfile.TemporaryDirectory() as directory:
             report_file=Path(directory)/'report.ini'
             exporter=types.ModuleType('export_complete_fight_report')
             exporter.capture=lambda *_: {'fightStatisticsComplete':False}
-            exporter.save_report=lambda _:Path(directory)/'saved-fight.json'
-            with patch.dict(sys.modules,{'export_complete_fight_report':exporter}), patch.object(
+            exporter.save_report=lambda *args:Path(directory)/'saved-fight.json'
+            game=types.ModuleType('fight_report_export')
+            game.game_process=lambda: (123, 'test')
+            reader=types.ModuleType('read_postfight_capture')
+            reader.read_capture=lambda *_: (_ for _ in ()).throw(RuntimeError('No retained capture'))
+            reader.build_complete_report=lambda *_: None
+            with patch.dict(sys.modules,{'export_complete_fight_report':exporter,
+                                         'fight_report_export':game,
+                                         'read_postfight_capture':reader}), patch.object(
                 sys,'argv',['helper','--export-fight-report','--report',str(report_file)]):
-                self.assertEqual(helper.main(),0)
+                exit_code=helper.main()
+                self.assertEqual(exit_code,0,report_file.read_text(encoding='utf-16'))
             ini=configparser.ConfigParser();ini.read(report_file,encoding='utf-16')
             self.assertEqual(ini['FightReport']['State'],'3')
             self.assertEqual(ini['FightReport']['Success'],'1')

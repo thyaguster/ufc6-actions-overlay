@@ -38,7 +38,7 @@ if (-not $Test) {
     Copy-Item -LiteralPath 'src/ufc6_menu_layer.json' -Destination 'dist/ufc6_menu_layer.json'
     & (Join-Path $root 'build-updater.ps1'); if ($LASTEXITCODE) { throw 'Updater build failed' }
     $manifest = [ordered]@{
-        version = '0.9.74'
+        version = '0.9.75'
         parsec_engine_sha256 = 'd65bb89742d4fbaa6d57fde7a97eab7ed34ff4e6b5b0ae2213d6476d19c7c049'
         engine_revision = '3309ab23f'
         engine_sha256 = '8df294a9c7ef98b1db975f0b9b1628dc061764f3035349d9bff7e1d7af846752'
